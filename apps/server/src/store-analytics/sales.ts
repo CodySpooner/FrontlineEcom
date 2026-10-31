@@ -24,8 +24,12 @@ export const CANONICAL = `o.duplicate_of IS NULL AND iif(o.breakdown_at IS NULL,
  * filter, on the order's channel (an order synced before channels were recorded: TikTok Shop's by its id, else the
  * store's own channel).
  */
-/** `products`: orders holding one of these products' lines, counting only those lines (SA-47's collection filter). */
-export type Slice = { cut?: { at: string; fraction: number }; channels?: string[]; products?: string[] };
+/**
+ * `products`: orders holding one of these products' lines, counting only those lines (SA-47's collection filter).
+ * `variants` (SA-83, with `products`): only the order and refund lines naming one of these variants; per-product rows
+ * (`order_items`) name no variant, so none of them count.
+ */
+export type Slice = { cut?: { at: string; fraction: number }; channels?: string[]; products?: string[]; variants?: string[] };
 
 /** ` AND …` conditions narrowing order `o` (and the row's own day and time columns) to a slice, with their params. */
 export function sliceSql(db: Db, storeId: string, s: Slice | undefined, to: string, day = 'o.local_date', time = 'o.created_at') {
@@ -37,7 +41,10 @@ export function sliceSql(db: Db, storeId: string, s: Slice | undefined, to: stri
     sql.push(`coalesce(o.channel, iif(+o.id GLOB 'tt-*', 'tiktok_shop', ?)) IN (${s.channels.map(() => '?').join(', ')})`);
     params.push(platform === 'shopify' || platform === 'woocommerce' ? 'site' : platform, ...s.channels);
   }
-  if (s?.products) {
+  if (s?.variants) {
+    sql.push('EXISTS (SELECT 1 FROM order_lines x WHERE x.store_id = o.store_id AND x.order_id = o.id AND x.product_id IN (SELECT value FROM json_each(?)) AND x.variant_id IN (SELECT value FROM json_each(?)))');
+    params.push(JSON.stringify(s.products ?? []), JSON.stringify(s.variants));
+  } else if (s?.products) {
     const holds = (t: string) => `EXISTS (SELECT 1 FROM ${t} x WHERE x.store_id = o.store_id AND x.order_id = o.id AND x.product_id IN (SELECT value FROM json_each(?)))`;
     sql.push(`(${holds('order_lines')} OR ${holds('order_items')})`);
     params.push(JSON.stringify(s.products), JSON.stringify(s.products));
@@ -45,9 +52,13 @@ export function sliceSql(db: Db, storeId: string, s: Slice | undefined, to: stri
   return { sql: sql.map((x) => ` AND ${x}`).join(''), params };
 }
 
-/** ` AND <col> IN (the slice's products)` and its param, or nothing without a product set. */
+/** ` AND <col> IN (the slice's products)` and its param, or nothing without a product set; with variants, its row's variant too. */
 export function inProducts(s: Slice | undefined, col: string): { sql: string; params: SQLInputValue[] } {
-  return s?.products ? { sql: ` AND ${col} IN (SELECT value FROM json_each(?))`, params: [JSON.stringify(s.products)] } : { sql: '', params: [] };
+  if (!s?.products) return { sql: '', params: [] };
+  const sql = ` AND ${col} IN (SELECT value FROM json_each(?))`;
+  if (!s.variants) return { sql, params: [JSON.stringify(s.products)] };
+  if (col.startsWith('i.')) return { sql: ' AND 0', params: [] }; // order_items has no variant column
+  return { sql: `${sql} AND ${col.replace('product_id', 'variant_id')} IN (SELECT value FROM json_each(?))`, params: [JSON.stringify(s.products), JSON.stringify(s.variants)] };
 }
 
 /** A demo store's daily rows over [from, to]; with a cut, its last day as it stood at that time (`demoSoFar`). */
@@ -183,7 +194,7 @@ export function salesMetrics(db: Db, storeId: string, from: string, to: string, 
 
   // Paid orders cancelled on a day of the period (the store's days), whenever they were placed.
   const zone = storeZone(db, storeId);
-  const wc = sliceSql(db, storeId, { channels: slice?.channels, products: slice?.products }, to);
+  const wc = sliceSql(db, storeId, { channels: slice?.channels, products: slice?.products, variants: slice?.variants }, to);
   const cancelled = db
     .prepare(`SELECT o.cancelled_at AS at FROM orders o WHERE o.store_id = ? AND o.cancelled_at BETWEEN ? AND ? AND o.breakdown_at IS NOT NULL AND ${CANONICAL}${wc.sql}`)
     .all(storeId, addDays(from, -1), addDays(to, 2), ...wc.params)

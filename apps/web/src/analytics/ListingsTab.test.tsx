@@ -22,11 +22,12 @@ const row = (i: number, more: Partial<SaListingRow> = {}): SaListingRow => ({
 });
 const ALL = Array.from({ length: 64 }, (_, i) => row(i + 1));
 
-/** A listings API over `rows`, 25 a page. */
-function render(rows: SaListingRow[], path = '/analytics?store=a&tab=listings', ui = <Analytics />) {
+/** A listings API over `rows`, 25 a page; `variants` answers a row's variants (SA-83). */
+function render(rows: SaListingRow[], path = '/analytics?store=a&tab=listings', ui = <Analytics />, variants: () => unknown = () => ({ rows: [] })) {
   const fetch = stubApi((url) => {
     if (url === '/api/stores') return [{ id: 'a', name: 'Glow Haus' }];
     if (url.startsWith('/api/analytics/context')) return CTX;
+    if (url.startsWith('/api/analytics/listings/')) return variants();
     if (url.startsWith('/api/analytics/listings')) {
       const page = Number(new URL(url, 'http://x').searchParams.get('page'));
       const counts = { active: rows.length, draft: 0, archived: 0, all: rows.length };
@@ -39,6 +40,11 @@ function render(rows: SaListingRow[], path = '/analytics?store=a&tab=listings', 
 }
 // The popovers are closed (jsdom has no showPopover): their items are found with hidden: true.
 const item = (menu: string, role: 'menuitemradio' | 'menuitemcheckbox', name: string) => within(document.getElementById(`sa-listings-${menu}`)!).getByRole(role, { name, hidden: true });
+/** The tab as SA-88 will mount it, rows opening through `onOpen`. */
+function Tab({ onOpen }: { onOpen: (id: string) => void }) {
+  const s = useAnalyticsState();
+  return s.store ? <ListingsTab s={{ ...s, store: s.store }} onOpen={onOpen} /> : null;
+}
 const bodyRows = async () => (await screen.findAllByRole('row')).slice(1);
 const cells = (tr: HTMLElement) => [...tr.querySelectorAll('td')].map((td) => td.textContent);
 
@@ -88,11 +94,7 @@ describe('Listings table (SA-82)', () => {
 
   it('↑/↓ move between rows, Enter or a click opens the row', async () => {
     const open = vi.fn();
-    function Tab() {
-      const s = useAnalyticsState();
-      return s.store ? <ListingsTab s={{ ...s, store: s.store }} onOpen={open} /> : null;
-    }
-    render(ALL.slice(0, 3), '/analytics?store=a', <Tab />);
+    render(ALL.slice(0, 3), '/analytics?store=a', <Tab onOpen={open} />);
     const rows = await bodyRows();
     expect(rows.map((r) => r.tabIndex)).toEqual([0, -1, -1]);
     rows[0]!.focus();
@@ -140,5 +142,36 @@ describe('Listings table (SA-82)', () => {
     fireEvent.change(screen.getByRole('textbox', { name: 'Search listings' }), { target: { value: 'serum' } });
     await waitFor(() => expect(last()).toContain('q=serum'));
     expect(last()).toMatch(/stock=low.*sales=none.*cost=missing/);
+  });
+
+  it('a product with variants expands to indented variant rows with their own sales, or the note when none are recorded (SA-83)', async () => {
+    const open = vi.fn();
+    const variant = (id: string, title: string, sku: string, stock: number, more: object) => ({ id, title, sku, price: 18, stock, stockState: 'in_stock', units: V(41), netSales: V(738), refunds: V(18), contribution: V(395), ...more });
+    const fetch = render([row(1), row(3, { title: 'Overnight Lip Mask', sku: null, variants: 3, variantsOut: 1 })], '/analytics?store=a', <Tab onOpen={open} />, () => ({
+      rows: [variant('v1', 'Berry', 'GH-OLM-BER', 312, { units: V(131), netSales: V(2358) }), variant('v3', 'Mint', 'GH-OLM-MNT', 22, { stockState: 'low', coverDays: 4 })],
+    }));
+    const rows = await bodyRows();
+    expect(within(rows[0]!).queryByRole('button')).toBeNull(); // one variant: nothing to expand
+    const show = within(rows[1]!).getByRole('button', { name: 'Show the variants of Overnight Lip Mask' });
+    fireEvent.click(show);
+    expect(show.getAttribute('aria-expanded')).toBe('true');
+    expect(open).not.toHaveBeenCalled(); // expanding doesn't open the product
+    await screen.findByText('Berry');
+    const all = await bodyRows();
+    expect(all.slice(2).map(cells)).toEqual([
+      ['Berry · GH-OLM-BER', '', '', '$18.00', '312', '131', '$2,358', '$18', '$395', ''],
+      ['Mint · GH-OLM-MNT', '', '', '$18.00', '22 · ~4 d', '41', '$738', '$18', '$395', ''],
+    ]);
+    expect(all.slice(2).map((r) => [r.getAttribute('tabindex'), r.querySelectorAll('input, button').length])).toEqual([[null, 0], [null, 0]]); // no checkbox, not a row stop
+    expect(decodeURIComponent(String(fetch.mock.calls.map((c) => c[0]).find((u) => String(u).startsWith('/api/analytics/listings/p3/variants?'))))).toContain('compare=none');
+    fireEvent.click(screen.getByRole('button', { name: 'Hide the variants of Overnight Lip Mask' }));
+    expect(screen.queryByText('Berry')).toBeNull();
+
+    cleanup();
+    const none = { value: null, status: 'unavailable', reason: 'not_tracked', note: 'Variant sales not recorded yet' };
+    render([row(3, { title: 'Overnight Lip Mask', variants: 3 })], undefined, undefined, () => ({ rows: [variant('v1', 'Berry', 'GH-OLM-BER', 312, { units: none, netSales: none, refunds: none, contribution: none })], note: 'Variant sales not recorded yet' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Show the variants of Overnight Lip Mask' }));
+    expect(await screen.findByText('Variant sales not recorded yet')).toBeTruthy();
+    expect(cells((await bodyRows())[1]!)).toEqual(['Berry · GH-OLM-BER', '', '', '$18.00', '312', '–', '–', '–', '–', '']); // never zeros
   });
 });

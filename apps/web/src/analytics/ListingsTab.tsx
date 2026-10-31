@@ -1,15 +1,15 @@
 // SA-82: the Listings tab (spec §7 Listings table; the Listings board): every listing of the store, 25 a page, filtered
 // and sorted over the whole matching set by the API (SA-66, SA-80). Status, search and the tab's own filters live in
 // the URL beside the page's; Channel and Collection are the page's filters. A row opens the product drawer through
-// `onOpen` (SA-88): without it rows aren't interactive (decision 33).
-import { useDeferredValue, type ReactNode } from 'react';
+// `onOpen` (SA-88): without it rows aren't interactive (decision 33). A product with variants expands to them (SA-83).
+import { Fragment, useDeferredValue, useState, type ReactNode } from 'react';
 import { useSearchParams } from 'react-router';
-import { ChevronDown, Info, Plus, Search, TriangleAlert } from 'lucide-react';
+import { ChevronDown, ChevronRight, Info, Plus, Search, TriangleAlert } from 'lucide-react';
 import { SA_LISTING_FILTERS, SA_LISTING_STATUSES, SA_REASONS, type SaListingRow, type SaListingStatus, type SaValue } from '@frontline/shared';
 import { hidePopover, Popover, rove } from '../agents/Popover';
 import { Button, cx, ErrorState, LoadingState, Segmented } from '../components/ui';
 import { ago, cents, money, pct } from '../lib/format';
-import { useSaCollections, useSaContext, useSaListings } from './api';
+import { useSaCollections, useSaContext, useSaListings, useSaVariants } from './api';
 import { FilterScope } from './FilterScope';
 import { channelsOf, Option, useFilters } from './Filters';
 import { range } from './Pickers';
@@ -72,7 +72,7 @@ const dash = (v?: SaValue) => (
 const val = (v: SaValue, f: (n: number) => string) => (v.value == null ? dash(v) : <span title={v.note}>{f(v.value)}</span>);
 
 /** Stock now: a count only where one is kept; FBA and supplier stock are never judged (decision 27). */
-function stock(r: SaListingRow): [text: string, tone?: string, title?: string] {
+function stock(r: Pick<SaListingRow, 'stock' | 'stockState' | 'coverDays'> & Partial<Pick<SaListingRow, 'variants' | 'variantsOut'>>): [text: string, tone?: string, title?: string] {
   const n = (r.stock ?? 0).toLocaleString('en-US');
   switch (r.stockState) {
     case 'out':
@@ -88,8 +88,59 @@ function stock(r: SaListingRow): [text: string, tone?: string, title?: string] {
     case 'supplier':
       return ['Supplier-managed', 'text-muted', 'A supplier filled its recent orders: no count or cover'];
     default:
-      return r.variants > 1 && r.variantsOut ? [`${n} · ${r.variantsOut} out`, 'text-amber'] : [n];
+      return (r.variants ?? 1) > 1 && r.variantsOut ? [`${n} · ${r.variantsOut} out`, 'text-amber'] : [n];
   }
+}
+
+const INDENT = { paddingLeft: 62 }; // the board's; an inline style, as the table's cell padding beats a class
+
+/** SA-83: a product's variants under its row (no checkbox, no channels or status of their own) and why sales are missing. */
+function VariantRows({ s, id, currency }: { s: AnalyticsPage & { store: string }; id: string; currency?: string }) {
+  const q = useSaVariants(s.store, id, { ...periodParams(s), compare: 'none' });
+  const line = (body: ReactNode) => (
+    <tr className="bg-bg-2 text-xs text-muted">
+      <td colSpan={10} style={INDENT}>
+        {body}
+      </td>
+    </tr>
+  );
+  if (q.isError)
+    return line(
+      <>
+        Couldn't load the variants.{' '}
+        <button type="button" onClick={() => q.refetch()} className="cursor-pointer font-semibold text-text-2 hover:text-white">
+          Try again
+        </button>
+      </>,
+    );
+  if (!q.data) return line('Loading variants…');
+  return (
+    <>
+      {q.data.rows.map((v) => {
+        const [text, tone, title] = stock(v);
+        return (
+          <tr key={v.id} className="bg-bg-2 text-xs text-text-2">
+            <td style={INDENT}>
+              {v.title ?? v.id}
+              {v.sku && <span className="text-muted"> · {v.sku}</span>}
+            </td>
+            <td />
+            <td />
+            <td className={R}>{v.price == null ? dash() : cents(v.price, currency)}</td>
+            <td className={cx(R, tone)} title={title}>
+              {text}
+            </td>
+            <td className={R}>{val(v.units, (n) => n.toLocaleString('en-US'))}</td>
+            <td className={R}>{val(v.netSales, (n) => money(n, currency))}</td>
+            <td className={R}>{val(v.refunds, (n) => money(n, currency))}</td>
+            <td className={R}>{val(v.contribution, (n) => money(n, currency))}</td>
+            <td />
+          </tr>
+        );
+      })}
+      {q.data.note && line(q.data.note)}
+    </>
+  );
 }
 
 export function ListingsTab({ s, onOpen }: { s: AnalyticsPage & { store: string }; onOpen?: (id: string) => void }) {
@@ -97,6 +148,8 @@ export function ListingsTab({ s, onOpen }: { s: AnalyticsPage & { store: string 
   const ctx = useSaContext(s.store).data;
   const collections = useSaCollections(s.store);
   const { toggle, has } = useFilters(s);
+  const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
+  const flip = (id: string) => setExpanded((x) => (x.has(id) ? new Set([...x].filter((y) => y !== id)) : new Set([...x, id])));
   const get = (k: string) => params.get(k) ?? '';
   /** One of the tab's own keys (empty leaves the URL), back to page 1; typing in search replaces the history entry. */
   const put = (k: string, v: string) =>
@@ -166,75 +219,89 @@ export function ListingsTab({ s, onOpen }: { s: AnalyticsPage & { store: string 
                 const [text, tone, title] = stock(r);
                 const failed = r.channels.filter((c) => c.status === 'failed');
                 const sub = [r.sku, plural(r.variants, 'variant'), r.variants > 1 && r.variantsOut > 0 && `${r.variantsOut} out of stock`].filter(Boolean).join(' · ');
+                const open = expanded.has(r.id);
                 return (
-                  <tr
-                    key={r.id}
-                    tabIndex={onOpen && (i ? -1 : 0)}
-                    onClick={onOpen && (() => onOpen(r.id))}
-                    onKeyDown={onOpen && ((e) => e.key === 'Enter' && onOpen(r.id))}
-                    className={cx(onOpen && 'cursor-pointer outline-none hover:bg-white/2 focus-visible:bg-red-soft')}
-                  >
-                    <td className="max-w-[340px]">
-                      <span className="flex min-w-0 items-center gap-2.5">
-                        {r.image ? <img src={r.image} alt="" loading="lazy" className="size-[30px] shrink-0 rounded-[7px] object-cover" /> : <span aria-hidden className="size-[30px] shrink-0 rounded-[7px] border border-[#2e2e35] bg-[linear-gradient(140deg,#2b2b31,#1b1b20)]" />}
-                        <span className="min-w-0">
-                          <b className="block truncate font-medium">{r.title}</b>
-                          <span className="block truncate text-[11px] text-muted">{sub}</span>
+                  <Fragment key={r.id}>
+                    <tr
+                      tabIndex={onOpen && (i ? -1 : 0)}
+                      onClick={onOpen && (() => onOpen(r.id))}
+                      onKeyDown={onOpen && ((e) => e.target === e.currentTarget && e.key === 'Enter' && onOpen(r.id))}
+                      className={cx(onOpen && 'cursor-pointer outline-none hover:bg-white/2 focus-visible:bg-red-soft')}
+                    >
+                      <td className="max-w-[340px]">
+                        <span className="flex min-w-0 items-center gap-2.5">
+                          {r.variants > 1 && (
+                            <button
+                              type="button"
+                              aria-expanded={open}
+                              aria-label={`${open ? 'Hide' : 'Show'} the variants of ${r.title}`}
+                              onClick={(e) => (e.stopPropagation(), flip(r.id))}
+                              className="-mr-1 grid size-5 shrink-0 cursor-pointer place-items-center rounded text-muted hover:text-white"
+                            >
+                              {open ? <ChevronDown aria-hidden className="size-3.5" /> : <ChevronRight aria-hidden className="size-3.5" />}
+                            </button>
+                          )}
+                          {r.image ? <img src={r.image} alt="" loading="lazy" className="size-[30px] shrink-0 rounded-[7px] object-cover" /> : <span aria-hidden className="size-[30px] shrink-0 rounded-[7px] border border-[#2e2e35] bg-[linear-gradient(140deg,#2b2b31,#1b1b20)]" />}
+                          <span className="min-w-0">
+                            <b className="block truncate font-medium">{r.title}</b>
+                            <span className="block truncate text-[11px] text-muted">{sub}</span>
+                          </span>
                         </span>
-                      </span>
-                    </td>
-                    <td>
-                      <span className="flex gap-1">
-                        {r.channels.map((c, k) => {
-                          const kind = c.channel === 'site' ? (ctx?.platform ?? '') : c.channel;
-                          return (
-                            <span key={k} title={`${name(c.channel)} · ${c.status}`} className={cx('inline-flex h-4 w-5 items-center justify-center rounded border bg-[#22222a] text-[9.5px] font-bold', TINT[kind] ?? 'border-line-2 text-text-2')}>
-                              {SHORT[kind] ?? c.channel.slice(0, 2).toUpperCase()}
-                            </span>
-                          );
-                        })}
-                      </span>
-                    </td>
-                    <td>
-                      <span className="inline-flex items-center gap-1.5 text-xs">
-                        <i aria-hidden className={cx('size-1.5 rounded-full', r.status === 'active' ? 'bg-good' : 'bg-muted')} />
-                        {r.status.charAt(0).toUpperCase() + r.status.slice(1)}
-                      </span>
-                    </td>
-                    <td className={R}>{cents(r.price, cur)}</td>
-                    <td className={cx(R, tone)} title={title}>
-                      {text}
-                    </td>
-                    <td className={cx(R, none && 'text-muted')}>{val(r.units, (n) => n.toLocaleString('en-US'))}</td>
-                    <td className={R}>{none ? <span className="text-muted">No sales</span> : val(r.netSales, (n) => money(n, cur))}</td>
-                    <td className={R}>
-                      {none ? dash() : val(r.refunds, (n) => money(n, cur))}
-                      {!none && r.refundRate.value != null && <span className="ml-1.5 text-muted">{pct(r.refundRate.value * 100)}</span>}
-                    </td>
-                    <td className={R}>
-                      {none ? (
-                        dash()
-                      ) : r.contribution.value == null && r.contribution.reason === 'not_tracked' ? (
-                        <span title={r.contribution.note} className="rounded-full border border-amber/45 px-2 py-px text-[11px] font-semibold text-amber">
-                          No unit cost
+                      </td>
+                      <td>
+                        <span className="flex gap-1">
+                          {r.channels.map((c, k) => {
+                            const kind = c.channel === 'site' ? (ctx?.platform ?? '') : c.channel;
+                            return (
+                              <span key={k} title={`${name(c.channel)} · ${c.status}`} className={cx('inline-flex h-4 w-5 items-center justify-center rounded border bg-[#22222a] text-[9.5px] font-bold', TINT[kind] ?? 'border-line-2 text-text-2')}>
+                                {SHORT[kind] ?? c.channel.slice(0, 2).toUpperCase()}
+                              </span>
+                            );
+                          })}
                         </span>
-                      ) : (
-                        val(r.contribution, (n) => money(n, cur))
-                      )}
-                    </td>
-                    <td>
-                      {failed.length ? (
-                        <span className="inline-flex items-center gap-1 text-red" title={failed.map((c) => `${name(c.channel)}: ${c.error ?? 'failed'}`).join('\n')}>
-                          <TriangleAlert aria-hidden className="size-3" />
-                          Failed
+                      </td>
+                      <td>
+                        <span className="inline-flex items-center gap-1.5 text-xs">
+                          <i aria-hidden className={cx('size-1.5 rounded-full', r.status === 'active' ? 'bg-good' : 'bg-muted')} />
+                          {r.status.charAt(0).toUpperCase() + r.status.slice(1)}
                         </span>
-                      ) : r.syncedAt ? (
-                        <span className="text-muted">{ago(r.syncedAt).replace(' ago', '')}</span>
-                      ) : (
-                        dash()
-                      )}
-                    </td>
-                  </tr>
+                      </td>
+                      <td className={R}>{cents(r.price, cur)}</td>
+                      <td className={cx(R, tone)} title={title}>
+                        {text}
+                      </td>
+                      <td className={cx(R, none && 'text-muted')}>{val(r.units, (n) => n.toLocaleString('en-US'))}</td>
+                      <td className={R}>{none ? <span className="text-muted">No sales</span> : val(r.netSales, (n) => money(n, cur))}</td>
+                      <td className={R}>
+                        {none ? dash() : val(r.refunds, (n) => money(n, cur))}
+                        {!none && r.refundRate.value != null && <span className="ml-1.5 text-muted">{pct(r.refundRate.value * 100)}</span>}
+                      </td>
+                      <td className={R}>
+                        {none ? (
+                          dash()
+                        ) : r.contribution.value == null && r.contribution.reason === 'not_tracked' ? (
+                          <span title={r.contribution.note} className="rounded-full border border-amber/45 px-2 py-px text-[11px] font-semibold text-amber">
+                            No unit cost
+                          </span>
+                        ) : (
+                          val(r.contribution, (n) => money(n, cur))
+                        )}
+                      </td>
+                      <td>
+                        {failed.length ? (
+                          <span className="inline-flex items-center gap-1 text-red" title={failed.map((c) => `${name(c.channel)}: ${c.error ?? 'failed'}`).join('\n')}>
+                            <TriangleAlert aria-hidden className="size-3" />
+                            Failed
+                          </span>
+                        ) : r.syncedAt ? (
+                          <span className="text-muted">{ago(r.syncedAt).replace(' ago', '')}</span>
+                        ) : (
+                          dash()
+                        )}
+                      </td>
+                    </tr>
+                    {open && <VariantRows s={s} id={r.id} currency={cur} />}
+                  </Fragment>
                 );
               })}
             </tbody>

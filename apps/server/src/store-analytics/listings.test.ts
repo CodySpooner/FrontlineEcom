@@ -1,5 +1,5 @@
 // SA-66: GET /api/analytics/listings over the ledger fixture plus 64 sale-less products (56 active, 5 draft, 3 archived).
-import type { SaFilters, SaListings } from '@frontline/shared';
+import type { SaFilters, SaListings, SaVariants } from '@frontline/shared';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../app';
 import { openDb, type Db } from '../db';
@@ -7,7 +7,7 @@ import { seedDemo } from '../demo';
 import { costMetrics } from './costs';
 import { LEDGER_NOW, LEDGER_PERIODS, LEDGER_STORE, seedLedgerStore } from './fixture';
 import { contributions } from './contributions';
-import { COVER_WINDOW, coverUnits, listings } from './listings';
+import { COVER_WINDOW, coverUnits, listings, listingVariants } from './listings';
 import { computeMetricSet } from './metric-set';
 import { storePeriod, type StorePeriod } from './period';
 import { salesMetrics } from './sales';
@@ -210,6 +210,45 @@ describe('listings (SA-66)', () => {
     expect(rows.map((r) => [r.id, r.stockState, r.stock])).toEqual([['x2', 'supplier', null], ['x3', 'in_stock', 5], ['x4', 'not_tracked', null], ['x6', 'not_tracked', null]]);
     expect(list(db, { status: 'all', stock: 'supplier' }).rows.map((r) => r.id)).toEqual(['x2']);
     expect(list(db, { status: 'all', stock: 'not_tracked' }).total).toBe(31);
+  });
+
+  it("SA-83: each variant's sales are the v1 functions' for the lines naming it, adding up to its product's row", () => {
+    const db = fixture();
+    const v = listingVariants(db, LEDGER_STORE, '8003', p1(db))!;
+    expect(v.note).toBeUndefined();
+    expect(v.rows.map((r) => [r.title, r.sku, r.price, r.stock, r.stockState])).toEqual([['Berry', 'GH-OLM-BER', 18, 30, 'in_stock'], ['Vanilla', 'GH-OLM-VAN', 18, 27, 'in_stock'], ['Mint', 'GH-OLM-MNT', 18, 0, 'out']]);
+    for (const r of v.rows) {
+      const slice = { products: ['8003'], variants: [r.id] };
+      const s = salesMetrics(db, LEDGER_STORE, P1.from, P1.to, 'refund_day', slice);
+      expect([r.units, r.netSales, r.refunds, r.contribution]).toEqual([s.units, s.net_sales, s.refunds, costMetrics(db, LEDGER_STORE, P1.from, P1.to, 'refund_day', slice).contribution_before_ads]);
+    }
+    const row = list(db, {}, { product: ['8003'] }).rows[0]!;
+    const sum = (k: 'units' | 'netSales' | 'refunds') => v.rows.reduce((a, r) => a + r[k].value!, 0);
+    expect([sum('units'), sum('netSales'), sum('refunds')]).toEqual([row.units.value, row.netSales.value, row.refunds.value]);
+    expect(sum('units')).toBeGreaterThan(0);
+  });
+
+  it('SA-83: a sale on rows naming no variant leaves every variant without sales, with the note; a demo store says why; 404 for no such product', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(LEDGER_NOW);
+    const db = fixture();
+    sale(db, '#v-1', P1.from, '8003', 1);
+    db.prepare("UPDATE order_lines SET variant_id = NULL WHERE store_id = ? AND order_id = '#v-1'").run(LEDGER_STORE); // a line naming no variant
+    const v = listingVariants(db, LEDGER_STORE, '8003', p1(db))!;
+    expect(v.note).toBe('Variant sales not recorded yet');
+    for (const r of v.rows) for (const x of [r.units, r.netSales, r.refunds, r.contribution]) expect(x).toEqual({ value: null, status: 'unavailable', reason: 'not_tracked', note: 'Variant sales not recorded yet' });
+    expect(v.rows.map((r) => r.stockState)).toEqual(['in_stock', 'in_stock', 'out']); // stock is still known
+
+    const demo = openDb();
+    seedDemo(demo, '2026-10-26');
+    const sp = storePeriod(demo, 'glow', () => undefined, Date.parse('2026-10-26T15:00:00Z')) as StorePeriod;
+    const d = listingVariants(demo, 'glow', 'glow-p3', sp)!;
+    expect([d.note, d.rows.length, d.rows[0]!.units.value]).toEqual(["Demo data isn't split by variant", 3, null]);
+
+    const app = createApp(db);
+    const get = (id: string, store = LEDGER_STORE) => app.request(`/api/analytics/listings/${id}/variants?store=${store}&period=custom&from=${P1.from}&to=${P1.to}`);
+    expect(((await (await get('8003')).json()) as SaVariants).rows.map((r) => r.id)).toEqual(['8003-1', '8003-2', '8003-3']);
+    expect((await get('nope')).status).toBe(404);
   });
 
   it('GET /api/analytics/listings: the page and the SA-80 filters, and 400 for a bad status, sort, page or filter', async () => {

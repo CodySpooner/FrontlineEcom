@@ -896,6 +896,28 @@ export interface SaListingRow {
   previousNetSales?: SaValue;
 }
 
+/** SA-83: one variant under its expanded Listings row: its state now and, where order lines name it, its period sales. */
+export interface SaVariantRow {
+  id: string;
+  title: string | null;
+  sku: string | null;
+  price: number | null;
+  /** Null when its stock isn't tracked. */
+  stock: number | null;
+  stockState: SaStockState;
+  coverDays?: number;
+  units: SaValue;
+  netSales: SaValue;
+  refunds: SaValue;
+  contribution: SaValue;
+}
+
+/** GET /api/analytics/listings/:id/variants: `note` says why the sales are unavailable ("Variant sales not recorded yet"). */
+export interface SaVariants {
+  rows: SaVariantRow[];
+  note?: string;
+}
+
 /** GET /api/analytics/listings: one page (25) of the store's matching products, sorted over all of them. */
 export interface SaListings {
   period: SaPeriod;

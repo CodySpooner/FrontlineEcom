@@ -5,7 +5,7 @@ import { annotations } from './annotations';
 import { contributions } from './contributions';
 import { insights } from './insights';
 import { computeMetricSet, computeSeries, parseFilters } from './metric-set';
-import { listings } from './listings';
+import { listings, listingVariants } from './listings';
 import { overview } from './overview';
 import { historyStart, storePeriod, zoneInfo } from './period';
 import { reconcile } from './reconcile';
@@ -152,6 +152,19 @@ export function storeAnalyticsRoutes(db: Db) {
       if (basis !== 'refund_day' && basis !== 'order_day') return c.json({ error: 'refunds must be refund_day or order_day' }, 400);
       const out = listings(db, s.storeId, c.req.query(), sp, filters, basis); // status, q, sort, page and SA-80's filters
       return typeof out === 'string' ? c.json({ error: out }, 400) : c.json(out);
+    })
+    // SA-83: a product's variants for its expanded row.
+    .get('/api/analytics/listings/:id/variants', (c) => {
+      const s = scoped(c);
+      if ('error' in s) return c.json({ error: s.error }, s.status);
+      const sp = storePeriod(db, s.storeId, (k) => c.req.query(k));
+      if (typeof sp === 'string') return c.json({ error: sp }, 400);
+      const filters = parseFilters(c.req.query('filters'));
+      if (typeof filters === 'string') return c.json({ error: filters }, 400);
+      const basis = c.req.query('refunds') ?? 'refund_day';
+      if (basis !== 'refund_day' && basis !== 'order_day') return c.json({ error: 'refunds must be refund_day or order_day' }, 400);
+      const out = listingVariants(db, s.storeId, c.req.param('id'), sp, filters, basis);
+      return out ? c.json(out) : c.json({ error: 'No such product in this store' }, 404);
     })
     // SA-47: the store's collections for the filter (Shopify collections, WooCommerce categories, Etsy shop sections).
     .get('/api/analytics/collections', (c) => {

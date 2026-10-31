@@ -2,7 +2,7 @@
 // sorted over the whole matching set and paged at 25 (decision 38). A row's state is current; its sales are the period's,
 // from the v1 functions narrowed to that product.
 import type { SQLInputValue } from 'node:sqlite';
-import { SA_LISTING_FILTERS, SA_LISTING_SORTS, SA_LISTING_STATUSES, type SaFilterScope, type SaFilters, type SaListingRow, type SaListings, type SaListingSort, type SaListingStatus, type SaStockState, type SaValue } from '@frontline/shared';
+import { SA_LISTING_FILTERS, SA_LISTING_SORTS, SA_LISTING_STATUSES, type SaFilterScope, type SaFilters, type SaListingRow, type SaListings, type SaListingSort, type SaListingStatus, type SaStockState, type SaValue, type SaVariants } from '@frontline/shared';
 import { addDays } from '../dates';
 import type { Db } from '../db';
 import { hash, mulberry32 } from '../demo';
@@ -121,6 +121,52 @@ function demoSplit(db: Db, storeId: string, from: string, to: string, basis: Ref
   };
   const rows = new Map([...demoShares(db, storeId)].map(([id, k]) => [id, part(k)]));
   return (id: string) => rows.get(id) ?? part(0);
+}
+
+/**
+ * SA-83: a product's variants for its expanded row, each one's state now and its period sales, which only count when
+ * every unit the product sold is on an order line naming its variant; else none, with the note. Undefined: no such
+ * product in the store.
+ */
+export function listingVariants(db: Db, storeId: string, productId: string, sp: StorePeriod, filters: SaFilters = {}, basis: RefundBasis = 'refund_day'): SaVariants | undefined {
+  if (!db.prepare('SELECT 1 FROM products WHERE store_id = ? AND id = ?').get(storeId, productId)) return undefined;
+  const demo = !!db.prepare('SELECT demo FROM stores WHERE id = ?').get(storeId)?.demo;
+  const vs = db
+    .prepare("SELECT id, title, sku, price, inventory AS inv, inventory_tracked AS tracked, coalesce(inventory_policy = 'fba', 0) AS fba FROM product_variants WHERE store_id = ? AND product_id = ? ORDER BY rowid")
+    .all(storeId, productId);
+  const { from, to } = sp.period;
+  const channels = filters.channel?.length && !demo ? filters.channel : undefined;
+  const slice = (ids?: string[], all = false): Slice => ({ ...(channels && !all && { channels }), products: [productId], ...(ids && { variants: ids }) });
+  const units = (a: string, b: string, s: Slice) => salesMetrics(db, storeId, a, b, basis, s).units.value ?? 0;
+  const sum = (xs: number[]) => xs.reduce((a, n) => a + n, 0);
+  // the cover window's rate per variant, store-wide like `coverUnits`, only when its lines name every unit too
+  const [wf, wt] = [addDays(sp.today, -COVER_WINDOW), addDays(sp.today, -1)];
+  const sold = vs.map((v) => (demo ? 0 : units(wf, wt, slice([String(v.id)], true))));
+  const rated = !demo && sum(sold) === units(wf, wt, slice(undefined, true));
+  const sales = vs.map((v) => (demo ? undefined : salesMetrics(db, storeId, from, to, basis, slice([String(v.id)]))));
+  const recorded = !demo && sum(sales.map((s) => s!.units.value ?? 0)) === units(from, to, slice());
+  const note = demo ? "Demo data isn't split by variant" : recorded ? undefined : 'Variant sales not recorded yet';
+  const none: SaValue = { value: null, status: 'unavailable', reason: demo ? 'unsupported' : 'not_tracked', note };
+  return {
+    rows: vs.map((v, i) => {
+      const s = recorded ? sales[i] : undefined;
+      const cover = rated ? coverOf(v, sold[i]!) : undefined;
+      return {
+        id: String(v.id),
+        title: v.title == null ? null : String(v.title),
+        sku: v.sku == null ? null : String(v.sku),
+        price: v.price == null ? null : Number(v.price),
+        stock: v.tracked ? Number(v.inv) : null,
+        stockState: stockState(v, rated ? sold[i]! : 0),
+        ...(cover !== undefined && { coverDays: Math.round(cover * 10) / 10 }),
+        units: s?.units ?? none,
+        netSales: s?.net_sales ?? none,
+        refunds: s?.refunds ?? none,
+        contribution: s ? costMetrics(db, storeId, from, to, basis, slice([String(v.id)])).contribution_before_ads : none,
+      };
+    }),
+    ...(note && { note }),
+  };
 }
 
 /** A demo store's fixed share of its sales per active product (Dashboard's `demoTopProducts` weights), adding up to 1. */

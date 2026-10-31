@@ -39,6 +39,7 @@ const ROUTES: Row[] = [
   { method: 'GET', path: '/api/analytics/reconcile' },
   { method: 'GET', path: '/api/analytics/collections' },
   { method: 'GET', path: '/api/analytics/listings' },
+  { method: 'GET', path: '/api/analytics/listings/:id/variants', record: () => 'pawsome-p1' }, // SA-83: a demo product of pawsome's
   { method: 'GET', path: '/api/analytics/overview' },
   { method: 'GET', path: '/api/analytics/annotations' },
   { method: 'GET', path: '/api/analytics/contributions' },

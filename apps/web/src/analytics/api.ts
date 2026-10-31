@@ -3,7 +3,7 @@
 // screen only while the store is the same, so a switch shows loading, never the last store's numbers.
 // ponytail: no definitions hook; the page reads the shared registry (SA_METRICS, SA_SOURCES) it is built from.
 import { useQuery } from '@tanstack/react-query';
-import type { SaAnnotation, SaCollection, SaContext, SaListings, SaMetricId, SaMetricSet, SaInsights, SaMoved, SaOverview, SaReconcile, SaSeries, SaSourceRow } from '@frontline/shared';
+import type { SaAnnotation, SaCollection, SaContext, SaListings, SaMetricId, SaMetricSet, SaInsights, SaMoved, SaOverview, SaReconcile, SaSeries, SaSourceRow, SaVariants } from '@frontline/shared';
 import { api } from '../api/client';
 import { periodParams, type AnalyticsState } from './state';
 
@@ -24,6 +24,8 @@ export const useSaSources = (store?: string) => useSa<SaSourceRow[]>(store, 'sou
 export const useSaCollections = (store?: string) => useSa<SaCollection[]>(store, 'collections');
 /** SA-66: one page of products; `params` are the listings query (status, q, sort, page) plus any period or filters. */
 export const useSaListings = (store: string | undefined, params: Params) => useSa<SaListings>(store, 'listings', params);
+/** SA-83: a product's variants for its expanded Listings row. */
+export const useSaVariants = (store: string, product: string, params: Params) => useSa<SaVariants>(store, `listings/${encodeURIComponent(product)}/variants`, params);
 export const useSaMetrics = (s: AnalyticsState, metrics?: SaMetricId[]) => useSa<SaMetricSet>(s.store, 'metrics', { ...periodParams(s), metrics: metrics?.join(',') });
 export const useSaSeries = (s: AnalyticsState, metric: SaMetricId) => useSa<SaSeries>(s.store, 'series', { ...periodParams(s), metric });
 export const useSaOverview = (s: AnalyticsState) => useSa<SaOverview>(s.store, 'overview', periodParams(s));

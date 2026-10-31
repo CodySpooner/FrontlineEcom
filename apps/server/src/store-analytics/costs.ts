@@ -106,7 +106,7 @@ export function costMetrics(db: Db, storeId: string, from: string, to: string, b
   // a channel its referral fee on its sales, the rest the store's % of the amount charged plus its per-order fee.
   // ponytail: a recorded fee has a day but no time, so a comparison's cut day keeps all of it.
   // With a product set, each order's fee is pro-rated by its matching lines' share of its sales.
-  const wf = sliceSql(db, storeId, { channels: slice?.channels, products: slice?.products }, to);
+  const wf = sliceSql(db, storeId, { channels: slice?.channels, products: slice?.products, variants: slice?.variants }, to);
   const feeShare = shareOf(slice);
   let [fees, estimatedOrders] = [0, 0];
   for (const r of db
