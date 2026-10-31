@@ -7,13 +7,13 @@ import { useSaContext } from '../analytics/api';
 import { ContextBar } from '../analytics/ContextBar';
 import { LegacyOverview } from '../analytics/legacy';
 import { Overview } from '../analytics/Overview';
-import { useAnalyticsState, type AnalyticsState } from '../analytics/state';
+import { useAnalyticsState, type AnalyticsPage } from '../analytics/state';
 import { Hero } from '../components/Hero';
 import { buttonClass, EmptyState, ErrorState, LoadingState, Tabs } from '../components/ui';
 import { NAV } from '../nav';
 
 /** The registered tabs, in the board's order, with the datasets their freshness chip reads. */
-export const TABS: { value: string; label: string; datasets: SaDataset[]; render: (s: AnalyticsState & { store: string }) => ReactNode }[] = [
+export const TABS: { value: string; label: string; datasets: SaDataset[]; render: (s: AnalyticsPage & { store: string }) => ReactNode }[] = [
   {
     value: 'overview',
     label: 'Overview',

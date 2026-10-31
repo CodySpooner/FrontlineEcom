@@ -3,7 +3,7 @@
 // screen only while the store is the same, so a switch shows loading, never the last store's numbers.
 // ponytail: no definitions hook; the page reads the shared registry (SA_METRICS, SA_SOURCES) it is built from.
 import { useQuery } from '@tanstack/react-query';
-import type { SaAnnotation, SaCollection, SaContext, SaListings, SaMetricId, SaMetricSet, SaMoved, SaOverview, SaReconcile, SaSeries, SaSourceRow } from '@frontline/shared';
+import type { SaAnnotation, SaCollection, SaContext, SaListings, SaMetricId, SaMetricSet, SaInsights, SaMoved, SaOverview, SaReconcile, SaSeries, SaSourceRow } from '@frontline/shared';
 import { api } from '../api/client';
 import { periodParams, type AnalyticsState } from './state';
 
@@ -29,4 +29,6 @@ export const useSaSeries = (s: AnalyticsState, metric: SaMetricId) => useSa<SaSe
 export const useSaOverview = (s: AnalyticsState) => useSa<SaOverview>(s.store, 'overview', periodParams(s));
 export const useSaAnnotations = (s: AnalyticsState) => useSa<SaAnnotation[]>(s.store, 'annotations', periodParams(s));
 export const useSaContributions = (s: AnalyticsState) => useSa<SaMoved>(s.store, 'contributions', periodParams(s));
+/** The rules read the whole store: a filter doesn't change them, so it doesn't refetch them. */
+export const useSaInsights = (s: AnalyticsState) => useSa<SaInsights>(s.store, 'insights', { ...periodParams(s), filters: undefined });
 export const useSaReconcile = (s: AnalyticsState) => useSa<SaReconcile>(s.store, 'reconcile', { ...periodParams(s), filters: undefined });

@@ -1,13 +1,15 @@
 // The v1 Overview as its pieces ship (SA-70 on), above the legacy view until SA-79 replaces it.
+import { ChevronRight } from 'lucide-react';
 import { useState } from 'react';
-import { SA_COMPARES, SA_METRICS, type SaAnnotation, type SaContext, type SaMetricId, type SaOverview } from '@frontline/shared';
-import { Button, cx, ErrorState, LoadingState, Panel, Segmented } from '../components/ui';
+import { Link, useSearchParams } from 'react-router';
+import { SA_COMPARES, SA_DATASETS, SA_METRICS, type SaAnnotation, type SaContext, type SaInsightTarget, type SaMetricId, type SaOverview } from '@frontline/shared';
+import { Button, cx, Dialog, ErrorState, LoadingState, Panel, Segmented } from '../components/ui';
 import { fmtDay, money } from '../lib/format';
-import { useSaAnnotations, useSaContext, useSaContributions, useSaOverview, useSaSeries } from './api';
+import { useSaAnnotations, useSaContext, useSaContributions, useSaInsights, useSaOverview, useSaSeries } from './api';
 import { FilterScope } from './FilterScope';
 import { channelsOf } from './Filters';
 import { KpiStrip } from './KpiStrip';
-import type { AnalyticsState } from './state';
+import type { AnalyticsPage, AnalyticsState } from './state';
 import { TrendChart, type Mark } from './TrendChart';
 
 /** The chart's quick picks; a tile picks any of the six. Contribution is after ads with ad data, else before (Q15). */
@@ -151,7 +153,108 @@ function MovedPanel({ s, ctx }: { s: AnalyticsState; ctx?: SaContext }) {
   );
 }
 
-export function Overview({ s, tabs }: { s: AnalyticsState; tabs: string[] }) {
+const DOT = { warn: 'bg-amber', red: 'bg-red', info: 'bg-[#7fb2ff]' };
+const ROW = 'flex w-full items-center gap-2.5 border-t border-line px-4 py-[9px] text-left text-[12.5px]';
+
+/** SA-76: the rule engine's flags, each opening where it can be looked into; How flags work lists every rule. */
+function AttentionPanel({ s, onChart }: { s: AnalyticsPage; onChart: (k: string) => void }) {
+  const q = useSaInsights(s);
+  const [, setParams] = useSearchParams();
+  const [how, setHow] = useState(false);
+  const d = q.data?.insights && q.data;
+  // A target that has no screen yet (Listings, SA-82) leaves its row plain: no dead link (decision 33).
+  const go = (t: SaInsightTarget): { to: string } | { onClick: () => void; title: string } | undefined => {
+    if (t.kind === 'product' || t.kind === 'products') {
+      const ids = t.kind === 'product' ? [t.id] : t.ids;
+      return { onClick: () => s.set({ filters: { ...s.filters, product: ids }, page: 1 }), title: ids.length === 1 ? 'Show this product only' : 'Show these products only' };
+    }
+    if (t.kind === 'sources') return { onClick: () => setParams((p) => (p.set('panel', 'sources'), p)), title: 'Open Data sources' };
+    if (t.kind === 'metric') return { onClick: () => onChart(t.id === 'contribution_after_ads' ? 'contribution' : t.id), title: `Chart ${SA_METRICS[t.id].label.toLowerCase()}` };
+    if (t.kind === 'orders') return { to: '/orders' };
+  };
+  return (
+    <section className="card min-w-0 p-4">
+      <div className="mb-2 flex flex-wrap items-center gap-2">
+        <h2 className="font-display text-base font-semibold tracking-[.02em] whitespace-nowrap">Needs attention</h2>
+        {d && (
+          <span className="rounded-full border border-line-2 px-2 py-px text-[11px] font-semibold text-text-2 tabular-nums">
+            {d.insights.length}
+            <span className="sr-only"> flags</span>
+          </span>
+        )}
+        {d && (
+          <button type="button" className="ml-auto cursor-pointer text-xs whitespace-nowrap underline decoration-line-3 underline-offset-3 hover:text-white" onClick={() => setHow(true)}>
+            How flags work
+          </button>
+        )}
+      </div>
+      {q.isError ? (
+        <ErrorState message="Couldn't load the flags." onRetry={() => q.refetch()} />
+      ) : !d ? (
+        <LoadingState rows={3} />
+      ) : !d.insights.length ? (
+        <p className="text-[13px] text-muted">No rule flagged anything in this period.</p>
+      ) : (
+        <ul className="-mx-4 -mb-4">
+          {d.insights.map((i, k) => {
+            const to = go(i.target);
+            const body = (
+              <>
+                <i aria-hidden className={cx('size-[7px] shrink-0 rounded-full', DOT[i.tone])} />
+                <span className="min-w-0 flex-1">
+                  <b className="block font-medium">{i.title}</b>
+                  <span className="block text-[11px] text-muted">
+                    {i.kind === 'data_health' && 'Data health · '}
+                    {i.detail}
+                  </span>
+                </span>
+                {to && <ChevronRight aria-hidden className="size-3.5 shrink-0 text-muted" />}
+              </>
+            );
+            return (
+              <li key={k}>
+                {!to ? (
+                  <div className={ROW}>{body}</div>
+                ) : 'to' in to ? (
+                  <Link to={to.to} className={cx(ROW, 'hover:bg-panel-2')}>
+                    {body}
+                  </Link>
+                ) : (
+                  <button type="button" onClick={to.onClick} title={to.title} className={cx(ROW, 'cursor-pointer hover:bg-panel-2')}>
+                    {body}
+                  </button>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      {d && (
+        <Dialog open={how} onClose={() => setHow(false)} title="How flags work" width={640}>
+          <div className="grid gap-3 text-[13px]">
+            <p className="text-text-2">
+              Each flag is a fixed rule over this store's own data: what was observed, never a score or a cause. A rule needs its minimum sample before it flags, and one that would flag on a source that is out of date or failing is held back and
+              says so.
+            </p>
+            <ul className="grid gap-2.5">
+              {d.rules.map((r) => (
+                <li key={r.id} className="border-t border-line pt-2.5">
+                  <b className="font-semibold">{r.name}</b> <span className="font-mono text-[11px] text-muted">{r.id}</span>
+                  <p className="text-text-2">{r.when}</p>
+                  <p className="text-xs text-muted">
+                    Minimum sample: {r.minSample} · Reads: {r.datasets.length ? r.datasets.map((x) => SA_DATASETS[x]).join(', ') : "every source's sync status"}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </Dialog>
+      )}
+    </section>
+  );
+}
+
+export function Overview({ s, tabs }: { s: AnalyticsPage; tabs: string[] }) {
   const o = useSaOverview(s);
   const ctx = useSaContext(s.store);
   const [chart, setChart] = useState('net_sales');
@@ -166,6 +269,9 @@ export function Overview({ s, tabs }: { s: AnalyticsState; tabs: string[] }) {
       <div className="grid items-stretch gap-3.5 min-[1180px]:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
         <TrendPanel s={s} ctx={ctx.data} o={o.data} chart={chart} onChart={setChart} />
         <MovedPanel s={s} ctx={ctx.data} />
+      </div>
+      <div className="grid items-start gap-3.5 min-[1180px]:grid-cols-[minmax(0,1.1fr)_minmax(0,1.2fr)_minmax(0,1fr)]">
+        <AttentionPanel s={s} onChart={setChart} />
       </div>
     </div>
   );

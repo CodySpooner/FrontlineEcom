@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { SaListingRow } from '@frontline/shared';
 import { Analytics } from '../pages/Analytics';
 import { renderApp, stubApi } from '../test-utils';
+import { FilterScope } from './FilterScope';
 import { channelsOf } from './Filters';
 
 const where = () => decodeURIComponent(screen.getByTestId('where').textContent!);
@@ -71,6 +72,25 @@ describe('Filters (SA-68)', () => {
     await waitFor(() => expect(where()).not.toContain('filters='));
     expect(screen.queryByRole('group', { name: 'Applied filters' })).toBeNull();
     expect(screen.queryByText(/^Not applied here:/)).toBeNull();
+  });
+
+  it('a filter left out of several metrics for one reason is one line naming them', () => {
+    render(
+      <FilterScope
+        scope={{
+          applied: [],
+          ignored: [
+            { key: 'product', reason: "Demo data isn't split by product", metric: 'net_sales' },
+            { key: 'product', reason: "Demo data isn't split by product", metric: 'orders' },
+            { key: 'product', reason: 'Store level: not split by product', metric: 'site_conversion' },
+          ],
+        }}
+      />,
+    );
+    expect(screen.getByText(/^Not applied here:/).textContent).toBe("Not applied here: Product (Demo data isn't split by product: Net sales, Orders); Product (Store level: not split by product: Site conversion)");
+    cleanup();
+    render(<FilterScope scope={{ applied: [], ignored: [{ key: 'channel', reason: 'Store level', metric: 'net_sales' }] }} />);
+    expect(screen.getByText(/^Not applied here:/).textContent).toBe('Not applied here: Channel (Store level)'); // one metric: the panel says which
   });
 
   it('a filter changes the page back to 1; a store without collections says so', async () => {

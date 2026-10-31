@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { changeOf, saDef, type SaMoved } from '@frontline/shared';
+import { changeOf, saDef, type SaInsights, type SaMoved } from '@frontline/shared';
 import { Analytics } from '../pages/Analytics';
 import { renderApp, stubApi } from '../test-utils';
 
@@ -18,8 +18,8 @@ const MOVED: SaMoved = {
   scope: { applied: [], ignored: [] },
 };
 
-function render(moved: () => unknown) {
-  stubApi((url) => {
+function render(moved: () => unknown, insights: () => unknown = () => []) {
+  const fetch = stubApi((url) => {
     if (url === '/api/stores') return [{ id: 'a', name: 'Glow Haus' }];
     if (url.startsWith('/api/analytics/overview'))
       return {
@@ -27,11 +27,13 @@ function render(moved: () => unknown) {
         metrics: (['net_sales', 'orders', 'aov', 'site_conversion', 'ad_spend', 'contribution_after_ads'] as const).map((id) => ({ id, def: saDef(id), value: 10, status: 'ok', previous: { value: 9, status: 'ok' }, change: changeOf(10, 9, 'count') })),
       };
     if (url.startsWith('/api/analytics/contributions')) return moved();
+    if (url.startsWith('/api/analytics/insights')) return insights();
     if (url.startsWith('/api/analytics/series') || url.startsWith('/api/analytics/summary')) return new Response('{}', { status: 500 });
     if (url.startsWith('/api/analytics/context')) return { storeId: 'a', name: 'Glow Haus', niche: 'beauty', platform: 'shopify', currency: 'USD', demo: false, channels: [], zone: null, zoneLabel: '', zoneAbbr: 'ET', historyStart: null, freshness: [] };
     return [];
   });
   renderApp(<Analytics />, '/analytics?store=a');
+  return fetch;
 }
 const panel = async () => (await screen.findByRole('heading', { name: 'What moved net sales' })).closest('section')!;
 
@@ -72,5 +74,74 @@ describe('What moved (SA-73)', () => {
     fail = false;
     fireEvent.click(await within(again).findByRole('button', { name: 'Try again' }));
     expect(await within(again).findByText('Hydra Barrier Night Cream')).toBeTruthy();
+  });
+});
+
+const RULE = { when: 'w', minSample: 'm', datasets: [] };
+const INSIGHTS: SaInsights = {
+  insights: [
+    { rule: 'stock_cover@1', kind: 'business', tone: 'warn', title: 'Hydra Barrier Night Cream: ~5 days of stock', detail: '38 left · 7.4 sold a day over the last 14 days', evidence: {}, target: { kind: 'product', id: '8002' } },
+    { rule: 'late_fulfillment@1', kind: 'business', tone: 'red', title: '2 orders not shipped after 48 h', detail: 'Oldest #1001, placed Oct 26', evidence: {}, target: { kind: 'orders' } },
+    { rule: 'listing_sync@1', kind: 'business', tone: 'info', title: '1 TikTok Shop listing failed to sync', detail: 'Silk Sleep Scrunchie Set · image under 600 px', evidence: {}, target: { kind: 'listings', channel: 'tiktok_shop' } },
+    { rule: 'source_health@1', kind: 'data_health', tone: 'red', title: 'Meta Ads sync failing', detail: 'ad spend', evidence: {}, target: { kind: 'sources' } },
+    { rule: 'ads_contribution@1', kind: 'business', tone: 'warn', title: 'Ad spend up 20.0% while contribution after ads fell 3.2%', detail: 'd', evidence: {}, target: { kind: 'metric', id: 'contribution_after_ads' } },
+  ],
+  rules: [
+    { id: 'stock_cover@1', name: 'Low stock cover', when: 'Stock lasts under 10 days', minSample: '5 units sold in the last 14 days', datasets: ['orders', 'inventory'] },
+    { id: 'source_health@1', name: 'Source health', ...RULE },
+  ],
+};
+
+describe('Needs attention (SA-76)', () => {
+  it('the count, the rows by tone, and each row opening its record; a listing row waits for Listings', async () => {
+    const fetch = render(() => MOVED, () => INSIGHTS);
+    const p = (await screen.findByRole('heading', { name: 'Needs attention' })).closest('section')!;
+    const rows = await within(p).findAllByRole('listitem');
+    expect(p.textContent).toContain('5 flags');
+    expect(rows.map((r) => r.textContent)).toEqual([
+      'Hydra Barrier Night Cream: ~5 days of stock38 left · 7.4 sold a day over the last 14 days',
+      '2 orders not shipped after 48 hOldest #1001, placed Oct 26',
+      '1 TikTok Shop listing failed to syncSilk Sleep Scrunchie Set · image under 600 px',
+      'Meta Ads sync failingData health · ad spend',
+      'Ad spend up 20.0% while contribution after ads fell 3.2%d',
+    ]);
+    expect(rows.map((r) => r.querySelector('i')!.className.match(/bg-\S+/)![0])).toEqual(['bg-amber', 'bg-red', 'bg-[#7fb2ff]', 'bg-red', 'bg-amber']);
+    expect(within(rows[1]!).getByRole('link').getAttribute('href')).toBe('/orders');
+    expect(within(rows[2]!).queryByRole('link')).toBeNull();
+    expect(within(rows[2]!).queryByRole('button')).toBeNull(); // no Listings tab yet: no dead link
+
+    fireEvent.click(within(rows[4]!).getByRole('button'));
+    expect(await screen.findByRole('heading', { name: 'Contribution after ads' })).toBeTruthy(); // the chart shows it
+
+    fireEvent.click(within(rows[3]!).getByRole('button'));
+    expect(screen.getByTestId('where').textContent).toContain('panel=sources');
+    expect(await screen.findByRole('dialog', { name: 'Data sources' })).toBeTruthy();
+
+    fireEvent.click(within(rows[0]!).getByRole('button', { name: /Hydra Barrier/ }));
+    expect(decodeURIComponent(screen.getByTestId('where').textContent!)).toContain('filters={"product":["8002"]}');
+    const calls = () => fetch.mock.calls.map((c) => decodeURIComponent(String(c[0])));
+    await within(p).findAllByRole('listitem');
+    expect(calls().some((u) => u.startsWith('/api/analytics/overview') && u.includes('"product":["8002"]'))).toBe(true);
+    expect(calls().filter((u) => u.startsWith('/api/analytics/insights')).every((u) => !u.includes('filters'))).toBe(true); // the rules read the whole store
+  });
+
+  it('How flags work lists every rule with its threshold, sample and datasets; nothing flagged says so; a failed load retries', async () => {
+    render(() => MOVED, () => INSIGHTS);
+    fireEvent.click(await screen.findByRole('button', { name: 'How flags work' }));
+    const d = await screen.findByRole('dialog', { name: 'How flags work' });
+    expect(within(d).getAllByRole('listitem').map((li) => li.textContent)).toEqual([
+      'Low stock cover stock_cover@1Stock lasts under 10 daysMinimum sample: 5 units sold in the last 14 days · Reads: Orders, Inventory',
+      "Source health source_health@1wMinimum sample: m · Reads: every source's sync status",
+    ]);
+    cleanup();
+    render(() => MOVED, () => ({ ...INSIGHTS, insights: [] }));
+    expect(await screen.findByText('No rule flagged anything in this period.')).toBeTruthy();
+    cleanup();
+    let fail = true;
+    render(() => MOVED, () => (fail ? new Response('{}', { status: 502 }) : INSIGHTS));
+    const p = (await screen.findByRole('heading', { name: 'Needs attention' })).closest('section')!;
+    fail = false;
+    fireEvent.click(await within(p).findByRole('button', { name: 'Try again' }));
+    expect(await within(p).findByText('Meta Ads sync failing')).toBeTruthy();
   });
 });

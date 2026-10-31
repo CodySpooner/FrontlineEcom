@@ -7,6 +7,8 @@ import { useStoreSelection } from '../components/StoreFilter';
 import { useStores } from '../api/client';
 
 export type RefundBasis = 'refund_day' | 'order_day';
+/** The state with its setter, as a tab gets it. */
+export type AnalyticsPage = ReturnType<typeof useAnalyticsState>;
 
 export interface AnalyticsState {
   store?: string;
