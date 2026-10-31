@@ -3,7 +3,7 @@
 // screen only while the store is the same, so a switch shows loading, never the last store's numbers.
 // ponytail: no definitions hook; the page reads the shared registry (SA_METRICS, SA_SOURCES) it is built from.
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { SaAnnotation, SaBreakdownBy, SaCollection, SaContext, SaListings, SaMetricId, SaMetricSet, SaInsights, SaMoved, SaOrders, SaOverview, SaProductCompare, SaProductDetail, SaReconcile, SaSalesBreakdown, SaSalesReport, SaTraffic, SaSeries, SaSourceRow, SaVariants } from '@frontline/shared';
+import type { SaAnnotation, SaBreakdownBy, SaCollection, SaContext, SaCustomers, SaListings, SaMetricId, SaMetricSet, SaInsights, SaMoved, SaOrders, SaOverview, SaProductCompare, SaProductDetail, SaReconcile, SaSalesBreakdown, SaSalesReport, SaTraffic, SaSeries, SaSourceRow, SaVariants } from '@frontline/shared';
 import { api, json } from '../api/client';
 import { periodParams, type AnalyticsState } from './state';
 
@@ -50,6 +50,7 @@ export const useSaContributions = (s: AnalyticsState) => useSa<SaMoved>(s.store,
 /** The rules read the whole store: a filter doesn't change them, so it doesn't refetch them. */
 export const useSaInsights = (s: AnalyticsState) => useSa<SaInsights>(s.store, 'insights', { ...periodParams(s), filters: undefined });
 /** SA-95, SA-96, SA-97: the Sales tab's report, a breakdown, and the orders behind [from, to] a page at a time. */
+export const useSaCustomers = (s: AnalyticsState) => useSa<SaCustomers>(s.store, 'customers', periodParams(s));
 export const useSaTraffic = (s: AnalyticsState) => useSa<SaTraffic>(s.store, 'traffic', periodParams(s));
 export const useSaSales = (s: AnalyticsState, grain?: string) => useSa<SaSalesReport>(s.store, 'sales', { ...periodParams(s), grain });
 export const useSaBreakdown = (s: AnalyticsState, by: SaBreakdownBy) => useSa<SaSalesBreakdown>(s.store, 'sales/breakdown', { ...periodParams(s), compare: 'none', by });

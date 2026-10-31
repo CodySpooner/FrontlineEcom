@@ -20,7 +20,7 @@ afterEach(cleanup);
 describe('Store Analytics shell (SA-62)', () => {
   it('lists only the registered tabs; an unregistered tab in the URL opens Overview', async () => {
     stub([{ id: 'a', name: 'Store A' }]);
-    renderApp(<Analytics />, '/analytics?store=a&tab=customers');
+    renderApp(<Analytics />, '/analytics?store=a&tab=not-a-tab');
     const tabs = await screen.findAllByRole('tab');
     expect(tabs.map((t) => t.textContent)).toEqual(TABS.map((t) => t.label));
     expect(screen.getByRole('tab', { selected: true }).textContent).toBe('Overview');

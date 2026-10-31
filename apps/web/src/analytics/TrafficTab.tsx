@@ -22,17 +22,18 @@ const BY: Record<SaTrafficBy, string> = { source: 'Source', device: 'Device', co
 const count = (n: number) => fmtValue('sessions', n);
 const pct = (n: number) => (n < 0.005 ? '<1%' : `${Math.round(n * 100)}%`);
 
-/** A breakdown value as people read it: a country code as its name, anything else capitalised (`unknown` → Unknown). */
-function named(by: SaTrafficBy, v: string) {
-  if (by === 'country' && /^[A-Z]{2}$/.test(v)) {
-    try {
-      return new Intl.DisplayNames(['en'], { type: 'region' }).of(v) ?? v;
-    } catch {
-      return v;
-    }
+/** An ISO country code as its name (the code when the browser can't name it). */
+export function countryName(code: string) {
+  if (!/^[A-Z]{2}$/.test(code)) return code;
+  try {
+    return new Intl.DisplayNames(['en'], { type: 'region' }).of(code) ?? code;
+  } catch {
+    return code;
   }
-  return v[0]!.toUpperCase() + v.slice(1);
 }
+
+/** A breakdown value as people read it: a country code as its name, anything else capitalised (`unknown` → Unknown). */
+const named = (by: SaTrafficBy, v: string) => (by === 'country' && v !== 'unknown' ? countryName(v) : v[0]!.toUpperCase() + v.slice(1));
 
 const Bar = ({ share }: { share: number }) => (
   <span className="flex items-center gap-2">
