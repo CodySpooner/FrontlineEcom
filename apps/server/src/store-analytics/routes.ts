@@ -1,4 +1,4 @@
-import { SA_BREAKDOWNS, SA_METRICS, SA_SALES_GRAINS, SA_SOURCES, type SaBreakdownBy, type SaCollection, type SaContext, type SaMetricId, type SaSalesGrain, type SaSourceKind } from '@frontline/shared';
+import { SA_BREAKDOWNS, SA_METRICS, SA_SALES_GRAINS, SA_SOURCES, SA_TRAFFIC_BREAKDOWNS, SA_TRAFFIC_REPORT, type SaBreakdownBy, type SaTraffic, type SaCollection, type SaContext, type SaMetricId, type SaSalesGrain, type SaSourceKind } from '@frontline/shared';
 import { Hono } from 'hono';
 import type { Db } from '../db';
 import { annotations } from './annotations';
@@ -17,6 +17,7 @@ import { historyStart, storePeriod, zoneInfo } from './period';
 import { reconcile } from './reconcile';
 import { salesReport } from './sales-report';
 import { datasetFreshness, markVerified, sourceRows } from './sources';
+import { trafficBreakdown, trafficFunnel } from './traffic';
 
 export type Scope = { storeId: string; metrics?: SaMetricId[] };
 
@@ -127,6 +128,19 @@ export function storeAnalyticsRoutes(db: Db) {
       const basis = c.req.query('refunds') ?? 'refund_day';
       if (basis !== 'refund_day' && basis !== 'order_day') return c.json({ error: 'refunds must be refund_day or order_day' }, 400);
       return c.json(salesBreakdown(db, s, sp, filters, basis, by));
+    })
+    // SA-101 (spec §8): the funnel where each step is reported, conversion v1 (/metrics'), sessions by source, device and country.
+    .get('/api/analytics/traffic', (c) => {
+      const s = scoped(c);
+      if ('error' in s) return c.json({ error: s.error }, s.status);
+      const sp = storePeriod(db, s.storeId, (k) => c.req.query(k));
+      if (typeof sp === 'string') return c.json({ error: sp }, 400);
+      const filters = parseFilters(c.req.query('filters'));
+      if (typeof filters === 'string') return c.json({ error: filters }, 400);
+      const { from, to } = sp.period;
+      const { conversion, ...funnel } = trafficFunnel(db, s.storeId, from, to); // conversion: the KPI's, in metrics
+      const breakdowns = Object.fromEntries(SA_TRAFFIC_BREAKDOWNS.map((by) => [by, trafficBreakdown(db, s.storeId, from, to, by)])) as SaTraffic['breakdowns'];
+      return c.json({ ...computeMetricSet(db, s, [...SA_TRAFFIC_REPORT], sp, filters), ...funnel, breakdowns } satisfies SaTraffic);
     })
     // SA-97: the orders behind the period's net sales, a page at a time, adding up to it.
     .get('/api/analytics/orders', (c) => {

@@ -872,6 +872,16 @@ export interface SaChannelTraffic {
   value: SaValue;
 }
 
+/** SA-101: `GET /api/analytics/traffic`: its KPIs are /metrics' for the scope; the funnel and breakdowns are store level. */
+export const SA_TRAFFIC_REPORT = ['sessions', 'site_conversion'] as const satisfies readonly SaMetricId[];
+export interface SaTraffic extends SaMetricSet {
+  /** Who reports the site's traffic: GA4 when connected, else the platform; null for a marketplace store (no site). */
+  source: SaSourceKind | null;
+  steps: SaFunnelStep[];
+  channels: SaChannelTraffic[];
+  breakdowns: Record<SaTrafficBy, { rows: SaTrafficRow[]; reason?: SaReason; note?: string }>;
+}
+
 /** SA-96: what `GET /api/analytics/sales/breakdown?by=` splits net sales and units by. */
 export const SA_BREAKDOWNS = ['channel', 'product', 'collection', 'country'] as const;
 export type SaBreakdownBy = (typeof SA_BREAKDOWNS)[number];

@@ -1,8 +1,8 @@
 // SA-69: one number, one value everywhere. Each surface that shows a v1 number has a row here holding it equal to
 // /metrics (or to the surface it's drawn from) for the same scope, on the ledger fixture and on a demo store. Later
 // surfaces add a row.
-import type { SaListings, SaMetricSet, SaOrders, SaOverview, SaProductDetail, SaSalesBreakdown, SaSalesReport } from '@frontline/shared';
-import { SA_BREAKDOWNS, SA_OVERVIEW_KPIS, SA_SALES_REPORT } from '@frontline/shared';
+import type { SaListings, SaMetricSet, SaOrders, SaOverview, SaProductDetail, SaSalesBreakdown, SaSalesReport, SaTraffic } from '@frontline/shared';
+import { SA_BREAKDOWNS, SA_OVERVIEW_KPIS, SA_SALES_REPORT, SA_TRAFFIC_REPORT } from '@frontline/shared';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../app';
 import { openDb } from '../db';
@@ -54,6 +54,18 @@ for (const scope of SCOPES) {
           expect(rows.reduce((s, r) => s + (r.values[id].value ?? 0), 0), `${id}${v}`).toBeCloseTo(m.metrics.find((x) => x.id === id)!.value!, 2);
         }
         void [grain, tax, shipping];
+      }
+    });
+
+    it("the traffic report's sessions and conversion = /metrics; its funnel's sessions are the KPI's (SA-101)", async () => {
+      const a = app();
+      for (const v of VARIANTS) {
+        const q = `store=${scope.store}&${scope.period}${v}`;
+        const [{ source, steps, channels, breakdowns, ...set }, m] = await Promise.all([get<SaTraffic>(a, `traffic?${q}`), get<SaMetricSet>(a, `metrics?${q}&metrics=${SA_TRAFFIC_REPORT.join(',')}`)]);
+        expect(set).toEqual(m);
+        const { id, def, previous, change, ...sessions } = m.metrics[0]!;
+        expect(steps[0]!.value, v).toEqual(sessions);
+        void [source, channels, breakdowns, id, def, previous, change];
       }
     });
 

@@ -1,9 +1,11 @@
 // SA-21: sessions and site conversion beyond the oracle.
-import { describe, expect, it } from 'vitest';
+import type { SaTraffic } from '@frontline/shared';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { createApp } from '../app';
 import { openDb } from '../db';
 import { seedDemo } from '../demo';
 import { insertStore } from '../stores';
-import { LEDGER_PERIODS, LEDGER_STORE, seedLedgerStore } from './fixture';
+import { LEDGER_NOW, LEDGER_PERIODS, LEDGER_STORE, seedLedgerStore } from './fixture';
 import { trafficBreakdown, trafficFunnel, trafficMetrics } from './traffic';
 
 const { P1 } = LEDGER_PERIODS;
@@ -163,5 +165,44 @@ describe('trafficBreakdown (SA-100)', () => {
     const demo = openDb();
     seedDemo(demo, '2026-10-26');
     expect(trafficBreakdown(demo, 'glow', '2026-10-19', '2026-10-25', 'device')).toMatchObject({ rows: [], reason: 'unsupported' });
+  });
+});
+
+describe('GET /api/analytics/traffic (SA-101)', () => {
+  afterEach(() => vi.useRealTimers());
+  const report = async (db: ReturnType<typeof openDb>, q = '') => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(LEDGER_NOW);
+    const res = await createApp(db).request(`/api/analytics/traffic?store=${LEDGER_STORE}&period=custom&from=${P1.from}&to=${P1.to}${q}`);
+    expect(res.status).toBe(200);
+    return (await res.json()) as SaTraffic;
+  };
+
+  it('the KPIs with their comparison, the funnel where each step is reported, the three breakdowns and the channels', async () => {
+    const db = openDb();
+    seedLedgerStore(db);
+    db.prepare("INSERT INTO traffic_breakdown_daily (store_id, date, dimension, value, sessions, purchase_sessions, source) VALUES ('ledger', '2026-10-26', 'device', 'mobile', 70, 1, 'shopify'), ('ledger', '2026-10-26', 'device', 'desktop', 30, 1, 'shopify')").run();
+    const t = await report(db, '&compare=previous');
+    expect(t.metrics.map((m) => [m.id, m.value, m.previous?.value])).toEqual([
+      ['sessions', 700, 700],
+      ['site_conversion', 12 / 600, 14 / 700],
+    ]);
+    expect(t.source).toBe('shopify');
+    expect(t.steps.map((s) => [s.id, s.value.value])).toEqual([['sessions', 700], ['add_to_carts', 84], ['checkouts', 35], ['purchase_sessions', 12]]);
+    expect(t.breakdowns).toEqual({
+      source: { rows: [], reason: 'needs_ingestion' },
+      device: { rows: [{ value: 'mobile', sessions: 70, purchase_sessions: 1 }, { value: 'desktop', sessions: 30, purchase_sessions: 1 }] },
+      country: { rows: [], reason: 'needs_ingestion' },
+    });
+    expect(t.channels.map((c) => [c.channel, c.value.reason])).toEqual([['tiktok_shop', 'not_tracked']]);
+  });
+
+  it('a GA4 store: conversion unavailable with the reason, carts and checkouts as events', async () => {
+    const db = openDb();
+    seedLedgerStore(db);
+    db.prepare(GA4).run();
+    const t = await report(db);
+    expect(t.metrics[1]).toMatchObject({ id: 'site_conversion', value: null, status: 'unavailable', reason: 'unsupported', note: 'GA4 sends event counts, not purchasing sessions.' });
+    expect(t.steps.map((s) => s.unit)).toEqual(['sessions', 'events', 'events', 'sessions']);
   });
 });
