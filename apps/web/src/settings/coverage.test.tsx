@@ -52,7 +52,7 @@ describe('every control on a settings page is real', () => {
       if (url === '/api/config') return { values: {}, origins: {}, versions: { app: 1 } };
       if (url === '/api/stores') return [peak];
       if (url === '/api/stores/peak/impact') return { removes: [], keeps: [] };
-      if (url.startsWith('/api/caps')) return caps;
+      if (url.startsWith('/api/caps')) return [caps]; // GET /api/caps answers a list
       if (url === '/api/health') return { ok: true, uptimeSec: 1, version: 'dev', connectors: [] };
       if (url === '/api/runtimes') return ['claude', 'codex'].map((runtime) => ({ runtime, connected: runtime === 'claude', ...(runtime === 'codex' ? { reason: 'Set up Codex' } : {}), source: 'registry', checkedAt: '', models: [{ id: 'm', label: 'M', efforts: ['low', 'high'], default: true }] }));
     });

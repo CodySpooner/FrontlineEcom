@@ -29,7 +29,7 @@ export { agentDefaults, agentTypes, runLimits, archiveCustomRole, createCustomRo
 export { conversationCounts, conversationFindings, conversationKnowledge, conversationPreface, conversationQuery, conversationThread, runDeliverables, setConversationConfig, createConversation, discardConversation, getConversation, indexConversation, listConversations, recap, stateOf, touchConversation, updateConversation, type ConversationQuery } from './conversations';
 export { createRunManager, getRun, hasEffects, listRuns, replyBlocks, runGist, teamCost, type RunManager, type RunManagerOptions, type StartOptions } from './runs';
 export { addNote, addParticipant, createTeam, getTeam, parseContribution, parsePlan, resumeStep, TEAM_PLAN, TEAM_SYNTHESIS, TEAM_TASK, validateTeam } from './teams';
-export { CREDITS, saveCreative, listCreatives, deleteCreative, chargeCredits, creditsToday, demoMedia, wrap, type NewCreative } from './creatives';
+export { CREDITS, saveCreative, listCreatives, deleteCreative, chargeCredits, creditsAsked, creditsToday, demoMedia, rendersAsked, wrap, type NewCreative } from './creatives';
 export { reviewCampaigns, thresholds, economics, adWindow, uncostedShare, type CampaignStats, type Economics, type Verdict } from './ads';
 export { ADS_JOB, DEFAULT_JOBS, createDefaultJobs, enableDefaultJobs } from './jobs';
 export { MISSION_TEMPLATES, advanceMissions, cancelMission, createMission, getMission, listMissions, parseMission } from './missions';

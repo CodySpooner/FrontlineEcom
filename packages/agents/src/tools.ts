@@ -651,9 +651,13 @@ export const APP_TOOLS: AppTool[] = [
         action: { kind: 'creative.generate', payload: { kind, aspect, prompt, headline, primaryText, cta, credits } },
       });
       if (!approved) return message;
-      // Other renders may have been approved while this one waited.
+      // Other renders may have been approved, or the cap lowered (ST-24a), while this one waited.
       const now = creditsToday(ctx.db, ctx.store.id);
-      if (now + credits > cap) return `${message}, but not generated: other renders used ${now} of today's ${cap}-credit cap meanwhile. Suggest it for tomorrow instead.`;
+      const capNow = ctx.caps?.(ctx.store.id).higgsfieldCreditsPerDay ?? Infinity;
+      if (now + credits > capNow) {
+        const why = capNow < cap ? `today's credit cap is ${capNow} now (it was ${cap}) and ${now} are used` : `other renders used ${now} of today's ${cap}-credit cap meanwhile`;
+        return `${message}, but not generated: ${why}. Suggest it for tomorrow instead.`;
+      }
       // ponytail: charged before the render, so a failure after Higgsfield took it (timeout, download) still counts; a
       // request it refused counts too, on the cap's side.
       chargeCredits(ctx.db, ctx.store.id, credits);

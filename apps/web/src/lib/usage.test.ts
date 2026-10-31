@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { StoreCaps } from '@frontline/shared';
-import { budgetFix, capFrom, usedShare } from './usage';
+import { budgetFix, capFrom, creditsUsed, pendingRenders, usedShare } from './usage';
 
 describe('usedShare', () => {
   it('is used over cap, capped at 1', () => {
@@ -34,5 +34,14 @@ describe('capFrom', () => {
     expect(capFrom(caps, 'higgsfieldCreditsPerDay')).toEqual({ text: 'Workspace default', to: '/settings/usage?store=glow#caps.higgsfieldCreditsPerDay' });
     expect(capFrom(caps, 'adSpendChangePerDay')?.text).toBe('Built-in default');
     expect(capFrom({ ...caps, origins: undefined }, 'agentCostPerDay')).toBeUndefined(); // nothing said rather than a guess
+  });
+});
+
+describe('the credits meter', () => {
+  it('counts the renders waiting on the owner, and says how many', () => {
+    const u = { storeId: 'glow', agentCostUsd: 0, adBudgetAddedUsd: 0, credits: 20, creditsPending: 42, rendersPending: 2 };
+    expect([creditsUsed(u), pendingRenders(u)]).toEqual([62, 'including 2 pending renders']);
+    expect(pendingRenders({ ...u, rendersPending: 1 })).toBe('including 1 pending render');
+    expect([creditsUsed({ ...u, creditsPending: undefined }), pendingRenders({ ...u, rendersPending: undefined })]).toEqual([20, 'including 0 pending renders']); // an older server
   });
 });

@@ -1,7 +1,12 @@
-import { settingsUrl, type StoreCaps } from '@frontline/shared';
+import { settingsUrl, type StoreCaps, type StoreUsage } from '@frontline/shared';
 
 /** Share of a daily cap used so far, 0–1. A zero cap counts as full once anything is used. */
 export const usedShare = (used: number, cap: number) => (cap > 0 ? Math.min(1, used / cap) : used > 0 ? 1 : 0);
+
+/** Credits used today plus the renders waiting on the owner: they hold the cap's room (decision 10). */
+export const creditsUsed = (u: StoreUsage) => u.credits + (u.creditsPending ?? 0);
+/** What the credits meter includes, said with it. */
+export const pendingRenders = (u: StoreUsage) => `including ${u.rendersPending ?? 0} pending render${u.rendersPending === 1 ? '' : 's'}`;
 
 const FROM = { store: 'Set for this store', workspace: 'Workspace default', default: 'Built-in default' } as const;
 type CapKey = keyof NonNullable<StoreCaps['origins']>;

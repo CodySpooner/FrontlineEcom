@@ -7,7 +7,9 @@ import {
   isAccountError,
   isDefaultModelGone,
   costToday,
+  creditsAsked,
   creditsToday,
+  rendersAsked,
   ADS_JOB,
   IDLE_CAMPAIGN_STATUSES,
   MISSION_TEMPLATES,
@@ -586,7 +588,14 @@ export function agentRoutes(db: Db) {
       const ids = c.req.query('stores')?.split(',').filter(Boolean);
       const stores = listStores(db).filter((s) => !ids?.length || ids.includes(s.id));
       return c.json(
-        stores.map((s): StoreUsage => ({ storeId: s.id, agentCostUsd: costToday(db, s.id), credits: creditsToday(db, s.id), adBudgetAddedUsd: budgetAddedToday(db, s.id) })),
+        stores.map((s): StoreUsage => ({
+          storeId: s.id,
+          agentCostUsd: costToday(db, s.id),
+          credits: creditsToday(db, s.id),
+          creditsPending: creditsAsked(db, s.id),
+          rendersPending: rendersAsked(db, s.id),
+          adBudgetAddedUsd: budgetAddedToday(db, s.id),
+        })),
       );
     })
     .get('/api/agents', (c) => {

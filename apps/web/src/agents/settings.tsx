@@ -12,7 +12,7 @@ import { nicheName } from '../components/StoreForm';
 import { Badge, Button, buttonClass, ConfirmDelete, cx, Dialog, EmptyState, ErrorState, inputClass, LoadingState, Panel, ProgressBar, MEMORY_KINDS, memoryAuthor, RUN_STATUS, Segmented, Switch, Table, Tabs, UsageMeter } from '../components/ui';
 import { describeTrigger, when } from '../lib/automation';
 import { ago, cents, money } from '../lib/format';
-import { capFrom } from '../lib/usage';
+import { capFrom, creditsUsed, pendingRenders } from '../lib/usage';
 import { withParams } from '../knowledge/url';
 import { agentsUrl } from './urls';
 
@@ -316,7 +316,7 @@ function AgentSettings({ agent }: { agent: Agent }) {
                 {usage && <UsageMeter label="AI usage" used={usage.agentCostUsd} cap={caps.agentCostPerDay} fmt={(n) => cents(n)} />}
               </Cap>
               <Cap label="Higgsfield credits" value={`${caps.higgsfieldCreditsPerDay.toLocaleString('en-US')}/day`} from={capFrom(caps, 'higgsfieldCreditsPerDay')}>
-                {usage && <UsageMeter label="Higgsfield credits" used={usage.credits} cap={caps.higgsfieldCreditsPerDay} fmt={(n) => n.toLocaleString('en-US')} />}
+                {usage && <UsageMeter label="Higgsfield credits" used={creditsUsed(usage)} cap={caps.higgsfieldCreditsPerDay} fmt={(n) => n.toLocaleString('en-US')} note={pendingRenders(usage)} />}
               </Cap>
               <Cap
                 label="Autopilot actions"

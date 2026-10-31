@@ -23,7 +23,7 @@ const api = (extra: (url: string) => unknown = () => undefined) =>
     if (url === '/api/settings') return settings;
     if (url === '/api/config') return { values: { baseCurrency: 'EUR', timezone: 'UTC' }, origins: {}, versions: { app: 1, workspace: 1 } };
     if (url === '/api/stores') return [peak, glow];
-    if (url.startsWith('/api/caps')) return { ...caps, storeId: new URL(url, 'http://x').searchParams.get('stores') ?? 'peak' };
+    if (url.startsWith('/api/caps')) return [{ ...caps, storeId: new URL(url, 'http://x').searchParams.get('stores') ?? 'peak' }]; // GET /api/caps answers a list
     return extra(url) ?? (url === '/api/health' ? { ok: true, uptimeSec: 1, version: 'dev', connectors: [] } : undefined);
   });
 

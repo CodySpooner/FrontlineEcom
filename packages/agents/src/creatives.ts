@@ -46,6 +46,10 @@ export function creditsToday(db: DatabaseSync, storeId: string): number {
   return Number(db.prepare('SELECT coalesce(sum(credits), 0) AS n FROM creative_credits WHERE store_id = ? AND created_at >= ?').get(storeId, midnight.toISOString())?.n ?? 0);
 }
 
+/** The store's render requests still waiting on the owner: how many (the usage meter says them, ST-24a). */
+export const rendersAsked = (db: DatabaseSync, storeId: string) =>
+  Number(db.prepare(`SELECT count(*) AS n FROM approvals WHERE store_id = ? AND status = 'pending' AND json_extract(action_json, '$.kind') = 'creative.generate'`).get(storeId)?.n ?? 0);
+
 /** Credits of the store's render requests still waiting on the owner. */
 export const creditsAsked = (db: DatabaseSync, storeId: string) =>
   Number(

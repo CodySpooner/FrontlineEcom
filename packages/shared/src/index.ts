@@ -1531,7 +1531,7 @@ export type SettingsUpdate = { version: number; profile?: Partial<Settings['prof
  */
 export interface StoreCaps {
   storeId: string;
-  /** Max USD/day of ad budget agents may add or move. */
+  /** Max USD/day agents may raise ad budgets by (cuts and pauses don't count). */
   adSpendChangePerDay: number;
   /** Max Higgsfield credits/day for creative generation. */
   higgsfieldCreditsPerDay: number;
@@ -1553,6 +1553,9 @@ export interface StoreUsage {
   storeId: string;
   agentCostUsd: number;
   credits: number;
+  /** Credits of renders still waiting on the owner, and how many: they hold the cap's room, so the meter counts them (ST-24a). */
+  creditsPending?: number;
+  rendersPending?: number;
   /** Daily ad budget added by approved or pending budget changes. */
   adBudgetAddedUsd: number;
 }

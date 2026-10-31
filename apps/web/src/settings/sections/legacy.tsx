@@ -3,9 +3,8 @@
 import { useState, type FormEvent } from 'react';
 import { useSearchParams } from 'react-router';
 import { APPROVAL_KINDS, type StoreCaps, type StoreCapsUpdate } from '@frontline/shared';
-import { useBackupNow, useBackups, useCaps, useHealth, useOpenDataFolder, useRestoreBackup, useSaveCaps, useSettings, useStores, useUsage } from '../../api/client';
-import { Badge, Button, cx, ErrorState, Field, inputClass, LoadingState, Panel, Switch, UsageMeter } from '../../components/ui';
-import { money } from '../../lib/format';
+import { useBackupNow, useBackups, useCaps, useHealth, useOpenDataFolder, useRestoreBackup, useSaveCaps, useSettings, useStores } from '../../api/client';
+import { Badge, Button, cx, ErrorState, Field, inputClass, LoadingState, Panel, Switch } from '../../components/ui';
 
 // Only kinds with a $ amount can be checked against a daily cap.
 const AUTOPILOT = Object.entries(APPROVAL_KINDS).flatMap(([kind, k]) => (k.autopilot ? [{ kind, label: k.label }] : []));
@@ -57,14 +56,12 @@ export function CapsForm({ caps }: { caps: StoreCaps }) {
   const dirty = JSON.stringify(draft) !== JSON.stringify(caps);
   const rule = (kind: string) => draft.autopilot[kind] ?? { enabled: false, maxUsdPerDay: 50 };
   const setRule = (kind: string, r: Partial<StoreCaps['autopilot'][string]>) => setDraft((d) => ({ ...d, autopilot: { ...d.autopilot, [kind]: { ...rule(kind), ...r } } }));
-  const usage = useUsage([caps.storeId]).data?.[0];
-  const num = (key: 'adSpendChangePerDay' | 'higgsfieldCreditsPerDay', label: string, help: string, used: number | undefined, fmt: (n: number) => string) => (
+  const num = (key: 'adSpendChangePerDay' | 'higgsfieldCreditsPerDay', label: string, help: string) => (
     <div className="grid content-start gap-2">
       <Field label={label}>
         <input type="number" min={0} max={1_000_000} step="any" value={draft[key]} onChange={(e) => setDraft((d) => ({ ...d, [key]: e.target.valueAsNumber }))} required className={cx(inputClass, 'w-full min-w-0')} />
         <span className="text-[11px] text-muted">{help}</span>
       </Field>
-      {used !== undefined && <UsageMeter label={label} used={used} cap={draft[key] || 0} fmt={fmt} />}
     </div>
   );
   const submit = (e: FormEvent) => {
@@ -85,8 +82,8 @@ export function CapsForm({ caps }: { caps: StoreCaps }) {
     <form onSubmit={submit} onChange={() => setSaved(false)} className="grid gap-5">
       {/* AI usage per day moved to Agents & Providers (ST-23). */}
       <div className="grid gap-3 min-[700px]:grid-cols-2">
-        {num('adSpendChangePerDay', 'Ad budget changes ($/day)', 'Most an agent may add or move per day.', usage?.adBudgetAddedUsd, (n) => money(n))}
-        {num('higgsfieldCreditsPerDay', 'Higgsfield credits per day', 'For image and video generation.', usage?.credits, (n) => n.toLocaleString('en-US'))}
+        {num('adSpendChangePerDay', 'Ad budget changes ($/day)', "Most an agent may raise ad budgets by per day. Cuts and pauses don't count.")}
+        {num('higgsfieldCreditsPerDay', 'Higgsfield credits per day', 'For image and video generation.')}
       </div>
       <fieldset>
         <legend className="mb-1 text-[13px] font-semibold">Autopilot</legend>

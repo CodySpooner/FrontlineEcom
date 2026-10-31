@@ -291,13 +291,13 @@ export function ProgressBar({ value = 0, tone = 'red', scan, label }: { value?: 
 }
 
 /** Today's use of a daily cap: a neutral bar that turns red from 80%. */
-export function UsageMeter({ label, used, cap, fmt }: { label: string; used: number; cap: number; fmt: (n: number) => string }) {
+export function UsageMeter({ label, used, cap, fmt, note }: { label: string; used: number; cap: number; fmt: (n: number) => string; note?: string }) {
   const share = usedShare(used, cap);
   return (
     <div className="grid gap-1">
       <ProgressBar value={share} tone={share >= 0.8 ? 'red' : 'muted'} label={`${label} used today`} />
       <span className={cx('text-[11px] tabular-nums', share >= 1 ? 'text-red' : 'text-muted')}>
-        {fmt(used)} of {fmt(cap)} used today
+        {fmt(used)} of {fmt(cap)} used today{note ? `, ${note}` : ''}
       </span>
     </div>
   );
