@@ -212,13 +212,14 @@ describe('listings (SA-66)', () => {
     expect(list(db, { status: 'all', stock: 'not_tracked' }).total).toBe(31);
   });
 
-  it('GET /api/analytics/listings: the page, and 400 for a bad status, sort or page', async () => {
+  it('GET /api/analytics/listings: the page and the SA-80 filters, and 400 for a bad status, sort, page or filter', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(LEDGER_NOW);
     const app = createApp(fixture());
     const get = (q: string) => app.request(`/api/analytics/listings?store=${LEDGER_STORE}&period=custom&from=${P1.from}&to=${P1.to}${q}`);
     const body = (await (await get('&page=3')).json()) as SaListings;
     expect([body.page, body.rows.length, body.rows[0]!.title]).toEqual([3, 10, 'Extra 47']);
-    for (const q of ['&status=hidden', '&sort=color', '&sort=units:up', '&page=0', '&page=1.5', '&refunds=whenever', '&filters=x']) expect((await get(q)).status).toBe(400);
+    for (const [q, ids] of [['&sync=failed', ['tt-9001']], ['&stock=variants_out&sales=with&cost=missing', ['8003']]] as const) expect(((await (await get(q)).json()) as SaListings).rows.map((r) => r.id)).toEqual(ids);
+    for (const q of ['&status=hidden', '&sort=color', '&sort=units:up', '&page=0', '&page=1.5', '&refunds=whenever', '&filters=x', '&stock=wet', '&sales=some', '&cost=all', '&sync=ok']) expect((await get(q)).status).toBe(400);
   });
 });

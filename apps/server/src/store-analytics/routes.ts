@@ -150,7 +150,7 @@ export function storeAnalyticsRoutes(db: Db) {
       if (typeof filters === 'string') return c.json({ error: filters }, 400);
       const basis = c.req.query('refunds') ?? 'refund_day';
       if (basis !== 'refund_day' && basis !== 'order_day') return c.json({ error: 'refunds must be refund_day or order_day' }, 400);
-      const out = listings(db, s.storeId, { status: c.req.query('status'), q: c.req.query('q'), sort: c.req.query('sort'), page: c.req.query('page') }, sp, filters, basis);
+      const out = listings(db, s.storeId, c.req.query(), sp, filters, basis); // status, q, sort, page and SA-80's filters
       return typeof out === 'string' ? c.json({ error: out }, 400) : c.json(out);
     })
     // SA-47: the store's collections for the filter (Shopify collections, WooCommerce categories, Etsy shop sections).
