@@ -5,7 +5,7 @@ import { settingsUrl, type Settings as SettingsT, type Store, type StoreCaps } f
 import { App } from '../App';
 import { budgetFix } from '../lib/usage';
 import { SECTIONS } from '../settings/Layout';
-import { Backups, CapsForm } from '../settings/sections/legacy';
+import { Backups } from '../settings/sections/legacy';
 import { renderApp, stubApi } from '../test-utils';
 import { Settings } from './Settings';
 
@@ -15,8 +15,6 @@ const glow = { ...peak, id: 'glow', name: 'Glow Haus' } as Store;
 const caps: StoreCaps = { storeId: 'peak', adSpendChangePerDay: 100, higgsfieldCreditsPerDay: 200, agentCostPerDay: 5, autopilot: {} };
 /** The section title (Settings' own h2, not a panel's). */
 const titled = (label: string) => vi.waitFor(() => expect(document.getElementById('settings-title')?.textContent).toBe(label));
-const amount = () => screen.getByLabelText('Change ad budgets: most per day in dollars');
-const sent = (fetch: ReturnType<typeof stubApi>, method: string) => fetch.mock.calls.filter(([, init]) => init?.method === method).map(([url, init]) => [url, JSON.parse(String(init!.body))]);
 const api = (extra: (url: string) => unknown = () => undefined) =>
   stubApi((url, init) => {
     if (init?.method === 'PATCH' && url === '/api/settings') return settings;
@@ -68,7 +66,7 @@ describe('routes and deep links', () => {
   it('a deep link opens its section with its store selected, and the store carries over to other sections', async () => {
     api();
     renderApp(<Settings />, settingsUrl('usage', { store: 'glow', setting: 'caps.agentCostPerDay' }));
-    expect(((await screen.findByRole('combobox', { name: 'Store' })) as HTMLSelectElement).value).toBe('glow');
+    expect(await screen.findByRole('heading', { name: 'Glow Haus daily caps' })).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Stores2' }).getAttribute('href')).toBe('/settings/stores?store=glow');
   });
 
@@ -117,47 +115,6 @@ describe('sidebar badges come from real data', () => {
     renderApp(<Settings />, '/settings/general');
     expect(await screen.findByRole('link', { name: 'Integrations1 issue' })).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Stores2' })).toBeTruthy();
-  });
-});
-
-describe('autopilot form (moved, ST-30)', () => {
-  it("won't send an autopilot rule with a blank amount", async () => {
-    const fetch = stubApi(() => undefined);
-    renderApp(<CapsForm caps={caps} />);
-    fireEvent.click(screen.getByRole('switch', { name: 'Change ad budgets' }));
-    fireEvent.change(amount(), { target: { value: '' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Save caps' }));
-    await new Promise((r) => setTimeout(r, 50));
-    expect(sent(fetch, 'PUT')).toHaveLength(0);
-  });
-
-  it('turning a rule off with a blank amount saves it as 0', async () => {
-    const fetch = stubApi((_url, init) => (init?.method === 'PUT' ? caps : undefined));
-    renderApp(<CapsForm caps={caps} />);
-    const rule = screen.getByRole('switch', { name: 'Change ad budgets' });
-    fireEvent.click(rule);
-    fireEvent.change(amount(), { target: { value: '' } });
-    fireEvent.click(rule);
-    fireEvent.click(screen.getByRole('button', { name: 'Save caps' }));
-    await vi.waitFor(() => expect(sent(fetch, 'PUT')).toHaveLength(1));
-    expect(sent(fetch, 'PUT')[0]![1].autopilot['ads.set_budget']).toEqual({ enabled: false, maxUsdPerDay: 0 });
-  });
-
-  it('sends only the rules that changed, with the version read: the caps are edited above it now', async () => {
-    const fetch = stubApi((_url, init) => (init?.method === 'PUT' ? { ...caps, version: 4 } : undefined));
-    renderApp(<CapsForm caps={{ ...caps, version: 3 }} />);
-    // AI usage per day moved to Agents & Providers (ST-23), the ad and credit caps to Daily caps (ST-24b).
-    expect(screen.queryAllByRole('spinbutton').map((i) => i.getAttribute('aria-label'))).toEqual(['Change ad budgets: most per day in dollars', 'Pause campaigns: most per day in dollars']);
-    fireEvent.click(screen.getByRole('switch', { name: 'Change ad budgets' }));
-    fireEvent.change(amount(), { target: { value: '25' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Save caps' }));
-    await vi.waitFor(() => expect(sent(fetch, 'PUT')).toEqual([['/api/caps/peak', { version: 3, autopilot: { 'ads.set_budget': { enabled: true, maxUsdPerDay: 25 } } }]]));
-  });
-
-  it('says autopilot comes with a store instead of loading forever', async () => {
-    stubApi((url) => (url === '/api/stores' ? [] : url === '/api/settings' ? settings : url === '/api/config' ? { values: {}, origins: {}, versions: {} } : undefined));
-    renderApp(<Settings />, '/settings/usage');
-    expect(await screen.findByText('Autopilot is set per store: add a store first, then set its rules here.')).toBeTruthy();
   });
 });
 

@@ -54,7 +54,7 @@ export const SECTIONS: SectionDef[] = [
   },
   { slug: 'knowledge', group: 'AI & Connections', label: 'Knowledge', icon: BookOpen, sub: 'How agents research for the knowledge base, for General and each store.', Page: Knowledge, scoped: 'knowledge' },
   { slug: 'product-research', group: 'AI & Connections', label: 'Product Research', icon: Target, sub: "Each store's research profile: how products are ranked, flagged and found for it.", Page: ProductResearch, scoped: 'store' },
-  { slug: 'automation', group: 'AI & Connections', label: 'Automation & Approvals', icon: Zap, sub: 'Pause what the app starts by itself, and stop the runs it started.', Page: AutomationApprovals },
+  { slug: 'automation', group: 'AI & Connections', label: 'Automation & Approvals', icon: Zap, sub: 'Pause or stop automation, every schedule, autopilot, and who approves what.', Page: AutomationApprovals, scoped: true },
   { slug: 'usage', group: 'Operations', label: 'Usage & Limits', icon: Gauge, sub: "Daily limits the agents can't cross, and what today has used.", Page: Usage, scoped: true },
   { slug: 'data', group: 'Operations', label: 'Data & Backups', icon: Database, sub: 'Where your data lives on this computer, and its backups.', Page: () => <div data-legacy="ST-31"><YourData /></div> },
 ];

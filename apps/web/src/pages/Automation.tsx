@@ -1,9 +1,9 @@
 // UI-14 Automation: rules (schedule or metric trigger → agent task, approval policy, daily cap) and the log of what they did.
 import { useState, type FormEvent } from 'react';
-import { Link } from 'react-router';
+import { Link, useSearchParams } from 'react-router';
 import { CalendarClock, History, Plus, TrendingDown, Zap } from 'lucide-react';
 import { AGENT_ROLES, settingsUrl, type ActionKind, type AgentRole, type AutomationRule, type AutomationRuleInput, type AutomationRunStatus, type AutomationTrigger, type MetricTotals } from '@frontline/shared';
-import { useActionLog, useApprovals, useAutomationActions, useAutomationRuns, useAutomations } from '../api/client';
+import { useActionLog, useApprovals, useAutomationActions, useAutomationRuns, useAutomations, useConfig } from '../api/client';
 import { ApprovalCard } from '../components/Chat';
 import { DemoJobsNote } from '../components/DemoJobsNote';
 import { Hero } from '../components/Hero';
@@ -37,6 +37,14 @@ export function Automation() {
   const q = useAutomations();
   const rules = (q.data ?? []).filter((r) => has(r.storeId));
   const [editing, setEditing] = useState<AutomationRule | 'new'>();
+  // Settings → Automation & Approvals' schedules link here with ?rule=<id> (settings ST-30).
+  const [params, setParams] = useSearchParams();
+  const linked = q.data?.find((r) => r.id === params.get('rule'));
+  const open = editing ?? linked;
+  const close = () => {
+    setEditing(undefined);
+    if (linked) setParams((p) => (p.delete('rule'), p), { replace: true });
+  };
   const newRule = (
     <Button variant="primary" size="sm" onClick={() => setEditing('new')}>
       <Plus className="size-4" />
@@ -83,11 +91,24 @@ export function Automation() {
           <ActionLog />
         </div>
       </div>
-      <Dialog open={!!editing} onClose={() => setEditing(undefined)} title={editing === 'new' ? 'New rule' : 'Edit rule'} side="right">
-        {editing && <RuleEditor key={editing === 'new' ? 'new' : editing.id} rule={editing === 'new' ? undefined : editing} onDone={() => setEditing(undefined)} />}
+      <Dialog open={!!open} onClose={close} title={open === 'new' ? 'New rule' : 'Edit rule'} side="right">
+        {open && <RuleEditor key={open === 'new' ? 'new' : open.id} rule={open === 'new' ? undefined : open} onDone={close} />}
       </Dialog>
     </>
   );
+}
+
+/** The workspace timezone schedules run in, linked to General where it's set (settings decision 14). */
+function Zone() {
+  const zone = useConfig().data?.values.timezone;
+  return typeof zone === 'string' ? (
+    <>
+      {' in '}
+      <Link to={settingsUrl('general', { setting: 'timezone' })} className="hover:text-white hover:underline">
+        {zone}
+      </Link>
+    </>
+  ) : null;
 }
 
 function RuleRow({ r, onEdit }: { r: AutomationRule; onEdit: () => void }) {
@@ -95,7 +116,7 @@ function RuleRow({ r, onEdit }: { r: AutomationRule; onEdit: () => void }) {
   const { toggle, remove } = useAutomationActions();
   const Icon = r.trigger.type === 'schedule' ? CalendarClock : TrendingDown;
   const meta = [
-    APPROVAL[r.approval].label,
+    r.action.type === 'kb_research' ? 'KB controls decide approval' : APPROVAL[r.approval].label,
     `max ${r.maxRunsPerDay}/day`,
     r.trigger.type === 'metric' && `${r.cooldownHours} h cooldown`,
     r.enabled && r.nextRunAt && `next ${when(r.nextRunAt)}`,
@@ -110,7 +131,8 @@ function RuleRow({ r, onEdit }: { r: AutomationRule; onEdit: () => void }) {
           <span className="text-xs text-muted">{name(r.storeId)}</span>
         </div>
         <p className="text-[13px] text-text-2">
-          {describeTrigger(r.trigger)} → {AGENT_ROLES[roleOf(r.action.agentId)]?.name ?? r.action.agentId}
+          {describeTrigger(r.trigger)}
+          {r.trigger.type === 'schedule' && <Zone />} → {AGENT_ROLES[roleOf(r.action.agentId)]?.name ?? r.action.agentId}
         </p>
         <div className="mt-1 flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
           <span className="text-xs text-muted">{meta.join(' · ')}</span>
@@ -329,8 +351,20 @@ function RuleEditor({ rule, onDone }: { rule?: AutomationRule; onDone: () => voi
 
       <fieldset className="grid gap-2">
         <legend className="mb-1.5 text-[13px] font-semibold">Approval</legend>
-        <Segmented label="Approval" options={Object.entries(APPROVAL).map(([value, a]) => ({ value: value as 'ask' | 'auto', label: a.label }))} value={approval} onChange={setApproval} />
-        <p className="text-xs text-muted">{APPROVAL[approval].help}</p>
+        {rule?.action.type === 'kb_research' ? (
+          <p className="text-xs text-muted">
+            This is research: the store&apos;s{' '}
+            <Link to={settingsUrl('knowledge', { store: rule.storeId })} className="text-red hover:underline">
+              Knowledge controls
+            </Link>{' '}
+            decide whether it asks you first.
+          </p>
+        ) : (
+          <>
+            <Segmented label="Approval" options={Object.entries(APPROVAL).map(([value, a]) => ({ value: value as 'ask' | 'auto', label: a.label }))} value={approval} onChange={setApproval} />
+            <p className="text-xs text-muted">{APPROVAL[approval].help}</p>
+          </>
+        )}
         <Field label="At most this many times a day">
           <input type="number" min={1} max={100} step={1} value={maxRunsPerDay} onChange={(e) => setMax(e.target.valueAsNumber)} required className={cx(inputClass, 'w-28')} />
         </Field>
@@ -396,7 +430,10 @@ function ScheduleField({ cron, onChange }: { cron: string; onChange: (cron: stri
           </Field>
         )}
       </div>
-      <p className="text-xs text-muted">{custom ? 'Five fields in your local time: minute, hour, day of month, month, weekday.' : describeTrigger({ type: 'schedule', cron })}</p>
+      <p className="text-xs text-muted">
+        {custom ? 'Five fields: minute, hour, day of month, month, weekday.' : describeTrigger({ type: 'schedule', cron })}
+        <Zone />
+      </p>
     </>
   );
 }

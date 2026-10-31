@@ -13,9 +13,7 @@ import { renderApp, stubApi } from '../test-utils';
 import { SECTIONS } from './Layout';
 
 /** Editable entries with no row outside `data-legacy` yet. The item that renders a row removes its id; ST-48 empties it. */
-const ALLOWLIST = [
-  'autopilot.ads.set_budget', 'autopilot.ads.pause_campaign', // ST-30
-];
+const ALLOWLIST: string[] = [];
 
 /** `data-action` names, each with the test that proves what it does (`path#test name`). */
 const ACTIONS: Record<string, string> = {
@@ -45,8 +43,9 @@ afterEach(cleanup);
 afterAll(() => vi.unstubAllGlobals());
 
 describe('every control on a settings page is real', () => {
-  // Plus the pages under a section: a store's (ST-18); and Knowledge in a store's scope, where its store-only rows are (ST-25).
-  it.each([...SECTIONS.map((s) => s.slug), 'stores/peak', 'knowledge?store=peak'].map((s) => [s]))('/settings/%s', async (slug) => {
+  // Plus the pages under a section: a store's (ST-18); and Knowledge and Automation in a store's scope, where their store-only
+  // rows are (ST-25, ST-30's autopilot).
+  it.each([...SECTIONS.map((s) => s.slug), 'stores/peak', 'knowledge?store=peak', 'automation?store=peak'].map((s) => [s]))('/settings/%s', async (slug) => {
     stubApi((url) => {
       if (url === '/api/settings') return settings;
       if (url === '/api/config' || url.startsWith('/api/config?')) return { values: {}, origins: {}, versions: { app: 1 } };

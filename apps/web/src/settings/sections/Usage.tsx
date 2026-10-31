@@ -1,6 +1,6 @@
 // Usage & Limits (ST-24a/b, decision 10): today's meters per store, the same counters that stop a run, a render or a
 // raise; the ad and credit caps for the workspace or one store (one explicit save through PATCH /api/config); how the
-// AI limits stack; the limits Frontline sets; and what has been spent so far. The autopilot rows stay until ST-30.
+// AI limits stack; the limits Frontline sets; and what has been spent so far. Autopilot is on Automation & Approvals (ST-30).
 import { Link } from 'react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { SETTINGS, settingsUrl, type ConfigImpact, type ConfigView, type FrontlineLimit, type StoreCaps } from '@frontline/shared';
@@ -13,7 +13,6 @@ import { creditsUsed, pendingRenders } from '../../lib/usage';
 import { useSettingsForm } from '../form';
 import { SaveBar, SettingRow, SettingsSection, useScope, type Origin } from '../kit';
 import { same } from '../useDraft';
-import { Caps } from './legacy';
 
 export function Usage() {
   return (
@@ -23,9 +22,6 @@ export function Usage() {
       <Stacking />
       <SetByFrontline />
       <SoFar />
-      <div data-legacy="ST-30">
-        <Caps />
-      </div>
     </>
   );
 }

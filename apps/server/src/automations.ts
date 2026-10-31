@@ -255,6 +255,9 @@ export function automationRoutes(db: Db, pickStores: (q?: string) => string[]) {
     .post('/api/automations', async (c) => {
       const f = parseRule(db, await c.req.json().catch(() => undefined));
       if ('error' in f) return c.json(f, 400);
+      // Settings → Knowledge's Schedules shortcut (settings ST-30): the same topic, researcher and schedule twice would research it twice.
+      const same = f.action.type === 'kb_research' && db.prepare('SELECT 1 FROM automation_rules WHERE store_id = ? AND trigger_json = ? AND action_json = ?').get(f.storeId, JSON.stringify(f.trigger), JSON.stringify(f.action));
+      if (same) return c.json({ error: 'This research is already on that schedule.', field: 'action' }, 400);
       const id = randomUUID();
       db.prepare('INSERT INTO automation_rules (id, store_id, name, enabled, trigger_json, action_json, approval, max_runs_per_day, cooldown_hours, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(
         id, f.storeId, f.name, f.enabled ? 1 : 0, JSON.stringify(f.trigger), JSON.stringify(f.action), f.approval, f.maxRunsPerDay, f.cooldownHours, new Date().toISOString(),

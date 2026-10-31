@@ -111,6 +111,33 @@ export interface AutomationCancelled {
   /** "Stopped before it changed anything", "Stopped; its N requests stay in Requests" or "Already finished". */
   outcome: string;
 }
+
+/**
+ * The approval map (ST-30, decision 14): one row per kind of action, with the approval kinds (APPROVAL_KINDS keys, each
+ * in exactly one row) and the agent tools behind it. `where` is the settings section, or an app path, it's changed in.
+ */
+export const APPROVAL_MAP: { category: string; kinds: string[]; tools: string[]; does: string; decides: string; where: { label: string; to: string } }[] = [
+  { category: 'Read-only research', kinds: ['kb.research'], tools: ['recommend_research', 'fetch_source'], does: 'Self-directed knowledge research: it reads sources and changes nothing outside the app.', decides: "The store's Knowledge controls: on its own, or each task asks you first.", where: { label: 'Knowledge', to: '/settings/knowledge' } },
+  {
+    category: 'Drafts', kinds: [], tools: ['draft_page', 'draft_flow', 'draft_theme_change'],
+    does: "Page and flow drafts stay in the app. A theme draft is an unpublished copy of your live theme with the agent's files, made in your Shopify store before you're asked (never at Suggest): the live theme isn't touched, the copy takes one of Shopify's 20 theme slots, and saying no deletes it.",
+    decides: "No approval to draft. Making a theme draft live asks you (Publishing).", where: { label: "The agent's autonomy, on AI Agents", to: '/agents' },
+  },
+  { category: 'Live store edits', kinds: ['store.set_price', 'store.add_products'], tools: ['propose_price_change', 'request_approval'], does: 'Changing a price, adding products to the store.', decides: 'Always you.', where: { label: 'Not changeable', to: '' } },
+  { category: 'Publishing', kinds: ['store.publish_page', 'store.publish_theme'], tools: ['publish_page', 'draft_theme_change'], does: 'Publishing a page or making a theme draft live.', decides: 'Always you.', where: { label: 'Not changeable', to: '' } },
+  { category: 'Launching ads', kinds: ['tool_use'], tools: ['propose_ad_change'], does: "Meta Ads tools: each write asks you (a connected tool's write); budget, bid and status changes go through propose_ad_change.", decides: 'Always you.', where: { label: 'Not changeable', to: '' } },
+  {
+    category: 'Spending money', kinds: ['ads.set_budget', 'ads.pause_campaign', 'creative.generate'], tools: ['propose_ad_change', 'create_creative'], does: 'Ad budget changes, pausing campaigns, and creatives that spend Higgsfield credits.',
+    decides: "You, or autopilot for ad budget changes and pausing campaigns: an agent set to Autopilot approves its own within the store's daily amount. Creatives always ask.", where: { label: 'Autopilot rules', to: '/settings/automation' },
+  },
+  { category: 'Deleting data', kinds: [], tools: [], does: 'Not available: no tool does this.', decides: '', where: { label: '', to: '' } },
+  { category: 'Contacting customers', kinds: [], tools: [], does: 'Not available: no tool does this.', decides: '', where: { label: '', to: '' } },
+  {
+    category: 'App-internal', kinds: ['kb.save', 'kb.promote', 'niche.promote_learning', 'save_niche_pack', 'question'], tools: ['save_finding', 'propose_general', 'promote_niche_learning', 'request_approval', 'ask_owner'],
+    does: 'Saving a finding, promoting knowledge to General, sharing a learning with the niche, saving a niche pack, answering a question.',
+    decides: "You, or for findings the agent's save-findings setting on Deploy; Knowledge's approval and review for what reaches the knowledge base.", where: { label: 'Knowledge', to: '/settings/knowledge' },
+  },
+];
 /** GET /api/config/checklist (ST-17): one setup step, `done` only when its real condition holds. */
 export interface SetupItem {
   id: string;

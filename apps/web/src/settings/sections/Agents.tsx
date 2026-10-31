@@ -2,7 +2,7 @@
 // from (ST-20 wires them in), for the workspace or one store. One explicit save through PATCH /api/config.
 import { Link } from 'react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { CODEX_ULTRA, EFFORT_LABEL, SETTINGS, type ConfigImpact, type ConfigView, type RuntimeCapabilities } from '@frontline/shared';
+import { CODEX_ULTRA, EFFORT_LABEL, SETTINGS, settingsUrl, type ConfigImpact, type ConfigView, type RuntimeCapabilities } from '@frontline/shared';
 import { agentsUrl } from '../../agents/urls';
 import { api, json, useAgents, useClaudeAccount, useConfig, useRefreshRuntimes, useRuntimes, useSetUpCodex, type ApiError } from '../../api/client';
 import { Badge, cx, ErrorState, flatButtonClass, inputClass, LoadingState, Segmented } from '../../components/ui';
@@ -334,7 +334,11 @@ function Defaults() {
         </SettingRow>
         {store && (
           <>
-            <SettingRow label="Spending, publishing, live-store edits" origin={{ kind: 'policy', text: 'always asks you first, except ad changes you put on autopilot' }} />
+            <SettingRow label="Spending, publishing, live-store edits" origin={{ kind: 'policy', text: 'always asks you first, except ad changes you put on autopilot' }}>
+              <Link to={settingsUrl('automation', { store: store.id, setting: 'policy.approvals' })} className="text-[13px] text-[#ff6b76] hover:underline">
+                Approval rules
+              </Link>
+            </SettingRow>
             <SettingRow label="Per-agent budgets" help={agents ? `${agents.filter((a) => a.dailyBudgetUsd != null).length} of ${agents.length} ${store.name} agents have their own daily budget` : undefined}>
               <Link to={agentsUrl({ store: store.id })} className="text-[13px] text-[#ff6b76] hover:underline">
                 Open in AI Agents

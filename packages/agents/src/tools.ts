@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
-import { AGENT_ROLES, startOfDay, isPrivateHost, PR_EVIDENCE_KINDS, PR_RECOMMENDATION_LABEL, PR_RECOMMENDATIONS, PR_REPORT_LISTS, type PrReportBody, KB_CARD_TYPES, KB_LINK_TYPES, KB_SOURCE_RELIABILITY, KB_STAGES, type KbCardType, type KbLinkType, type KbStage, type KbWorkspace, type KnowledgeScope, PRICE_WRITE_PLATFORMS, PRODUCT_PAGE_PLATFORMS, PRODUCT_WRITE_PLATFORMS, RESEARCH_TABS, type Agent, type AgentConfig, type AgentRole, type AgentRun, type AgentEvent, type AnalyticsRange, type AnalyticsSummary, type ApprovalAction, type AspectRatio, type CreativeKind, type ApprovalDecision, type ApprovalsHook, type AdSnapshotData, type Competitor, type Platform, type PriceChange, type ResearchProduct, type ResearchTab, type Store, type StoreCaps, type SupplierProduct, storeHealth } from '@frontline/shared';
+import { AGENT_ROLES, APPROVAL_KINDS, startOfDay, isPrivateHost, PR_EVIDENCE_KINDS, PR_RECOMMENDATION_LABEL, PR_RECOMMENDATIONS, PR_REPORT_LISTS, type PrReportBody, KB_CARD_TYPES, KB_LINK_TYPES, KB_SOURCE_RELIABILITY, KB_STAGES, type KbCardType, type KbLinkType, type KbStage, type KbWorkspace, type KnowledgeScope, PRICE_WRITE_PLATFORMS, PRODUCT_PAGE_PLATFORMS, PRODUCT_WRITE_PLATFORMS, RESEARCH_TABS, type Agent, type AgentConfig, type AgentRole, type AgentRun, type AgentEvent, type AnalyticsRange, type AnalyticsSummary, type ApprovalAction, type AspectRatio, type CreativeKind, type ApprovalDecision, type ApprovalsHook, type AdSnapshotData, type Competitor, type Platform, type PriceChange, type ResearchProduct, type ResearchTab, type Store, type StoreCaps, type SupplierProduct, storeHealth } from '@frontline/shared';
 import { z } from 'zod';
 import { economics, IDLE_CAMPAIGN_STATUSES, reviewCampaigns, thresholds, uncostedShare, type CampaignStats } from './ads';
 import { chargeCredits, CREDITS, creditsAsked, creditsToday, demoMedia, listCreatives, saveCreative } from './creatives';
@@ -1613,7 +1613,8 @@ export async function requestApproval(ctx: ToolContext, req: { title: string; re
   const moved = storeMoved(ctx);
   if (moved) return { approved: false, message: `Not sent: ${moved}. Stop here; the owner can ask again${ctx.store.connected ? '' : ' on real data'}.` };
   const { kind, amountUsd: amount } = req.action;
-  const rule = req.autopilot && autonomy === 'autopilot' ? ctx.caps?.(ctx.store.id).autopilot[kind] : undefined;
+  // Only the kinds autopilot may take (settings ST-30's approval map): a stored rule for any other kind is ignored.
+  const rule = req.autopilot && autonomy === 'autopilot' && APPROVAL_KINDS[kind]?.autopilot ? ctx.caps?.(ctx.store.id).autopilot[kind] : undefined;
   const cap = rule?.enabled ? rule.maxUsdPerDay : 0;
   const used = rule?.enabled ? autopilotUsedToday(ctx.db, ctx.store.id, kind) : 0;
   const auto = !!rule?.enabled && ctx.decide !== undefined && amount !== undefined && used + amount <= cap;
