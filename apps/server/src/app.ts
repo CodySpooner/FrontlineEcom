@@ -24,6 +24,7 @@ import { listEvents, subscribe } from './live';
 import { researchRoutes } from './research';
 import { prRoutes } from './product-research/routes';
 import { settingsRoutes } from './settings';
+import { GUARD } from './config/limits';
 import { configRoutes } from './config/routes';
 import { ConfigError, NO_VERSION, versionOf } from './config/write';
 import { agentRoutes, runManager } from './routes/agents';
@@ -73,7 +74,7 @@ function kbGuard(): MiddlewareHandler {
     const now = Date.now();
     const recent = (k: keyof typeof hits) => (hits[k] = hits[k].filter((t) => now - t < 60_000)).length;
     const starts = c.req.method === 'POST' && (STARTS.test(c.req.path) || PR_STARTS.test(c.req.path));
-    if (recent('change') >= 300 || (starts && recent('start') >= 10)) return c.json({ error: 'Too many requests at once: wait a minute and try again.' }, 429);
+    if (recent('change') >= GUARD.changesPerMinute || (starts && recent('start') >= GUARD.startsPerMinute)) return c.json({ error: 'Too many requests at once: wait a minute and try again.' }, 429);
     hits.change.push(now);
     const maxSize = LARGE.test(c.req.path) ? 15 * MB : MB;
     let tooLarge = false;

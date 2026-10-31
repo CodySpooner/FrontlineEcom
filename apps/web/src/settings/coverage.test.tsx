@@ -14,7 +14,6 @@ import { SECTIONS } from './Layout';
 
 /** Editable entries with no row outside `data-legacy` yet. The item that renders a row removes its id; ST-48 empties it. */
 const ALLOWLIST = [
-  'caps.adSpendChangePerDay', 'caps.higgsfieldCreditsPerDay', // ST-24b
   'autopilot.ads.set_budget', 'autopilot.ads.pause_campaign', // ST-30
   'kb.autonomous', 'kb.roles', 'kb.triggers', 'kb.taskBudgetUsd', 'kb.dailyBudgetUsd', 'kb.depth', 'kb.approval', 'kb.review', 'kb.trustedDomains', 'kb.blockedDomains', 'kb.freshDays', 'kb.retentionDays', // ST-25
   'pr.audience', 'pr.priceMax', 'pr.shipTo', 'pr.warehouses', 'pr.maxDeliveryDays', 'pr.includeCategories', 'pr.keywords', // ST-27
@@ -54,6 +53,7 @@ describe('every control on a settings page is real', () => {
       if (url === '/api/stores/peak/impact') return { removes: [], keeps: [] };
       if (url.startsWith('/api/caps')) return [caps]; // GET /api/caps answers a list
       if (url === '/api/health') return { ok: true, uptimeSec: 1, version: 'dev', connectors: [] };
+      if (url === '/api/ecosystem/stats') return { activeTasks: 0, completedTasks: 0, failedTasks: 0, successRate: null, activeTeams: 0, inputTokens: 0, outputTokens: 0, costUsd: 0 };
       if (url === '/api/runtimes') return ['claude', 'codex'].map((runtime) => ({ runtime, connected: runtime === 'claude', ...(runtime === 'codex' ? { reason: 'Set up Codex' } : {}), source: 'registry', checkedAt: '', models: [{ id: 'm', label: 'M', efforts: ['low', 'high'], default: true }] }));
     });
     renderApp(<Settings />, `/settings/${slug}`);

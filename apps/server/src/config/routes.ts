@@ -12,6 +12,7 @@ import { changeRoutes, toChange } from './changes';
 import { checklist } from './checklist';
 import { effective } from './effective';
 import { impactOf } from './impact';
+import { frontlineLimits } from './limits';
 import { deleteImpact } from './store-delete';
 import { storeImpact } from './store-impact';
 import { ConfigError, currencies, versionOf, writeConfig } from './write';
@@ -43,6 +44,7 @@ export function configRoutes(db: Db) {
     })
     // Settings → General's currency picker (ST-16): the codes PATCH accepts for baseCurrency.
     .get('/api/config/currencies', (c) => c.json(currencies(db)))
+    .get('/api/config/limits', (c) => c.json(frontlineLimits()))
     .get('/api/config/checklist', async (c) => c.json(checklist(db, await claudeLogin())))
     .post('/api/config/impact', async (c) => {
       const docs = documentsOf(await c.req.json().catch(() => undefined), false);

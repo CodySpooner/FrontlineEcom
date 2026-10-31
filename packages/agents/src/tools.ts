@@ -1055,14 +1055,14 @@ export const APP_TOOLS: AppTool[] = [
       // only fail on the account. ponytail: no rate, no check (the owner hears TikTok's error).
       if (change === 'budget' && to < from && c.network === 'tiktok' && ctx.store.connected) {
         const usdTo = await inUsd(ctx, to);
-        if (usdTo !== undefined && usdTo <= 50) {
-          return `Not sent: TikTok refuses a campaign daily budget of $50 or less${ctx.store.currency === 'USD' ? '' : ` (${cash(to, ctx.store.currency)} is $${usdTo})`}. Propose more than that, or pause it.`;
+        if (usdTo !== undefined && usdTo <= AD_LIMITS.tiktokMinUsd) {
+          return `Not sent: TikTok refuses a campaign daily budget of $${AD_LIMITS.tiktokMinUsd} or less${ctx.store.currency === 'USD' ? '' : ` (${cash(to, ctx.store.currency)} is $${usdTo})`}. Propose more than that, or pause it.`;
         }
       }
       // A big jump restarts the network's learning phase and the winner with it (the playbook: 20-30% every 48-72 h).
-      const most = Math.max(Math.floor(from * 1.3), from + 1); // whole amounts: a $3 budget can still go to $4
+      const most = Math.max(Math.floor(from * (1 + AD_LIMITS.raiseStep)), from + 1); // whole amounts: a $3 budget can still go to $4
       if (to > most) {
-        return `Not sent: raise a budget at most 30% at a time (${cash(from, ctx.store.currency)} → up to ${cash(most, ctx.store.currency)}/day); a bigger jump restarts the network's learning. Raise again once it has held for 3 days.`;
+        return `Not sent: raise a budget at most ${pct(AD_LIMITS.raiseStep)} at a time (${cash(from, ctx.store.currency)} → up to ${cash(most, ctx.store.currency)}/day); a bigger jump restarts the network's learning. Raise again once it has held for 3 days.`;
       }
       // Autopilot caps bound the budget a change touches (a pause stops all of it); the added-spend cap counts raises only.
       // ponytail: no rate → no amount, so the caps can't be checked and autopilot can't take it: the owner decides. Same
@@ -1080,9 +1080,9 @@ export const APP_TOOLS: AppTool[] = [
                AND json_extract(action_json, '$.payload.campaignId') = ? AND decided_at >= ? AND NOT EXISTS (SELECT 1 FROM done_once WHERE ref = 'not-applied:' || approvals.id)
              ORDER BY decided_at DESC LIMIT 1`,
           )
-          .get(ctx.store.id, campaignId, ago(3));
+          .get(ctx.store.id, campaignId, ago(AD_LIMITS.settleDays));
       if (recent) {
-        return `Not sent: ${String(c.name)}'s budget was changed on ${String(recent.decided_at).slice(0, 10)}. It needs 48-72 h to settle and is judged on the 3 days after, so propose the next step once those are over (a pause can go now).`;
+        return `Not sent: ${String(c.name)}'s budget was changed on ${String(recent.decided_at).slice(0, 10)}. It needs 48-72 h to settle and is judged on the ${AD_LIMITS.settleDays} days after, so propose the next step once those are over (a pause can go now).`;
       }
       const addedUsd = to > from ? usd : 0;
       const cap = ctx.caps?.(ctx.store.id).adSpendChangePerDay;
@@ -1136,7 +1136,7 @@ export const APP_TOOLS: AppTool[] = [
       const costed = Number(p.cost) > 0;
       const floor = priceFloor(ctx.store, Number(p.cost));
       if (floor !== undefined && to <= floor) return `Not sent: ${$(to)} is at or below the unit cost${fees ? ' plus fees' : ''} (${$(floor)}).`;
-      if (Math.abs(to - from) / from > 0.3) return 'Not sent: test within ±30% of the current price, one step at a time.';
+      if (Math.abs(to - from) / from > PRICE_STEP) return `Not sent: test within ±${pct(PRICE_STEP)} of the current price, one step at a time.`;
       if (compareAt !== undefined && compareAt <= to) return 'compareAt must be above the new price.';
       const sale = NO_COMPARE_AT[ctx.store.platform];
       if (compareAt !== undefined && ctx.store.connected && sale) return `Not sent: ${sale} Propose the price alone.`;
@@ -1672,6 +1672,16 @@ function campaignStats(ctx: ToolContext, days: number): CampaignStats[] {
  * Daily ad budget added by budget changes approved since the workspace zone's midnight (settings decision 8), or still
  * waiting (whenever asked: approving it adds it today).
  */
+/**
+ * Limits Frontline sets on ad changes (Settings → Usage & Limits shows them, read-only, ST-24b): a budget raise is at most
+ * `raiseStep` a step, a campaign's budget changes once per `settleDays`, and TikTok refuses a campaign daily budget of
+ * `tiktokMinUsd` or less.
+ */
+export const AD_LIMITS = { raiseStep: 0.3, settleDays: 3, tiktokMinUsd: 50 } as const;
+/** A price test moves at most this share of the current price a step, up or down. */
+export const PRICE_STEP = 0.3;
+const pct = (share: number) => `${Math.round(share * 100)}%`;
+
 export function budgetAddedToday(db: DatabaseSync, storeId: string): number {
   const midnight = new Date(startOfDay(workspaceZone(db)));
   const row = db

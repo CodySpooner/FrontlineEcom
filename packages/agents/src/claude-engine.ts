@@ -14,7 +14,11 @@ const STOPPED: Partial<Record<string, string>> = {
   error_max_turns: 'Stopped: the run hit its 40-turn limit before finishing. Give it a narrower task.',
   error_max_budget_usd: "Stopped: the run used its share of today's AI budget for this store. Raise it in Settings.",
 };
-const RESEARCH_TURNS = 30;
+/** Steps (turns) a run may take, and a Knowledge research step; Usage & Limits shows them (ST-24b). */
+export const RUN_TURNS = 40;
+export const RESEARCH_TURNS = 30;
+/** The longest tool input an owner's approval shows: a longer one is refused, never cut (it would run in full). */
+export const APPROVAL_INPUT_CHARS = 2000;
 const STOPPED_RESEARCH: Partial<Record<string, string>> = {
   error_max_turns: `Stopped: this research step hit its ${RESEARCH_TURNS}-turn limit before finishing.`,
   error_max_budget_usd: "Stopped: the research task's budget, or today's AI budget for this store, ran out.",
@@ -206,7 +210,7 @@ export function claudeEngine(opts: ClaudeEngineOptions = {}): Engine {
           }
           const shown = JSON.stringify(toolInput);
           // The owner approves what they can read: an input cut to fit would run in full.
-          if (shown.length > 2000) return { behavior: 'deny', message: `Not sent: the input is ${shown.length} characters and the owner's request shows 2000. Split it into smaller calls.` };
+          if (shown.length > APPROVAL_INPUT_CHARS) return { behavior: 'deny', message: `Not sent: the input is ${shown.length} characters and the owner's request shows ${APPROVAL_INPUT_CHARS}. Split it into smaller calls.` };
           const { approved, message } = await requestApproval(ctx, {
             title: `Allow ${toolName.replace(/^mcp__/, '').replace('__', ': ')}`,
             reason: shown,
@@ -216,7 +220,7 @@ export function claudeEngine(opts: ClaudeEngineOptions = {}): Engine {
         },
         abortController,
         // Runaway guard: a run stops at 40 turns (a research step at 30), or at what it may spend.
-        maxTurns: research ? RESEARCH_TURNS : 40,
+        maxTurns: research ? RESEARCH_TURNS : RUN_TURNS,
         ...(input.budgetUsd !== undefined ? { maxBudgetUsd: Math.max(0.01, input.budgetUsd) } : {}),
         ...(input.resume ? { resume: input.resume } : {}),
         ...opts.queryOptions?.(input),

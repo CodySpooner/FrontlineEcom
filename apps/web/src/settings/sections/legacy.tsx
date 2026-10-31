@@ -4,7 +4,7 @@ import { useState, type FormEvent } from 'react';
 import { useSearchParams } from 'react-router';
 import { APPROVAL_KINDS, type StoreCaps, type StoreCapsUpdate } from '@frontline/shared';
 import { useBackupNow, useBackups, useCaps, useHealth, useOpenDataFolder, useRestoreBackup, useSaveCaps, useSettings, useStores } from '../../api/client';
-import { Badge, Button, cx, ErrorState, Field, inputClass, LoadingState, Panel, Switch } from '../../components/ui';
+import { Badge, Button, cx, ErrorState, inputClass, LoadingState, Panel, Switch } from '../../components/ui';
 
 // Only kinds with a $ amount can be checked against a daily cap.
 const AUTOPILOT = Object.entries(APPROVAL_KINDS).flatMap(([kind, k]) => (k.autopilot ? [{ kind, label: k.label }] : []));
@@ -19,8 +19,8 @@ export function Caps() {
   const q = useCaps(storeId);
   return (
     <Panel
-      title="Caps & Autopilot"
-      sub="Hard limits the agents can't cross. Autopilot lets an agent approve its own action within a daily cap; everything else asks you."
+      title="Autopilot"
+      sub="Lets an agent approve its own action within a daily cap; everything else asks you. Only for agents set to Autopilot on their page, and only for actions with a dollar amount to check."
       action={
         stores.length > 1 && (
           <label>
@@ -37,7 +37,7 @@ export function Caps() {
       }
     >
       {all.data?.length === 0 ? (
-        <p className="text-[13px] text-muted">Caps are set per store: add a store above, then set its limits here.</p>
+        <p className="text-[13px] text-muted">Autopilot is set per store: add a store first, then set its rules here.</p>
       ) : !storeId || q.isPending ? (
         <LoadingState rows={4} />
       ) : q.isError || !q.data ? (
@@ -56,19 +56,9 @@ export function CapsForm({ caps }: { caps: StoreCaps }) {
   const dirty = JSON.stringify(draft) !== JSON.stringify(caps);
   const rule = (kind: string) => draft.autopilot[kind] ?? { enabled: false, maxUsdPerDay: 50 };
   const setRule = (kind: string, r: Partial<StoreCaps['autopilot'][string]>) => setDraft((d) => ({ ...d, autopilot: { ...d.autopilot, [kind]: { ...rule(kind), ...r } } }));
-  const num = (key: 'adSpendChangePerDay' | 'higgsfieldCreditsPerDay', label: string, help: string) => (
-    <div className="grid content-start gap-2">
-      <Field label={label}>
-        <input type="number" min={0} max={1_000_000} step="any" value={draft[key]} onChange={(e) => setDraft((d) => ({ ...d, [key]: e.target.valueAsNumber }))} required className={cx(inputClass, 'w-full min-w-0')} />
-        <span className="text-[11px] text-muted">{help}</span>
-      </Field>
-    </div>
-  );
   const submit = (e: FormEvent) => {
     e.preventDefault();
-    // Only what changed becomes this store's own value: the rest keeps following the workspace.
     const update: StoreCapsUpdate = { version: caps.version ?? 0 };
-    for (const k of ['adSpendChangePerDay', 'higgsfieldCreditsPerDay'] as const) if (draft[k] !== caps[k]) update[k] = draft[k];
     const autopilot = Object.fromEntries(Object.entries(draft.autopilot).filter(([k, r]) => JSON.stringify(r) !== JSON.stringify(caps.autopilot[k])));
     if (Object.keys(autopilot).length) update.autopilot = autopilot;
     save.mutate(update, {
@@ -80,14 +70,10 @@ export function CapsForm({ caps }: { caps: StoreCaps }) {
   };
   return (
     <form onSubmit={submit} onChange={() => setSaved(false)} className="grid gap-5">
-      {/* AI usage per day moved to Agents & Providers (ST-23). */}
-      <div className="grid gap-3 min-[700px]:grid-cols-2">
-        {num('adSpendChangePerDay', 'Ad budget changes ($/day)', "Most an agent may raise ad budgets by per day. Cuts and pauses don't count.")}
-        {num('higgsfieldCreditsPerDay', 'Higgsfield credits per day', 'For image and video generation.')}
-      </div>
+      {/* The caps moved above (AI usage per day to Agents & Providers, ST-23; the others to Daily caps, ST-24b). */}
       <fieldset>
-        <legend className="mb-1 text-[13px] font-semibold">Autopilot</legend>
-        <p className="mb-2 text-xs text-muted">Only for agents set to Autopilot on their page, and only for actions with a dollar amount to check. Off means the agent always asks first.</p>
+        <legend className="sr-only">Autopilot</legend>
+        <p className="mb-2 text-xs text-muted">Off means the agent always asks first.</p>
         <ul className="divide-y divide-line rounded-lg border border-line bg-bg-2">
           {AUTOPILOT.map(({ kind, label }) => {
             const r = rule(kind);

@@ -39,6 +39,12 @@ export function settingsUrl(section: SettingsSection, o: { id?: string; store?: 
 export type SettingScope = 'personal' | 'workspace' | 'store' | 'device';
 /** Where an effective value came from (decision 4). App and personal values the owner saved read as `workspace`. */
 export type SettingOrigin = 'store' | 'workspace' | 'default' | 'env' | 'locked' | 'demo';
+
+/** GET /api/config/limits: a limit Frontline sets, read-only, its value said from the constant that enforces it (ST-24b). */
+export interface FrontlineLimit {
+  label: string;
+  value: string;
+}
 /** The documents `/api/config` reads and writes: `store_caps` is one store's override document. */
 export type ConfigDoc = 'app' | 'personal' | 'workspace' | 'store_caps';
 
@@ -226,8 +232,8 @@ export const SETTINGS: SettingDef[] = [
   { id: 'timezone', section: 'general', type: 'string', maxLength: 64, label: 'Workspace timezone', help: 'Schedules, the morning digest, quiet hours and every daily cap run on this clock.', synonyms: ['time zone'], scopes: ['workspace'], fill: "this computer's zone, once", owner: 'apps/server/src/config/write.ts#writeConfig', applies: 'now', export: true, consumers: ['packages/agents/src/squads.ts#workspaceZone'], proof: "apps/server/src/config/timezone.test.ts#schedules run on the workspace zone's wall clock: 9:00 there, and a 2:30 rule once on both DST nights" },
 
   cap('agentCostPerDay', 'AI usage per day', "A store's agents stop for the day past it. An estimate from usage.", { section: 'agents', default: 5, consumers: ['packages/agents/src/runs.ts#budgetFor', 'apps/server/src/settings.ts#getCaps', 'apps/web/src/lib/usage.ts#capFrom'], proof: "apps/server/src/routes/agents-runs.test.ts#the store's daily AI budget blocks new runs once spent" }),
-  cap('adSpendChangePerDay', 'Ad budget changes per day', "The most an agent may raise ad budgets by per day, in USD. Cuts and pauses don't count; your own approvals aren't limited.", { section: 'usage', default: 100, consumers: ['packages/agents/src/tools.ts#adSpendChangePerDay'], proof: "apps/server/src/routes/agents-ads.test.ts#the owner's cap on added spend and bad input stop a proposal before asking" }),
-  cap('higgsfieldCreditsPerDay', 'Higgsfield credits per day', 'For image and video generation.', { section: 'usage', default: 200, consumers: ['packages/agents/src/tools.ts#higgsfieldCreditsPerDay'], proof: "apps/server/src/routes/agents-creatives.test.ts#the store's daily credit cap stops generation before asking" }),
+  cap('adSpendChangePerDay', 'Ad budget changes per day', "Checked when an agent proposes a raise, converted to USD; with no exchange rate the check is skipped and you decide. Cuts and pauses don't count; your own approvals aren't limited.", { section: 'usage', default: 100, consumers: ['packages/agents/src/tools.ts#adSpendChangePerDay'], proof: "apps/server/src/routes/agents-ads.test.ts#the owner's cap on added spend and bad input stop a proposal before asking" }),
+  cap('higgsfieldCreditsPerDay', 'Higgsfield credits per day', 'For image and video renders, charged when you approve one. Renders waiting on you count.', { section: 'usage', default: 200, consumers: ['packages/agents/src/tools.ts#higgsfieldCreditsPerDay'], proof: "apps/server/src/routes/agents-creatives.test.ts#the store's daily credit cap stops generation before asking" }),
 
   // Agent defaults (decision 9): no default of their own (undefined); unset is the runtime's, as before.
   agentDefault('runtime', { type: 'string', enum: ['claude', 'codex'], label: 'Default runtime', help: 'What new conversations run on. Scheduled and background work runs on Claude on live stores and on the demo engine on demo stores, never on Codex.', consumers: ['packages/agents/src/configs.ts#seatDefault', 'packages/agents/src/runs.ts#defaults.runtime'], proof: `${DEFAULTS}#a demo store's conversation stays on the demo engine; picking Claude there takes the default model` }),

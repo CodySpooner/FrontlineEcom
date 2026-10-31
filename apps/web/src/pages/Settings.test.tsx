@@ -21,7 +21,7 @@ const api = (extra: (url: string) => unknown = () => undefined) =>
   stubApi((url, init) => {
     if (init?.method === 'PATCH' && url === '/api/settings') return settings;
     if (url === '/api/settings') return settings;
-    if (url === '/api/config') return { values: { baseCurrency: 'EUR', timezone: 'UTC' }, origins: {}, versions: { app: 1, workspace: 1 } };
+    if (url === '/api/config' || url.startsWith('/api/config?')) return { values: { baseCurrency: 'EUR', timezone: 'UTC' }, origins: {}, versions: { app: 1, workspace: 1 } };
     if (url === '/api/stores') return [peak, glow];
     if (url.startsWith('/api/caps')) return [{ ...caps, storeId: new URL(url, 'http://x').searchParams.get('stores') ?? 'peak' }]; // GET /api/caps answers a list
     return extra(url) ?? (url === '/api/health' ? { ok: true, uptimeSec: 1, version: 'dev', connectors: [] } : undefined);
@@ -119,7 +119,7 @@ describe('sidebar badges come from real data', () => {
   });
 });
 
-describe('caps form (moved, ST-24b)', () => {
+describe('autopilot form (moved, ST-30)', () => {
   it("won't send an autopilot rule with a blank amount", async () => {
     const fetch = stubApi(() => undefined);
     renderApp(<CapsForm caps={caps} />);
@@ -142,20 +142,21 @@ describe('caps form (moved, ST-24b)', () => {
     expect(sent(fetch, 'PUT')[0]![1].autopilot['ads.set_budget']).toEqual({ enabled: false, maxUsdPerDay: 0 });
   });
 
-  it('sends only what changed, with the version read: untouched caps keep following the workspace', async () => {
-    const fetch = stubApi((_url, init) => (init?.method === 'PUT' ? { ...caps, higgsfieldCreditsPerDay: 150, version: 4 } : undefined));
+  it('sends only the rules that changed, with the version read: the caps are edited above it now', async () => {
+    const fetch = stubApi((_url, init) => (init?.method === 'PUT' ? { ...caps, version: 4 } : undefined));
     renderApp(<CapsForm caps={{ ...caps, version: 3 }} />);
-    // AI usage per day moved to Agents & Providers (ST-23): this form no longer has it.
-    expect(screen.queryByLabelText(/^AI usage/)).toBeNull();
-    fireEvent.change(screen.getByLabelText(/^Higgsfield credits/), { target: { value: '150' } });
+    // AI usage per day moved to Agents & Providers (ST-23), the ad and credit caps to Daily caps (ST-24b).
+    expect(screen.queryAllByRole('spinbutton').map((i) => i.getAttribute('aria-label'))).toEqual(['Change ad budgets: most per day in dollars', 'Pause campaigns: most per day in dollars']);
+    fireEvent.click(screen.getByRole('switch', { name: 'Change ad budgets' }));
+    fireEvent.change(amount(), { target: { value: '25' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save caps' }));
-    await vi.waitFor(() => expect(sent(fetch, 'PUT')).toEqual([['/api/caps/peak', { version: 3, higgsfieldCreditsPerDay: 150 }]]));
+    await vi.waitFor(() => expect(sent(fetch, 'PUT')).toEqual([['/api/caps/peak', { version: 3, autopilot: { 'ads.set_budget': { enabled: true, maxUsdPerDay: 25 } } }]]));
   });
 
-  it('says caps come with a store instead of loading forever', async () => {
-    stubApi((url) => (url === '/api/stores' ? [] : url === '/api/settings' ? settings : undefined));
+  it('says autopilot comes with a store instead of loading forever', async () => {
+    stubApi((url) => (url === '/api/stores' ? [] : url === '/api/settings' ? settings : url === '/api/config' ? { values: {}, origins: {}, versions: {} } : undefined));
     renderApp(<Settings />, '/settings/usage');
-    expect(await screen.findByText('Caps are set per store: add a store above, then set its limits here.')).toBeTruthy();
+    expect(await screen.findByText('Autopilot is set per store: add a store first, then set its rules here.')).toBeTruthy();
   });
 });
 

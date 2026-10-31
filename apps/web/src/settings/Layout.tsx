@@ -46,7 +46,7 @@ export const SECTIONS: SectionDef[] = [
     sub: 'Connect store platforms, ad accounts, analytics, suppliers and creative tools.',
     Page: () => <div data-legacy="ST-37a"><Integrations /></div>,
   },
-  { slug: 'usage', group: 'Operations', label: 'Usage & Limits', icon: Gauge, sub: "Daily limits the agents can't cross, and what today has used.", Page: Usage },
+  { slug: 'usage', group: 'Operations', label: 'Usage & Limits', icon: Gauge, sub: "Daily limits the agents can't cross, and what today has used.", Page: Usage, scoped: true },
   { slug: 'data', group: 'Operations', label: 'Data & Backups', icon: Database, sub: 'Where your data lives on this computer, and its backups.', Page: () => <div data-legacy="ST-31"><YourData /></div> },
 ];
 

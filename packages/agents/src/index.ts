@@ -1,6 +1,6 @@
 export { runAgent, defaultEngine, engineInfo, type Engine, type RunInput } from './engine';
 export { fakeEngine, echoScript, type FakeScript, type FakeStep } from './fake-engine';
-export { agentModel, claudeAccount, claudeEngine, claudeModels, claudeRuntime, defaultModelGone, estimate, isAccountError, isDefaultModelGone, isReadOnly, movesSpend, toAgentEvents, type ClaudeEngineOptions } from './claude-engine';
+export { agentModel, APPROVAL_INPUT_CHARS, claudeAccount, claudeEngine, claudeModels, claudeRuntime, defaultModelGone, estimate, isAccountError, isDefaultModelGone, isReadOnly, movesSpend, RESEARCH_TURNS, RUN_TURNS, toAgentEvents, type ClaudeEngineOptions } from './claude-engine';
 export { CODEX_FEATURES_OFF, codexEngine, codexError, codexEvents, codexMcp, codexModels, codexSetup, codexStatus, codexWork, featuresChanged, killTree, spawnCodex, type CodexEngineOptions } from './codex';
 export { CODEX_TURN, fakeCodex, type FakeCodexChild } from './fake-codex';
 export { BUILTIN_TYPES, CHECKS_LAST, contractOf, contractText, ROLES, SQUAD_RULES, WORKFLOW_FIRST, type RoleSpec, type ToolName } from './roles';
@@ -23,7 +23,7 @@ export {
   MEMORY_CAP,
   type NewMemory,
 } from './memory';
-export { APP_TOOLS, OUTLIVE_RUN, RESEARCH_TOOLS, allows, autopilotUsedToday, budgetAddedToday, cash, defaultTools, toolsFor, runTools, callTool, requestApproval, smsSegments, type AppTool, type ExternalMcp, type ToolEnv, type ToolContext } from './tools';
+export { AD_LIMITS, APP_TOOLS, OUTLIVE_RUN, PRICE_STEP, RESEARCH_TOOLS, allows, autopilotUsedToday, budgetAddedToday, cash, defaultTools, toolsFor, runTools, callTool, requestApproval, smsSegments, type AppTool, type ExternalMcp, type ToolEnv, type ToolContext } from './tools';
 export { nicheSlug, customNichePack, saveNichePack, draftNichePackTask } from './niche';
 export { agentDefaults, agentTypes, runLimits, archiveCustomRole, createCustomRole, customRole, getConfig, getCustomRole, listPresets, resolveType, saveConfig, savePreset, seatDefault, toolGroups, validateConfig, validateCustomRole, type AgentDefaults, type AgentType, type ConfigDraft } from './configs';
 export { conversationCounts, conversationFindings, conversationKnowledge, conversationPreface, conversationQuery, conversationThread, runDeliverables, setConversationConfig, createConversation, discardConversation, getConversation, indexConversation, listConversations, recap, stateOf, touchConversation, updateConversation, type ConversationQuery } from './conversations';
