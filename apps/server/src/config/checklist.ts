@@ -16,7 +16,7 @@ export function checklist(db: Db, login: Pick<ClaudeAccount, 'signedIn' | 'error
   return [
     { id: 'store', title: 'Add your store', done: stores.length > 0, link: settingsUrl('stores'), detail: "Demo stores don't count." },
     // ST-21 moves this link to Settings → Agents.
-    { id: 'claude', title: 'Sign in to Claude', done: login.signedIn, link: settingsUrl('integrations'), detail: login.error ?? 'Agents run on your Claude login.' },
+    { id: 'claude', title: 'Sign in to Claude', done: login.signedIn, link: settingsUrl('agents'), detail: login.error ?? 'Agents run on your Claude login.' },
     ...stores
       .filter((s) => INTEGRATION_KINDS[s.platform as IntegrationKind]?.category === 'platform')
       .map((s) => {

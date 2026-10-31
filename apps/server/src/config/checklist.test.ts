@@ -55,6 +55,6 @@ test('a saved but unsynced CJ key stays open', () => {
 test('GET /api/config/checklist reads the account check: the demo engine never signs in', async () => {
   const db = openDb();
   const items = (await (await createApp(db).request('/api/config/checklist')).json()) as SetupItem[];
-  expect(items.find((i) => i.id === 'claude')).toMatchObject({ done: false, link: '/settings/integrations', detail: expect.stringContaining('demo engine') });
+  expect(items.find((i) => i.id === 'claude')).toMatchObject({ done: false, link: '/settings/agents', detail: expect.stringContaining('demo engine') });
   expect(items.map((i) => i.id)).toEqual(['store', 'claude', 'research', 'backup']);
 });

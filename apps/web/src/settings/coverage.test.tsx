@@ -15,7 +15,6 @@ import { SECTIONS } from './Layout';
 /** Editable entries with no row outside `data-legacy` yet. The item that renders a row removes its id; ST-48 empties it. */
 const ALLOWLIST = [
   'caps.agentCostPerDay', // ST-23
-  'agentDefaults.runtime', 'agentDefaults.model', 'agentDefaults.effort', 'agentDefaults.stopAfterMin', 'agentDefaults.knowledge', // ST-21
   'caps.adSpendChangePerDay', 'caps.higgsfieldCreditsPerDay', // ST-24b
   'autopilot.ads.set_budget', 'autopilot.ads.pause_campaign', // ST-30
   'kb.autonomous', 'kb.roles', 'kb.triggers', 'kb.taskBudgetUsd', 'kb.dailyBudgetUsd', 'kb.depth', 'kb.approval', 'kb.review', 'kb.trustedDomains', 'kb.blockedDomains', 'kb.freshDays', 'kb.retentionDays', // ST-25
@@ -24,6 +23,10 @@ const ALLOWLIST = [
 
 /** `data-action` names, each with the test that proves what it does (`path#test name`). */
 const ACTIONS: Record<string, string> = {
+  'settings.scope': 'apps/web/src/settings/sections/Agents.test.tsx#the scope switch edits one store: its values, under ?store=',
+  'agents.claude.check': 'apps/web/src/settings/sections/Agents.test.tsx#Check again asks the Claude login again and shows what it says',
+  'agents.codex.setup': "apps/web/src/settings/sections/Agents.test.tsx#Set up Codex starts the sign-in on the app's Codex folder, then Check again reads it",
+  'agents.codex.check': "apps/web/src/settings/sections/Agents.test.tsx#Set up Codex starts the sign-in on the app's Codex folder, then Check again reads it",
   'notifications.test': 'apps/web/src/settings/sections/Notifications.test.tsx#Send test shows what the server decided, and says where toasts appear',
   'stores.add': "apps/web/src/settings/sections/Stores.test.tsx#Add store says what adding does, then opens the new store's page",
   'stores.delete': "apps/web/src/settings/sections/Stores.test.tsx#Delete stays off until the store's name is typed, says what goes and what stays, and sends the name",
@@ -51,11 +54,12 @@ describe('every control on a settings page is real', () => {
       if (url === '/api/stores/peak/impact') return { removes: [], keeps: [] };
       if (url.startsWith('/api/caps')) return caps;
       if (url === '/api/health') return { ok: true, uptimeSec: 1, version: 'dev', connectors: [] };
+      if (url === '/api/runtimes') return ['claude', 'codex'].map((runtime) => ({ runtime, connected: runtime === 'claude', ...(runtime === 'codex' ? { reason: 'Set up Codex' } : {}), source: 'registry', checkedAt: '', models: [{ id: 'm', label: 'M', efforts: ['low', 'high'], default: true }] }));
     });
     renderApp(<Settings />, `/settings/${slug}`);
     const main = () => document.querySelector('section[aria-labelledby="settings-title"]')!;
-    // Every section has at least one control once its data is in.
-    await vi.waitFor(() => expect(main().querySelector(CONTROLS)).not.toBeNull());
+    // Every section has at least one control once its data is in (each card's, when it has several).
+    await vi.waitFor(() => expect([main().querySelector(CONTROLS), main().querySelector('[aria-label="Loading"]')]).toEqual([expect.anything(), null]));
     for (const el of main().querySelectorAll<HTMLElement>(CONTROLS)) {
       if (el.closest('[data-legacy], dialog')) continue;
       const tag = el.closest<HTMLElement>('[data-setting], [data-secret], [data-action]');

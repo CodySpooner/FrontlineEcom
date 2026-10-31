@@ -42,12 +42,12 @@ describe('routes and deep links', () => {
 
   it('a section with no content yet is absent from the sidebar and lands on General, keeping the query', async () => {
     api();
-    renderApp(<Settings />, '/settings/agents?store=peak');
+    renderApp(<Settings />, '/settings/history?store=peak');
     expect(screen.getByTestId('where').textContent).toBe('/settings/general?store=peak');
     const nav = await screen.findByRole('navigation', { name: 'Settings' });
     await within(nav).findByRole('link', { name: 'Stores2' });
-    expect(within(nav).queryByRole('link', { name: /Agents/ })).toBeNull();
-    expect(within(nav).getAllByRole('link').map((a) => a.textContent)).toEqual(['Account', 'Appearance', 'Notifications', 'General', 'Stores2', 'Integrations', 'Usage & Limits', 'Data & Backups']);
+    expect(within(nav).queryByRole('link', { name: /History/ })).toBeNull();
+    expect(within(nav).getAllByRole('link').map((a) => a.textContent)).toEqual(['Account', 'Appearance', 'Notifications', 'General', 'Stores2', 'Agents & Providers', 'Integrations', 'Usage & Limits', 'Data & Backups']);
   });
 
   it.each(SECTIONS.map((s) => [s.slug, s.label]))('/settings/%s renders its section', async (slug, label) => {
@@ -75,7 +75,7 @@ describe('routes and deep links', () => {
     expect(settingsUrl('integrations', { id: 'x', setting: 'y' })).toBe('/settings/integrations/x#y');
     expect(settingsUrl('usage', { store: 'a b' })).toBe('/settings/usage?store=a%20b');
     expect(budgetFix("Today's AI budget for this store ($5) is used up. Raise it in Settings.", 'glow:copywriter')?.to).toBe('/settings/usage?store=glow#caps.agentCostPerDay');
-    expect(budgetFix("Claude isn't signed in on this computer.", 'glow:copywriter')?.to).toBe('/settings/integrations');
+    expect(budgetFix("Claude isn't signed in on this computer.", 'glow:copywriter')?.to).toBe('/settings/agents');
   });
 
   it('the Hero chip opens Account', async () => {

@@ -37,7 +37,8 @@ describe('SystemStatus', () => {
             : [],
     );
     renderApp(<SystemStatus online />);
-    expect(await screen.findAllByText('Check Claude login')).toBeTruthy();
+    const links = (await screen.findAllByText('Check Claude login')).map((e) => e.closest('a')?.getAttribute('href'));
+    expect(links).toContain('/settings/agents');
   });
 
   it("doesn't check the Claude login when every store runs on the demo engine", async () => {

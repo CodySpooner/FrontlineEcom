@@ -19,7 +19,7 @@ const DEMO_ONLY = 'Agents are set to the demo engine here (FRONTLINE_AGENT_ENGIN
 let account: { at: number; answer: Promise<ClaudeAccount> } | undefined;
 
 export function claudeLogin(refresh = false): Promise<ClaudeAccount> {
-  if (engineInfo(true).provider !== 'claude') return Promise.resolve({ signedIn: false, checkedAt: new Date().toISOString(), error: DEMO_ONLY });
+  if (engineInfo(true).provider !== 'claude') return Promise.resolve({ signedIn: false, forced: true, checkedAt: new Date().toISOString(), error: DEMO_ONLY });
   if (!account || refresh || Date.now() - account.at > 5 * 60_000) account = { at: Date.now(), answer: claudeAccount(agentSessions().cwd) };
   return account.answer;
 }

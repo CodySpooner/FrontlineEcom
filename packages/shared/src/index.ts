@@ -80,6 +80,8 @@ export interface ClaudeAccount {
   checkedAt: string;
   /** Why it couldn't be asked (then `signedIn` is false). */
   error?: string;
+  /** Agents are forced to one engine here (`FRONTLINE_AGENT_ENGINE`), so the login isn't asked (Settings shows it locked). */
+  forced?: boolean;
   /** What the login can run, from the same handshake (decision 9). */
   models?: RuntimeModel[];
 }

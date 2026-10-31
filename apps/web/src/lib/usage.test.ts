@@ -17,7 +17,7 @@ describe('budgetFix', () => {
     expect(budgetFix("Today's budget for this agent ($0.3) is used up. Raise it in its settings.", 'glow:copywriter')).toEqual({ to: '/agents/glow%3Acopywriter?tab=settings', label: "Raise the agent's budget" });
     expect(budgetFix("Stopped: today's AI budget for this store ($5) is used up. Raise it in Settings.", 'glow:copywriter')).toEqual({ to: '/settings/usage?store=glow#caps.agentCostPerDay', label: "Raise the store's AI cap" });
     expect(budgetFix("Claude isn't signed in on this computer. Open a terminal, run `claude`, sign in with /login, then run the agent again.", 'glow:copywriter')).toEqual({
-      to: '/settings/integrations',
+      to: '/settings/agents',
       label: 'Check your Claude login',
     });
     // Ask AI, AI Research and the briefs can reach an agent the owner switched off.

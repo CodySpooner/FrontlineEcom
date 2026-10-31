@@ -143,7 +143,7 @@ export function Creative() {
                 Higgsfield AI{hf !== 'connected' && <span className="text-muted">{hf === 'error' ? ' · needs attention' : ' · demo renders'}</span>}
               </Link>
               <Link
-                to={settingsUrl('integrations')}
+                to={settingsUrl('agents')}
                 title={claude === 'demo' ? 'Demo stores get scripted answers' : 'Writes the copy and the briefs'}
                 className="inline-flex items-center gap-1.5 rounded-md border border-line bg-bg-2 px-2 py-1 text-text-2 hover:text-white"
               >

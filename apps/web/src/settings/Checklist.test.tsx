@@ -10,7 +10,7 @@ afterAll(() => vi.unstubAllGlobals());
 
 const ITEMS: SetupItem[] = [
   { id: 'store', title: 'Add your store', done: true, link: '/settings/stores', detail: "Demo stores don't count." },
-  { id: 'claude', title: 'Sign in to Claude', done: false, link: '/settings/integrations', detail: 'Not signed in.' },
+  { id: 'claude', title: 'Sign in to Claude', done: false, link: '/settings/agents', detail: 'Not signed in.' },
   { id: 'research', title: 'Verify a research source', done: false, link: '/settings/integrations', detail: 'CJ key saved, no successful sync yet.' },
   { id: 'backup', title: 'Back up your data', done: true, link: '/settings/data', detail: 'No backup yet.' },
 ];
@@ -29,7 +29,7 @@ test('while a step is open, General shows every step with why the open ones are 
   expect(within(card).getByText('2 of 4 steps left. Each one ticks itself off once it\'s really done.')).toBeTruthy();
   expect(within(card).getAllByRole('link').map((a) => [a.textContent, a.getAttribute('href')])).toEqual([
     ['Add your store', '/settings/stores'],
-    ['Sign in to ClaudeNot signed in.', '/settings/integrations'],
+    ['Sign in to ClaudeNot signed in.', '/settings/agents'],
     ['Verify a research sourceCJ key saved, no successful sync yet.', '/settings/integrations'],
     ['Back up your data', '/settings/data'],
   ]);

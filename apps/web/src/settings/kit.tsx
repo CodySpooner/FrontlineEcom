@@ -1,7 +1,9 @@
 // The settings row kit (ST-03, boards A1/A2): section cards, rows with their origin line, the scope switch, the save bar,
 // immediate rows and the danger zone. Every section from ST-12 on is built from these.
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { useSearchParams } from 'react-router';
 import { ChevronDown, ChevronRight, GitBranch, Layers, Lock, Server, Undo2 } from 'lucide-react';
+import { useStores } from '../api/client';
 import { cx, flatButtonClass } from '../components/ui';
 
 /** A section card: title, one line of help, rows, and an optional "Advanced · …" expander for the technical rows. */
@@ -228,6 +230,13 @@ export function ScopeSwitch({ variant = 'defaults', stores, value, onChange }: {
       </div>
     </div>
   );
+}
+
+/** The scope a section with store overrides edits: the store `?store=` names (it carries from section to section), else the workspace. */
+export function useScope() {
+  const q = useStores();
+  const [params, setParams] = useSearchParams();
+  return { ready: !!q.data, stores: q.data ?? [], store: q.data?.find((s) => s.id === params.get('store')), set: (store: string | null) => setParams(store ? { store } : {}) };
 }
 
 export type SaveState = 'idle' | 'saving' | 'saved' | 'applying' | 'applied' | 'failed' | 'error';

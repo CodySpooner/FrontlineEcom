@@ -124,7 +124,7 @@ export function SystemStatus({ online }: { online: boolean }) {
         <div role="status" className="mt-1.5 mb-[9px] flex items-center gap-2 text-[13px]">
           {dot}
           {online && !isError && (claudeOut || (!down && failing)) ? (
-            <Link to={settingsUrl('integrations')} className="hover:underline">
+            <Link to={settingsUrl(claudeOut ? 'agents' : 'integrations')} className="hover:underline">
               {text}
             </Link>
           ) : (

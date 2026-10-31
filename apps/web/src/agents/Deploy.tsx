@@ -1,8 +1,8 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { ChevronDown, ChevronRight, Lock } from 'lucide-react';
-import { APPROVAL_KINDS, CODEX_ULTRA, EFFORT_LABEL, settingsUrl, type AgentPermissions, type AgentPreset, type AgentTypeInfo, type ConversationDetail, type ConversationConfigInput, type KnowledgeScope, type RuntimeCapabilities, type RuntimeId, type Store } from '@frontline/shared';
-import { useAgents, useAgentTypes, useCaps, useChangeConfig, useCreateConversation, usePresets, useRefreshRuntimes, useRuntimes, useSavePreset, useSetUpCodex, useStores, useTypeTools } from '../api/client';
+import { APPROVAL_KINDS, CODEX_ULTRA, EFFORT_LABEL, settingsUrl, type AgentPermissions, type AgentPreset, type AgentTypeInfo, type ConfigView, type ConversationDetail, type ConversationConfigInput, type KnowledgeScope, type RuntimeCapabilities, type RuntimeId, type SettingOrigin, type Store } from '@frontline/shared';
+import { useAgents, useAgentTypes, useCaps, useChangeConfig, useConfig, useCreateConversation, usePresets, useRefreshRuntimes, useRuntimes, useSavePreset, useSetUpCodex, useStores, useTypeTools } from '../api/client';
 import { Button, cx, Dialog, Segmented, Switch } from '../components/ui';
 import { withParams } from '../knowledge/url';
 import { ago, money } from '../lib/format';
@@ -71,22 +71,42 @@ function fieldErrors(error: Error | null, fields: string[]) {
   };
 }
 
-type Choice = { runtime: RuntimeId; model?: string; effort?: string };
+/** No runtime: the store's default (Settings → Agents & Providers on a live store, the demo engine on a demo one). */
+type Choice = { runtime?: RuntimeId; model?: string; effort?: string };
+
+/** Settings → Agents & Providers' defaults for a store (decision 9): its own, else the workspace's; unset ones absent. */
+const defaultsOf = (v?: ConfigView) => {
+  const at = (k: string) => v?.values?.[`agentDefaults.${k}`] ?? undefined;
+  return {
+    runtime: at('runtime') as 'claude' | 'codex' | undefined,
+    model: at('model') as string | undefined,
+    effort: at('effort') as string | undefined,
+    stopAfterMin: at('stopAfterMin') as number | undefined,
+    knowledge: (at('knowledge') === 'store' ? ['store'] : ['store', 'general']) as KnowledgeScope[],
+    from: v?.origins?.['agentDefaults.model'],
+  };
+};
 
 /** Runtime, model and effort, resolved against what this machine can run: an unlisted model falls back to the default. */
-function useRuntimeChoice(store: Store, start: Choice) {
+function useRuntimeChoice(store: Store, start: Choice, defaults: Partial<ReturnType<typeof defaultsOf>> = {}) {
   const [v, setV] = useState(start);
   const all = useRuntimes().data;
   const claude = all?.find((c) => c.runtime === 'claude');
   const codex = all?.find((c) => c.runtime === 'codex');
+  const picked = v.runtime ?? (store.connected ? (defaults.runtime ?? 'claude') : 'demo');
   // A demo store may run on the demo engine; a live one never does (decision 9).
-  const runtime: RuntimeId = v.runtime === 'demo' && store.connected ? 'claude' : v.runtime;
+  const runtime: RuntimeId = picked === 'demo' && store.connected ? 'claude' : picked;
   const info = runtime === 'claude' ? claude : runtime === 'codex' ? codex : undefined;
   const models = info?.models ?? [];
-  const model = models.find((m) => m.id === v.model) ?? models.find((m) => m.default) ?? models[0];
+  // The model and effort defaults apply on the default runtime only (decision 9), like seatDefault's.
+  const preset = runtime === (defaults.runtime ?? 'claude') ? defaults : {};
+  const model = models.find((m) => m.id === (v.model ?? preset.model)) ?? models.find((m) => m.default) ?? models[0];
+  const wanted = v.effort ?? (v.model === undefined || v.model === preset.model ? preset.effort : undefined);
   const usable = model?.efforts.filter((e) => runtime !== 'codex' || e !== 'ultra') ?? []; // never Codex's ultra (CODEX_ULTRA)
-  const effort = model && (v.effort && usable.includes(v.effort) ? v.effort : model.defaultEffort && usable.includes(model.defaultEffort) ? model.defaultEffort : usable[0]);
-  return { runtime, model, effort, models, claude, codex, info, set: (patch: Partial<Choice>) => setV((p) => ({ ...p, ...patch })), reset: setV, config: { runtime, ...(model ? { model: model.id } : {}), ...(effort ? { effort } : {}) } };
+  const effort = model && (wanted && usable.includes(wanted) ? wanted : model.defaultEffort && usable.includes(model.defaultEffort) ? model.defaultEffort : usable[0]);
+  /** Where the model came from, when it's the store's or the workspace's default. */
+  const modelFrom: SettingOrigin | undefined = v.model === undefined && preset.model !== undefined && model?.id === preset.model ? preset.from : undefined;
+  return { runtime, model, effort, models, claude, codex, info, modelFrom, set: (patch: Partial<Choice>) => setV((p) => ({ ...p, ...patch })), reset: setV, config: { runtime, ...(model ? { model: model.id } : {}), ...(effort ? { effort } : {}) } };
 }
 
 /** The picked runtime can't run here: what to do, with Codex's own "Set up Codex" and a check again (decision 9). */
@@ -157,6 +177,11 @@ function RuntimeFields({ store, choice, said }: { store: Store; choice: ReturnTy
                 {model.description}
               </span>
             )}
+            {choice.modelFrom && (
+              <Link to={settingsUrl('agents', { ...(choice.modelFrom === 'store' ? { store: store.id } : {}), setting: 'agentDefaults.model' })} className="text-[11.5px] text-muted hover:text-white hover:underline">
+                {choice.modelFrom === 'store' ? `From ${store.name} settings` : 'Workspace default'}
+              </Link>
+            )}
             {said('model')}
           </label>
         )}
@@ -224,21 +249,25 @@ export function Deploy({ store: initial, type: preselected, onClose, lockStore, 
   const groups = useTypeTools(store.id, type?.id ?? '').data;
   const seat = useAgents().data?.find((a) => a.id === `${store.id}:${type?.baseRole}`);
   const caps = useCaps(store.id).data;
-  const choice = useRuntimeChoice(store, { runtime: store.connected ? 'claude' : 'demo' });
+  const defaults = defaultsOf(useConfig(store.id).data);
+  const choice = useRuntimeChoice(store, {}, defaults);
   const create = useCreateConversation(store.id);
   const save = useSavePreset(store.id);
   const [clientRequestId] = useState(() => crypto.randomUUID());
   const [presetId, setPresetId] = useState<string>();
   const [off, setOff] = useState<string[]>([]);
   const [compare, setCompare] = useState(false);
-  const [knowledge, setKnowledge] = useState<KnowledgeScope[]>(['store', 'general']);
+  // Unset knowledge and Stop after: the store's defaults (they may load after the dialog opens).
+  const [knowledgeSet, setKnowledge] = useState<KnowledgeScope[]>();
+  const knowledge = knowledgeSet ?? defaults.knowledge;
   const [budget, setBudget] = useState('');
-  const [stopAfter, setStopAfter] = useState('');
+  const [stopSet, setStopAfter] = useState<string>();
+  const stopAfter = stopSet ?? (defaults.stopAfterMin ? String(defaults.stopAfterMin) : '');
   const [saveFindings, setSaveFindings] = useState<AgentPermissions['saveFindings']>('off');
-  // Codex requires a Stop after (dollar caps don't apply to it): 20 minutes unless one is set (decision 9).
+  // Codex requires a Stop after (dollar caps don't apply to it): 20 minutes unless one is set or defaulted (decision 9).
   useEffect(() => {
-    if (choice.runtime === 'codex') setStopAfter((s) => s || '20');
-  }, [choice.runtime]);
+    if (choice.runtime === 'codex') setStopAfter((s) => (s === undefined && defaults.stopAfterMin ? s : s || '20'));
+  }, [choice.runtime]); // eslint-disable-line react-hooks/exhaustive-deps -- once per runtime change
   const [objective, setObjective] = useState('');
   const [files, setFiles] = useState<File[]>([]);
   const [title, setTitle] = useState<string>();
@@ -264,14 +293,14 @@ export function Deploy({ store: initial, type: preselected, onClose, lockStore, 
   const said = (field: string) => created.said(field) || saved.said(field);
 
   /** Fills every field from a preset; none is the type's Default. */
-  const fill = (p: AgentPreset | undefined, t: AgentTypeInfo | undefined, s = store) => {
+  const fill = (p: AgentPreset | undefined, t: AgentTypeInfo | undefined) => {
     const c = p?.config;
-    choice.reset({ runtime: c?.runtime ?? (s.connected ? 'claude' : 'demo'), model: c?.model, effort: c?.effort });
+    choice.reset({ runtime: c?.runtime, model: c?.model, effort: c?.effort });
     setOff(c?.tools ? Object.keys(DRAFTS).filter((d) => !c.tools!.includes(d)) : []);
     setCompare(!!c?.tools?.includes('compare_stores') && t?.id === 'market_analyst');
-    setKnowledge(c?.knowledge ?? ['store', 'general']);
+    setKnowledge(c?.knowledge);
     setBudget(c?.permissions?.budgetUsd ? String(c.permissions.budgetUsd) : '');
-    setStopAfter(c?.permissions?.stopAfterMin ? String(c.permissions.stopAfterMin) : '');
+    setStopAfter(c?.permissions?.stopAfterMin ? String(c.permissions.stopAfterMin) : undefined);
     setSaveFindings(c?.permissions?.saveFindings ?? 'off');
     if (c?.objective) setObjective(c.objective);
   };
@@ -339,10 +368,9 @@ export function Deploy({ store: initial, type: preselected, onClose, lockStore, 
               disabled={lockStore}
               value={store.id}
               onChange={(e) => {
-                const s = stores.find((x) => x.id === e.target.value)!;
-                setStoreId(s.id);
+                setStoreId(e.target.value);
                 setPresetId(undefined);
-                fill(undefined, type, s);
+                fill(undefined, type);
               }}
             >
               {stores.map((s) => (
