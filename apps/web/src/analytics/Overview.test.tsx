@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { changeOf, saDef, type SaInsights, type SaMoved } from '@frontline/shared';
+import { changeOf, saDef, type SaInsights, type SaListingRow, type SaMoved } from '@frontline/shared';
 import { Analytics } from '../pages/Analytics';
 import { renderApp, stubApi } from '../test-utils';
 
@@ -18,7 +18,7 @@ const MOVED: SaMoved = {
   scope: { applied: [], ignored: [] },
 };
 
-function render(moved: () => unknown, insights: () => unknown = () => []) {
+function render(moved: () => unknown, insights: () => unknown = () => [], listings: () => unknown = () => []) {
   const fetch = stubApi((url) => {
     if (url === '/api/stores') return [{ id: 'a', name: 'Glow Haus' }];
     if (url.startsWith('/api/analytics/overview'))
@@ -28,6 +28,7 @@ function render(moved: () => unknown, insights: () => unknown = () => []) {
       };
     if (url.startsWith('/api/analytics/contributions')) return moved();
     if (url.startsWith('/api/analytics/insights')) return insights();
+    if (url.startsWith('/api/analytics/listings')) return listings();
     if (url.startsWith('/api/analytics/series') || url.startsWith('/api/analytics/summary')) return new Response('{}', { status: 500 });
     if (url.startsWith('/api/analytics/context')) return { storeId: 'a', name: 'Glow Haus', niche: 'beauty', platform: 'shopify', currency: 'USD', demo: false, channels: [], zone: null, zoneLabel: '', zoneAbbr: 'ET', historyStart: null, freshness: [] };
     return [];
@@ -152,5 +153,27 @@ describe('Finding card on the Overview (SA-77)', () => {
     const c = within(await screen.findByRole('region', { name: 'Finding' }));
     expect(c.getByRole('heading').textContent).toBe('2 orders not shipped after 48 h'); // red, though stock cover comes first
     expect(c.getByRole('link', { name: 'Investigate' }).getAttribute('href')).toBe('/orders');
+  });
+});
+
+describe('Top products (SA-78)', () => {
+  const value = (v: number | null) => ({ value: v, status: v == null ? 'unavailable' : 'ok' }) as const;
+  const row = (id: string, title: string, units: number | null, net: number | null, prev?: number | null) =>
+    ({ id, title, image: null, units: value(units), netSales: value(net), ...(prev !== undefined && { previousNetSales: value(prev) }) }) as unknown as SaListingRow;
+  const ROWS = [row('8001', 'Vitamin C Glow Serum', 318, 10812, 7892), row('8002', 'Hydra Barrier Night Cream', 201, 8442, 9700), row('8003', 'Overnight Lip Mask', 274, 4932, 0), row('8004', 'Jade Facial Roller', null, null, 120), row('8005', 'Fifth', 1, 1, 1)];
+
+  it("the listings API's first four by net sales, its own numbers: units, net sales and the change vs the comparison", async () => {
+    const fetch = render(() => MOVED, undefined, () => ({ rows: ROWS, scope: { applied: [], ignored: [] } }));
+    const p = (await screen.findByRole('heading', { name: 'Top products' })).closest('section')!;
+    const rows = (await within(p).findAllByRole('row')).slice(1);
+    expect(rows.map((r) => [...r.querySelectorAll('td')].map((td) => td.textContent))).toEqual([
+      ['Vitamin C Glow Serum', '318', '$10,812', '▲ 37.0%'],
+      ['Hydra Barrier Night Cream', '201', '$8,442', '▼ 13.0%'],
+      ['Overnight Lip Mask', '274', '$4,932', 'New'],
+      ['Jade Facial Roller', '–', '–', ''], // nothing to compare: no change, never a zero
+    ]);
+    const url = decodeURIComponent(String(fetch.mock.calls.find((c) => String(c[0]).startsWith('/api/analytics/listings'))![0]));
+    expect(url).toContain('status=active');
+    expect(url).toContain('sort=net_sales:desc');
   });
 });

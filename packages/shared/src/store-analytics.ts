@@ -877,6 +877,8 @@ export interface SaListingRow {
   units: SaValue;
   refunds: SaValue;
   contribution: SaValue;
+  /** SA-78: net sales over the comparison period, its last day cut like the KPI's; absent with no comparison. */
+  previousNetSales?: SaValue;
 }
 
 /** GET /api/analytics/listings: one page (25) of the store's matching products, sorted over all of them. */

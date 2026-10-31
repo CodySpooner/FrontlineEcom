@@ -7,6 +7,7 @@ import type { Db } from '../db';
 import { hash, mulberry32 } from '../demo';
 import { costMetrics } from './costs';
 import { storeConverter } from './fx';
+import { setup } from './metric-set';
 import type { StorePeriod } from './period';
 import { CANONICAL, salesMetrics, sliceSql, type RefundBasis, type Slice } from './sales';
 
@@ -72,9 +73,9 @@ const cents = (n: number) => Math.round(n * 100) / 100;
  * products by Dashboard's fixed per-product weights (`demoTopProducts`), so the rows add up to the store's numbers and
  * don't move between loads. Every value is `demo`; a draft or archived product sold nothing.
  */
-function demoSplit(db: Db, storeId: string, from: string, to: string, basis: RefundBasis) {
-  const s = salesMetrics(db, storeId, from, to, basis);
-  const c = costMetrics(db, storeId, from, to, basis).contribution_before_ads;
+function demoSplit(db: Db, storeId: string, from: string, to: string, basis: RefundBasis, slice: Slice = {}) {
+  const s = salesMetrics(db, storeId, from, to, basis, slice);
+  const c = costMetrics(db, storeId, from, to, basis, slice).contribution_before_ads;
   const part = (k: number): Sales => {
     const of = (v: SaValue, round: (n: number) => number): SaValue => (v.value == null ? v : { ...v, value: round(v.value * k) });
     return { net_sales: of(s.net_sales, cents), units: of(s.units, Math.round), refunds: of(s.refunds, cents), contribution: of(c, cents) };
@@ -136,6 +137,8 @@ export function listings(db: Db, storeId: string, query: Query, sp: StorePeriod,
   // ponytail: the whole matching set is sorted in memory (20,000 products in the scale fixture); SQL ORDER BY when it isn't enough.
   const all = db.prepare(`SELECT p.id, p.title, p.price, iif(p.inventory_tracked, p.inventory, NULL) AS stock FROM products p WHERE ${where.join(' AND ')}`).all(...params);
   const demoSales = demo ? demoSplit(db, storeId, sp.period.from, sp.period.to, basis) : undefined;
+  const { compare, cut } = setup(db, storeId, sp, {});
+  const demoBefore = demo && compare ? demoSplit(db, storeId, compare.from, compare.to, basis, cut && { cut }) : undefined;
   const t = METRIC_SORTS.has(key) && !demo ? totals(db, storeId, sp.period.from, sp.period.to, basis, channels && { channels }) : undefined;
   const m = key as 'units' | 'net_sales' | 'refunds';
   const sortKey = (r: (typeof all)[number]): number | string | null =>
@@ -163,6 +166,7 @@ export function listings(db: Db, storeId: string, query: Query, sp: StorePeriod,
     const slice = { ...(channels && { channels }), products: [id] };
     const sales = demoSales ? undefined : salesMetrics(db, storeId, sp.period.from, sp.period.to, basis, slice);
     const d = demoSales?.(id) ?? { net_sales: sales!.net_sales, units: sales!.units, refunds: sales!.refunds, contribution: costMetrics(db, storeId, sp.period.from, sp.period.to, basis, slice).contribution_before_ads };
+    const before = compare && (demoBefore?.(id).net_sales ?? salesMetrics(db, storeId, compare.from, compare.to, basis, { ...slice, ...(cut && { cut }) }).net_sales);
     return {
       id,
       title: String(p.title),
@@ -181,6 +185,7 @@ export function listings(db: Db, storeId: string, query: Query, sp: StorePeriod,
       units: d.units,
       refunds: d.refunds,
       contribution: d.contribution,
+      ...(before && { previousNetSales: before }),
     };
   });
 

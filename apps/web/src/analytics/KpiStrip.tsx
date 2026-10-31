@@ -25,7 +25,7 @@ export function fmtValue(id: SaMetricId, v: number, currency = 'USD') {
 }
 
 /** "▲ 12.4%", "▼ 0.02 pts", "New"; nothing without a comparison. Better is green, worse red, ad spend neutral. */
-function Change({ change, direction }: { change: SaChange; direction: SaMetric['direction'] }) {
+export function Change({ change, direction }: { change: SaChange; direction: SaMetric['direction'] }) {
   if (change.kind === 'unavailable') return null;
   if (change.kind === 'new') return <span className="text-text-2">New</span>;
   const r = Math.round(change.value * (change.kind === 'points' ? 100 : 10)) / (change.kind === 'points' ? 100 : 10);

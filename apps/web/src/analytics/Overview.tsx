@@ -2,15 +2,15 @@
 import { ChevronRight } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
-import { SA_COMPARES, SA_METRICS, type SaAnnotation, type SaContext, type SaInsightTarget, type SaMetricId, type SaOverview } from '@frontline/shared';
+import { changeOf, SA_COMPARES, SA_METRICS, type SaAnnotation, type SaContext, type SaInsightTarget, type SaMetricId, type SaOverview, type SaValue } from '@frontline/shared';
 import { Button, cx, ErrorState, LoadingState, Panel, Segmented } from '../components/ui';
 import { fmtDay, money } from '../lib/format';
-import { useSaAnnotations, useSaContext, useSaContributions, useSaInsights, useSaOverview, useSaSeries } from './api';
+import { useSaAnnotations, useSaContext, useSaContributions, useSaInsights, useSaListings, useSaOverview, useSaSeries } from './api';
 import { FilterScope } from './FilterScope';
 import { FindingCard, RulesDialog, type Investigate } from './FindingCard';
 import { channelsOf } from './Filters';
-import { KpiStrip } from './KpiStrip';
-import type { AnalyticsPage, AnalyticsState } from './state';
+import { Change, KpiStrip } from './KpiStrip';
+import { periodParams, type AnalyticsPage, type AnalyticsState } from './state';
 import { TrendChart, type Mark } from './TrendChart';
 
 /** The chart's quick picks; a tile picks any of the six. Contribution is after ads with ad data, else before (Q15). */
@@ -239,6 +239,55 @@ function AttentionPanel({ s, onChart }: { s: AnalyticsPage; onChart: (k: string)
   );
 }
 
+const TH = 'pb-1.5 text-right font-medium';
+
+/** SA-78: the period's four best sellers by net sales: the Listings table's own rows (listings API), so the numbers agree. */
+function TopProducts({ s, ctx }: { s: AnalyticsPage; ctx?: SaContext }) {
+  const q = useSaListings(s.store, { ...periodParams(s), status: 'active', sort: 'net_sales:desc' });
+  const rows = q.data?.rows?.slice(0, 4);
+  const val = (v: SaValue, f: (n: number) => string) => (v.value == null ? '–' : f(v.value));
+  return (
+    <Panel title="Top products" sub="by net sales" className="flex flex-col">
+      {q.isError ? (
+        <ErrorState message="Couldn't load the top products." onRetry={() => q.refetch()} />
+      ) : !rows ? (
+        <LoadingState rows={4} />
+      ) : !rows.length ? (
+        <p className="text-[13px] text-muted">No active products.</p>
+      ) : (
+        <table className="w-full text-[12.5px] tabular-nums">
+          <thead>
+            <tr className="text-left text-[11px] text-muted">
+              <th className="pb-1.5 font-medium">Product</th>
+              <th className={TH}>Units</th>
+              <th className={TH}>Net sales</th>
+              <th className={TH}>Change</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.id} className="border-t border-[#1d1d22]">
+                <td className="w-full max-w-0 py-[5px]">
+                  <span className="flex min-w-0 items-center gap-2.5">
+                    {r.image ? <img src={r.image} alt="" loading="lazy" className="size-[26px] shrink-0 rounded-[6px] max-[479px]:hidden object-cover" /> : <span aria-hidden className="size-[26px] shrink-0 rounded-[6px] max-[479px]:hidden border border-[#2e2e35] bg-[linear-gradient(140deg,#2b2b31,#1b1b20)]" />}
+                    <b className="truncate font-medium">{r.title}</b>
+                  </span>
+                </td>
+                <td className="pl-3 text-right">{val(r.units, (n) => n.toLocaleString('en-US'))}</td>
+                <td className="pl-3 text-right whitespace-nowrap">{val(r.netSales, (n) => money(n, ctx?.currency))}</td>
+                <td className="pl-3 text-right whitespace-nowrap">{r.previousNetSales ? <Change change={changeOf(r.netSales.value, r.previousNetSales.value, 'money')} direction="up" /> : '–'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      <div className="mt-auto pt-2">
+        <FilterScope scope={q.data?.scope} />
+      </div>
+    </Panel>
+  );
+}
+
 const RANK = { red: 0, warn: 1, info: 2 };
 
 /** SA-77: the finding card with the most urgent flag (red first, then the rules' order). */
@@ -270,6 +319,7 @@ export function Overview({ s, tabs }: { s: AnalyticsPage; tabs: string[] }) {
       </div>
       <div className="grid items-start gap-3.5 min-[1180px]:grid-cols-[minmax(0,1.1fr)_minmax(0,1.2fr)_minmax(0,1fr)]">
         <AttentionPanel s={s} onChart={setChart} />
+        <TopProducts s={s} ctx={ctx.data} />
         <Finding s={s} onChart={setChart} />
       </div>
     </div>

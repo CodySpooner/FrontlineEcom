@@ -6,7 +6,9 @@ import { openDb, type Db } from '../db';
 import { seedDemo } from '../demo';
 import { costMetrics } from './costs';
 import { LEDGER_NOW, LEDGER_PERIODS, LEDGER_STORE, seedLedgerStore } from './fixture';
+import { contributions } from './contributions';
 import { listings } from './listings';
+import { computeMetricSet } from './metric-set';
 import { storePeriod, type StorePeriod } from './period';
 import { salesMetrics } from './sales';
 
@@ -120,6 +122,29 @@ describe('listings (SA-66)', () => {
     expect(units).toEqual([...units].sort((a, b) => b - a));
     expect(listings(db, 'glow', { sort: 'net_sales' }, sp)).toEqual(listings(db, 'glow', { sort: 'net_sales' }, sp)); // stable between loads
     expect(listings(db, 'glow', {}, sp, { channel: ['site'] })).toMatchObject({ scope: { applied: [], ignored: [{ key: 'channel', reason: "Demo data isn't split by channel" }] } });
+  });
+
+  it("SA-78: each row's net sales over the comparison: its change is What moved's; a demo store's add up to the KPI's, today cut too", () => {
+    const db = fixture();
+    const l = list(db, { sort: 'net_sales' });
+    const moved = contributions(db, { storeId: LEDGER_STORE }, p1(db)).rows.filter((r) => r.kind === 'product');
+    expect(moved.length).toBe(4);
+    for (const m of moved) {
+      const r = l.rows.find((x) => x.id === m.id)!;
+      expect(Math.round((r.netSales.value! - r.previousNetSales!.value!) * 100) / 100).toBe(m.change);
+    }
+    const none = storePeriod(db, LEDGER_STORE, (k) => ({ period: 'custom', from: P1.from, to: P1.to, compare: 'none' })[k], LEDGER_NOW) as StorePeriod;
+    expect((listings(db, LEDGER_STORE, {}, none) as SaListings).rows.some((r) => 'previousNetSales' in r)).toBe(false);
+
+    const demo = openDb();
+    seedDemo(demo, '2026-10-26');
+    for (const period of ['last30', 'today']) {
+      const sp = storePeriod(demo, 'glow', (k) => ({ period })[k], Date.parse('2026-10-26T15:00:00Z')) as StorePeriod;
+      const rows = (listings(demo, 'glow', {}, sp) as SaListings).rows;
+      const kpi = computeMetricSet(demo, { storeId: 'glow' }, ['net_sales'], sp).metrics[0]!.previous!.value!;
+      expect(rows.reduce((a, r) => a + r.previousNetSales!.value!, 0)).toBeCloseTo(kpi, 0);
+      expect(rows[0]!.previousNetSales!.status).toBe('demo');
+    }
   });
 
   it('GET /api/analytics/listings: the page, and 400 for a bad status, sort or page', async () => {
