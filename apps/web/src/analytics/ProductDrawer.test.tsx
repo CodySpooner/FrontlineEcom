@@ -27,11 +27,12 @@ const detail = (r: SaListingRow, more: Partial<SaProductDetail> = {}): SaProduct
   metrics: [metric('units', 201, 178), metric('net_sales', 8442, 7484), metric('refunds', 126, 90), metric('refund_rate', 0.015, 0.012), metric('contribution_before_ads', 4390, 4000), metric('cost_coverage', 1, 1)],
   units: { grain: 'day', points: [point('2026-10-27', 4), point('2026-10-28', null), point('2026-10-29', 6, { partial: true })] },
   channels: [channel('site', 'active', null, '2026-03-04'), channel('tiktok_shop', 'failed', 'Image under 600 px'), channel('amazon', null)],
-  costs: { unitCost: { value: 13.2, source: 'shopify', since: '2026-08-02' }, fees: { value: 52.1, status: 'estimated', note: 'Estimate for 41 orders' }, feeRule: { percent: 2.9, perOrder: 0.3 } },
+  costs: { unitCost: { value: 13.2, source: 'shopify', since: '2026-08-02' }, fees: { value: 52.1, status: 'estimated', note: 'Estimate for 41 orders' }, feeRule: { percent: 2.9, perOrder: 0.3 }, history: [] },
   variants: { rows: [] },
   insights: [{ rule: 'stock_cover@1', kind: 'business', tone: 'warn', title: `${r.title}: ~5 days of stock`, detail: '38 left · 7.4 sold a day over the last 14 days', evidence: {}, target: { kind: 'product', id: r.id } }],
   rules: [{ id: 'stock_cover@1', name: 'Low stock cover', when: 'Stock lasts under 10 days', minSample: '5 units', datasets: ['orders', 'inventory'], metrics: [] }],
   links: [],
+  refundLines: { rows: [] },
   scope: { applied: [], ignored: [{ key: 'collection', reason: 'The drawer shows the one product' }] },
   ...more,
 });
@@ -119,7 +120,7 @@ describe('Performance tab (SA-89)', () => {
       metrics: [metric('units', 3, null), metric('net_sales', 0, null), metric('refunds', 0, null), metric('refund_rate', null, null, none('No units')), metric('contribution_before_ads', null, null, none('No unit cost')), metric('cost_coverage', 0, null)],
       channels: [{ ...channel('site', 'active'), units: gone, netSales: gone, refunds: gone }],
       channelsNote: "Demo data isn't split by channel",
-      costs: { unitCost: null, fees: { value: 8.17, status: 'ok' }, feeRule: { percent: 2.9, perOrder: 0.3 } },
+      costs: { unitCost: null, fees: { value: 8.17, status: 'ok' }, feeRule: { percent: 2.9, perOrder: 0.3 }, history: [] },
       insights: [],
       rules: [],
     });
@@ -223,3 +224,62 @@ describe('Product links (SA-91)', () => {
     expect([linkCall(fetch)!.method, JSON.parse(String(linkCall(fetch)!.body))]).toEqual(['PUT', { store: 'a', channelProductId: 'p1', productId: 'p2' }]);
   });
 });
+
+describe('Costs and Refunds tabs (SA-92)', () => {
+  const tab = async (name: string) => {
+    const d = await screen.findByRole('dialog', { name: 'Product 1' });
+    fireEvent.click(await within(d).findByRole('tab', { name }));
+    return within(within(d).getByRole('tabpanel', { name }));
+  };
+  const history = [
+    { value: 12, currency: 'USD', source: 'owner', since: '2026-10-20', recordedAt: '2026-10-20T10:00:00Z', variant: null },
+    { value: 9, currency: 'USD', source: 'shopify', since: '2026-01-01', recordedAt: '2026-01-01T00:00:00Z', variant: 'Rose' },
+  ];
+  const costs = { unitCost: { value: 12, source: 'owner', since: '2026-10-20' }, fees: V(1), feeRule: { percent: 2.9, perOrder: 0.3 }, history };
+
+  it('the unit cost and its history; a saved cost reloads the views', async () => {
+    const fetch = render('/analytics?store=a&tab=listings&product=p1', { costs }, (url) => (url.startsWith('/api/products/') ? { id: 'p1', cost: 9.5 } : undefined));
+    const t = await tab('Costs');
+    expect(t.getByText(/^Unit cost/).textContent).toBe('Unit cost $12.00 (entered by you, since Oct 20)');
+    expect([...t.getByRole('table', { name: 'Unit cost history' }).querySelectorAll('tbody tr')].map((tr) => tr.textContent)).toEqual(['Oct 20$12.00entered by youAll variants', 'Jan 1$9.00ShopifyRose']);
+    expect(t.getByRole('button', { name: 'Save cost' }).hasAttribute('disabled')).toBe(true);
+    const loads = () => fetch.mock.calls.filter(([u]) => String(u).startsWith('/api/analytics/products/p1?')).length;
+    const before = loads();
+    fireEvent.change(t.getByRole('spinbutton', { name: 'New unit cost' }), { target: { value: '9.5' } });
+    fireEvent.click(t.getByRole('button', { name: 'Save cost' }));
+    await waitFor(() => expect(loads()).toBeGreaterThan(before));
+    const [url, init] = fetch.mock.calls.find(([u]) => String(u).startsWith('/api/products/'))!;
+    expect([url, init!.method, JSON.parse(String(init!.body))]).toEqual(['/api/products/a/p1', 'PATCH', { cost: 9.5 }]);
+    expect((t.getByRole('spinbutton', { name: 'New unit cost' }) as HTMLInputElement).value).toBe('');
+  });
+
+  it("a Shopify product's refusal shows; no cost recorded yet", async () => {
+    const no = 'Shopify keeps unit costs: set "Cost per item" on the product in Shopify and the next sync brings it here';
+    render('/analytics?store=a&tab=listings&product=p1', { costs: { ...costs, unitCost: null, history: [] } }, (url) =>
+      url.startsWith('/api/products/') ? new Response(JSON.stringify({ error: no }), { status: 400 }) : undefined,
+    );
+    const t = await tab('Costs');
+    expect(t.getByText(/^Unit cost/).textContent).toBe('Unit cost not recorded');
+    expect(t.queryByRole('table')).toBeNull();
+    fireEvent.change(t.getByRole('spinbutton', { name: 'New unit cost' }), { target: { value: '5' } });
+    fireEvent.click(t.getByRole('button', { name: 'Save cost' }));
+    expect(await t.findByText(no)).toBeTruthy();
+  });
+
+  it('the refund lines; none in the period; a demo store says why', async () => {
+    const line = { id: 'r1', orderId: '#1005', date: '2026-10-29', variant: 'Default', quantity: 1, amount: 32, restocked: true };
+    render('/analytics?store=a&tab=listings&product=p1', { refundLines: { rows: [line, { ...line, id: 'r2', orderId: '#1003', variant: null, quantity: null, amount: 16.2, restocked: null }] } });
+    const t = await tab('Refunds');
+    expect([...t.getByRole('table', { name: 'Refund lines' }).querySelectorAll('tbody tr')].map((tr) => [...tr.querySelectorAll('td')].map((td) => td.textContent))).toEqual([
+      ['Oct 29', '#1005', 'Default', '1', '$32.00', 'Yes'],
+      ['Oct 29', '#1003', '–', '–', '$16.20', '–'],
+    ]);
+    cleanup();
+    render('/analytics?store=a&tab=listings&product=p1');
+    expect((await tab('Refunds')).getByText('No refunds in this period.')).toBeTruthy();
+    cleanup();
+    render('/analytics?store=a&tab=listings&product=p1', { refundLines: { rows: [], note: 'Demo data has no refund lines' } });
+    expect((await tab('Refunds')).getByText('Demo data has no refund lines.')).toBeTruthy();
+  });
+});
+

@@ -1,16 +1,17 @@
 // SA-87 (spec §7 Product detail view): the product drawer's data in one call. Its row is its Listings row and its
 // numbers come from the same functions (a demo store's by its fixed share), so the drawer and the table agree
-// (consistency row). Refund lines come with the Refunds tab (SA-92). A linked channel product (SA-91) opens its store
-// product, whose numbers and channels include it.
-import { changeOf, SA_METRICS, saDef, type SaFilters, type SaFilterScope, type SaListings, type SaMetricId, type SaMetricResult, type SaProductChannel, type SaProductDetail, type SaValue } from '@frontline/shared';
+// (consistency row). A linked channel product (SA-91) opens its store product, whose numbers and channels include it.
+// SA-92: its unit cost history and the refund lines its Refunds number adds up.
+import { changeOf, SA_METRICS, saDef, type SaFilters, type SaFilterScope, type SaListings, type SaMetricId, type SaMetricResult, type SaProductChannel, type SaProductDetail, type SaRefundLine, type SaValue } from '@frontline/shared';
 import type { Db } from '../db';
 import { costMetrics } from './costs';
+import { storeConverter } from './fx';
 import { insights } from './insights';
 import { linkMap, productLinks, withLinked } from './links';
 import { demoShares, demoSplit, inStore, listings, listingVariants, type Sales } from './listings';
 import { computeSeries, setup } from './metric-set';
 import type { StorePeriod } from './period';
-import { CANONICAL, salesMetrics, sliceSql, type RefundBasis, type Slice } from './sales';
+import { CANONICAL, inProducts, salesMetrics, sliceSql, type RefundBasis, type Slice } from './sales';
 
 const METRICS: [SaMetricId, keyof Sales][] = [
   ['units', 'units'],
@@ -26,7 +27,7 @@ export function productDetail(db: Db, storeId: string, id: string, sp: StorePeri
   if (!inStore(db, storeId, [id])) return undefined;
   id = linkMap(db, storeId).get(id) ?? id;
   const ids = withLinked(db, storeId, [id]);
-  const store = db.prepare('SELECT platform, demo, fee_percent AS pct, fee_per_order AS per FROM stores WHERE id = ?').get(storeId)!;
+  const store = db.prepare('SELECT platform, demo, currency, fee_percent AS pct, fee_per_order AS per FROM stores WHERE id = ?').get(storeId)!;
   const demo = !!store.demo;
   const { collection, product, ...rest } = filters;
   // ponytail: a fixed valid query, so never an error string
@@ -91,6 +92,37 @@ export function productDetail(db: Db, storeId: string, id: string, sp: StorePeri
   const cost = demo
     ? db.prepare("SELECT cost AS value, 'demo' AS source, NULL AS since FROM products WHERE store_id = ? AND id = ? AND cost > 0").get(storeId, id)
     : db.prepare('SELECT cost AS value, source, effective_from AS since FROM unit_costs WHERE store_id = ? AND product_id = ? AND variant_id IS NULL AND effective_from <= ? ORDER BY effective_from DESC, recorded_at DESC LIMIT 1').get(storeId, id, sp.today);
+  const history = db
+    .prepare(
+      `SELECT u.cost, u.currency, u.source, u.effective_from AS since, u.recorded_at AS at, u.variant_id AS vid, v.title AS variant FROM unit_costs u
+       LEFT JOIN product_variants v ON v.store_id = u.store_id AND v.product_id = u.product_id AND v.id = u.variant_id
+       WHERE u.store_id = ? AND u.product_id = ? ORDER BY u.effective_from DESC, u.recorded_at DESC, u.rowid DESC`,
+    )
+    .all(storeId, id)
+    .map((r) => ({ value: Number(r.cost), currency: r.currency == null ? null : String(r.currency), source: String(r.source), since: String(r.since), recordedAt: String(r.at), variant: r.vid == null ? null : String(r.variant ?? r.vid) }));
+
+  // The rows `totals()` counts as its refunds: merchandise of orders with money parts, at the refund day's rate.
+  const { fx } = storeConverter(db, String(store.currency));
+  const day = basis === 'order_day' ? 'o.local_date' : 'r.local_date';
+  const wr = sliceSql(db, storeId, channels && { channels }, sp.period.to, day, basis === 'order_day' ? 'o.created_at' : 'r.refunded_at');
+  const ip = inProducts({ products: ids }, 'r.product_id');
+  const refundLines = demo
+    ? []
+    : db
+        .prepare(
+          `SELECT r.id, r.order_id AS o, r.local_date AS day, r.quantity AS q, r.merchandise AS merch, r.restocked AS back, o.currency AS cur, o.fx_rate AS locked, coalesce(v.title, r.variant_id) AS variant
+           FROM refunds r JOIN orders o ON o.store_id = r.store_id AND o.id = r.order_id
+           LEFT JOIN product_variants v ON v.store_id = r.store_id AND v.product_id = r.product_id AND v.id = r.variant_id
+           WHERE r.store_id = ? AND ${day} BETWEEN ? AND ? AND o.breakdown_at IS NOT NULL AND ${CANONICAL}${wr.sql}${ip.sql} ORDER BY r.local_date DESC, r.refunded_at DESC, r.id`,
+        )
+        .all(storeId, sp.period.from, sp.period.to, ...wr.params, ...ip.params)
+        .flatMap((r): SaRefundLine[] => {
+          const rate = fx(String(r.day), r.cur, r.locked, 0);
+          if (rate == null) return [];
+          const amount = Math.round(Number(r.merch ?? 0) * rate * 100) / 100;
+          return [{ id: String(r.id), orderId: String(r.o), date: String(r.day), variant: r.variant == null ? null : String(r.variant), quantity: r.q == null ? null : Number(r.q), amount, restocked: r.back == null ? null : !!r.back }];
+        });
+
   const failedOn = new Set(row.channels.filter((c) => c.status === 'failed').map((c) => c.channel));
   const flags = insights(db, storeId, sp, now);
   const mine = flags.insights.filter(({ target: t }) => (t.kind === 'product' && ids.includes(t.id)) || (t.kind === 'products' && t.ids.some((x) => ids.includes(x))) || (t.kind === 'listings' && failedOn.has(t.channel)));
@@ -106,11 +138,13 @@ export function productDetail(db: Db, storeId: string, id: string, sp: StorePeri
       unitCost: cost ? { value: Number(cost.value), source: String(cost.source), since: cost.since == null ? null : String(cost.since) } : null,
       fees: cur.fees,
       feeRule: { percent: Number(store.pct), perOrder: Number(store.per) },
+      history,
     },
     variants: listingVariants(db, storeId, id, sp, rest, basis)!,
     insights: mine,
     rules: flags.rules.filter((r) => mine.some((i) => i.rule === r.id)),
     links: productLinks(db, storeId, id),
+    refundLines: demo ? { rows: [], note: 'Demo data has no refund lines' } : { rows: refundLines },
     scope,
   };
 }

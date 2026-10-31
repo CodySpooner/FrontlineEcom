@@ -1,13 +1,12 @@
 // SA-62: Store Analytics, one store at a time (decision 2): the title strip, the context bar and the tabs. A tab is
-// listed only once its content ships (decision 33). The legacy Unit costs panel sits under the Overview until SA-92.
-// `product=` opens the product drawer over any tab (SA-88).
+// listed only once its content ships (decision 33). `product=` opens the product drawer over any tab (SA-88); unit
+// costs are edited on its Costs tab (SA-92).
 import type { ReactNode } from 'react';
 import { Link } from 'react-router';
 import { settingsUrl, type SaDataset } from '@frontline/shared';
 import { useSaContext } from '../analytics/api';
 import { ContextBar } from '../analytics/ContextBar';
 import { ListingsTab } from '../analytics/ListingsTab';
-import { UnitCosts } from '../analytics/legacy';
 import { Overview } from '../analytics/Overview';
 import { ProductDrawer } from '../analytics/ProductDrawer';
 import { useAnalyticsState, type AnalyticsPage } from '../analytics/state';
@@ -21,12 +20,7 @@ export const TABS: { value: string; label: string; datasets: SaDataset[]; render
     value: 'overview',
     label: 'Overview',
     datasets: ['orders', 'refunds', 'catalog', 'inventory', 'traffic', 'ad_spend'],
-    render: (s) => (
-      <>
-        <Overview s={s} tabs={TABS.map((t) => t.value)} />
-        <UnitCosts ids={[s.store]} multi={false} />
-      </>
-    ),
+    render: (s) => <Overview s={s} tabs={TABS.map((t) => t.value)} />,
   },
   { value: 'listings', label: 'Listings & Products', datasets: ['catalog', 'inventory', 'orders', 'refunds'], render: (s) => <ListingsTab key={s.store} s={s} onOpen={(id) => s.set({ product: id })} /> }, // a store's own selection and expanded rows
 ];

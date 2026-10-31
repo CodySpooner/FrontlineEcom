@@ -946,6 +946,29 @@ export interface SaProductChannel {
   refunds: SaValue;
 }
 
+/** SA-92: a product's unit cost as recorded (decision 15: a new cost never rewrites a past one). */
+export interface SaUnitCostEntry {
+  value: number;
+  currency: string | null;
+  /** A platform, `owner` (entered in the app) or another importer's name. */
+  source: string;
+  since: string;
+  recordedAt: string;
+  /** The variant's title (or id) for a variant's cost; null for the product's. */
+  variant: string | null;
+}
+
+/** SA-92: one refund line behind a product's Refunds number, in the store's currency. */
+export interface SaRefundLine {
+  id: string;
+  orderId: string;
+  date: string;
+  variant: string | null;
+  quantity: number | null;
+  amount: number;
+  restocked: boolean | null;
+}
+
 /** SA-91 (decision 22): a channel's product rolled into a store product, and how the link was made. */
 export interface SaProductLink {
   channel: string;
@@ -970,13 +993,21 @@ export interface SaProductDetail {
   /** Why the channels have no sales (a demo store). */
   channelsNote?: string;
   /** The price, cost and fee line: its unit cost now (with its source), the period's fees and the store's fee rule. */
-  costs: { unitCost: { value: number; source: string; since: string | null } | null; fees: SaValue; feeRule: { percent: number; perOrder: number } };
+  costs: {
+    unitCost: { value: number; source: string; since: string | null } | null;
+    fees: SaValue;
+    feeRule: { percent: number; perOrder: number };
+    /** SA-92: newest first. */
+    history: SaUnitCostEntry[];
+  };
   variants: SaVariants;
   insights: SaInsight[];
   /** SA-89: the rules behind `insights` (the Rule card's "Flags when"). */
   rules: SaRule[];
   /** SA-91: the channel products rolled into this one. */
   links: SaProductLink[];
+  /** SA-92: the refund lines in the period (by the refunds basis); `note` says why there are none to list. */
+  refundLines: { rows: SaRefundLine[]; note?: string };
   scope: SaFilterScope;
 }
 

@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { SaListings } from '@frontline/shared';
 import { createApp } from '../app';
 import { openDb, type Db } from '../db';
+import { setProductCost } from '../catalog';
 import { seedDemo } from '../demo';
 import { costMetrics } from './costs';
 import { LEDGER_NOW, LEDGER_PERIODS, LEDGER_STORE, seedLedgerStore } from './fixture';
@@ -98,3 +99,56 @@ describe('Product detail (SA-87)', () => {
     for (const q of ['&refunds=whenever', '&filters=nope', '&compare=sideways']) expect((await get('8001', q)).status).toBe(400);
   });
 });
+
+describe('Costs and Refunds tabs (SA-92)', () => {
+  it('the refund lines its Refunds number adds up, by the refunds basis; a demo store has none to list', () => {
+    const db = openDb();
+    seedLedgerStore(db);
+    const sp = p1(db, 'none');
+    const serum = productDetail(db, LEDGER_STORE, '8001', sp, {}, 'refund_day', LEDGER_NOW)!;
+    // r1016-1 waits for its order (not synced yet) and counts nowhere
+    expect(serum.refundLines).toEqual({ rows: [{ id: 'r1005-1', orderId: '#1005', date: '2026-10-29', variant: 'Default', quantity: 1, amount: 32, restocked: true }] });
+    expect(sum(serum.refundLines.rows.map((r) => r.amount))).toBe(serum.row.refunds.value);
+    // the cream's order is in P1, its refund in P3
+    const cream = (basis: 'refund_day' | 'order_day') => productDetail(db, LEDGER_STORE, '8002', sp, {}, basis, LEDGER_NOW)!;
+    expect(cream('refund_day').refundLines.rows).toEqual([]);
+    expect(cream('order_day').refundLines.rows.map((r) => [r.id, r.date, r.amount])).toEqual([['r1004-1', '2026-11-03', 84]]);
+    expect(cream('order_day').row.refunds.value).toBe(84);
+    // a refund of the EUR order at its day's rate; an order without money parts isn't counted, so not listed
+    db.prepare("INSERT INTO refunds (store_id, id, refund_id, order_id, product_id, variant_id, refunded_at, local_date, merchandise, quantity, restocked, source) VALUES (?, 'r1012-1', 'R1012', '#1012', '8002', '8002-1', '2026-10-30T12:00:00Z', '2026-10-30', 25.55, 1, 0, 'shopify')").run(LEDGER_STORE);
+    expect(cream('refund_day').refundLines.rows.map((r) => [r.id, r.amount, r.restocked])).toEqual([['r1012-1', 27.59, false]]);
+    expect(cream('refund_day').row.refunds.value).toBe(27.59);
+    db.prepare("UPDATE orders SET breakdown_at = NULL, status = 'paid' WHERE store_id = ? AND id = '#1005'").run(LEDGER_STORE);
+    const parts = productDetail(db, LEDGER_STORE, '8001', sp, {}, 'refund_day', LEDGER_NOW)!;
+    expect([parts.refundLines.rows, parts.row.refunds.value]).toEqual([[], 0]);
+
+    const demo = openDb();
+    seedDemo(demo, '2026-10-26');
+    const dsp = storePeriod(demo, 'glow', () => undefined, Date.parse('2026-10-26T15:00:00Z')) as StorePeriod;
+    const id = (listings(demo, 'glow', {}, dsp) as SaListings).rows[0]!.id;
+    expect(productDetail(demo, 'glow', id, dsp)!.refundLines).toEqual({ rows: [], note: 'Demo data has no refund lines' });
+  });
+
+  it("an edited cost doesn't change a past period's contribution; the history keeps every cost, newest first", async () => {
+    const db = openDb();
+    seedLedgerStore(db);
+    const sp = p1(db, 'none');
+    const contribution = () => productDetail(db, LEDGER_STORE, 'tt-9001', sp, {}, 'refund_day', LEDGER_NOW)!.metrics.find((m) => m.id === 'contribution_before_ads')!.value;
+    expect(setProductCost(db, LEDGER_STORE, 'tt-9001', { cost: 8 })).toMatchObject({ cost: 8 });
+    const first = contribution();
+    expect(first).toBe(20.76); // its one $30 line less the 8 cost and its order's fees
+    const res = await createApp(db).request(`/api/products/${LEDGER_STORE}/tt-9001`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ cost: 12 }) });
+    expect(res.status).toBe(200);
+    expect(contribution()).toBe(first);
+    const d = productDetail(db, LEDGER_STORE, 'tt-9001', sp, {}, 'refund_day', LEDGER_NOW)!;
+    expect(d.costs.history.map((h) => [h.value, h.source, h.variant])).toEqual([[12, 'owner', null], [8, 'owner', null]]);
+    expect(productDetail(db, LEDGER_STORE, '8001', sp, {}, 'refund_day', LEDGER_NOW)!.costs.history).toEqual([
+      { value: 11, currency: 'USD', source: 'shopify', since: '2026-10-29', recordedAt: '2026-10-29T13:00:00Z', variant: 'Default' },
+      { value: 9, currency: 'USD', source: 'shopify', since: '2026-01-01', recordedAt: '2026-01-01T00:00:00Z', variant: 'Default' },
+    ]);
+    // the refusal the Costs tab shows for a Shopify product
+    const shopify = await createApp(db).request(`/api/products/${LEDGER_STORE}/8003`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ cost: 5 }) });
+    expect([shopify.status, ((await shopify.json()) as { error: string }).error]).toEqual([400, 'Shopify keeps unit costs: set "Cost per item" on the product in Shopify and the next sync brings it here']);
+  });
+});
+

@@ -1,10 +1,12 @@
 // SA-88 (the Listings board): the product drawer, opened by `product=` in the URL from a Listings row or a Needs
 // attention flag. Its header facts and pills come from the product endpoint (SA-87); its tabs render as their content
-// ships (decision 33): Performance (SA-89), Variants and Channels (SA-90) with its product links (SA-91). Closed, it
-// hands focus back to what opened it.
+// ships (decision 33): Performance (SA-89), Variants and Channels (SA-90) with its product links (SA-91), Costs and
+// Refunds (SA-92). Closed, it hands focus back to what opened it.
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Info } from 'lucide-react';
 import { SA_METRICS, type Platform, type SaListingRow, type SaMetricId, type SaMetricResult, type SaProductDetail } from '@frontline/shared';
+import { useSetCost } from '../api/client';
 import { PLATFORM_NAME } from '../components/StoreForm';
 import { Button, cx, Dialog, ErrorState, LoadingState, Tabs } from '../components/ui';
 import { ago, cents, fmtDay, money, pct } from '../lib/format';
@@ -309,13 +311,116 @@ function Channels({ d, currency, platform, channel, children }: { d: SaProductDe
   );
 }
 
+/** SA-92: the unit cost now and as recorded, and the owner's edit: orders with a cost keep it (decision 15). */
+function Costs({ s, d, currency }: { s: AnalyticsPage & { store: string }; d: SaProductDetail; currency?: string }) {
+  const save = useSetCost();
+  const qc = useQueryClient();
+  const [cost, setCost] = useState('');
+  const uc = d.costs.unitCost;
+  return (
+    <div className="flex flex-col gap-3 text-[12px]">
+      <p className="text-text-2">
+        Unit cost{' '}
+        {uc ? (
+          <>
+            <b className="text-text">{cents(uc.value, currency)}</b>{' '}
+            <span className="text-muted">
+              ({costSource(uc.source)}
+              {uc.since && `, since ${fmtDay(uc.since)}`})
+            </span>
+          </>
+        ) : (
+          <span className="text-muted">not recorded</span>
+        )}
+      </p>
+      <form
+        className="flex items-center gap-2"
+        onSubmit={(e) => {
+          e.preventDefault();
+          save.mutate({ storeId: s.store, id: d.row.id, cost: Number(cost) }, { onSuccess: () => (setCost(''), qc.invalidateQueries({ queryKey: ['sa', s.store] })) });
+        }}
+      >
+        <input
+          type="number"
+          min="0"
+          step="0.01"
+          aria-label="New unit cost"
+          placeholder="New unit cost"
+          value={cost}
+          onChange={(e) => setCost(e.target.value)}
+          className="h-8 w-36 rounded-lg border border-line-2 bg-bg-2 px-2.5 tabular-nums outline-none placeholder:text-muted focus:border-red/60"
+        />
+        <Button size="sm" type="submit" disabled={!cost || save.isPending}>
+          Save cost
+        </Button>
+      </form>
+      {save.error && <p className="text-red">{save.error.message}</p>}
+      <p className="text-[11px] text-muted">Orders that have a cost keep it, so past periods' contribution doesn't move; orders without one take this cost.</p>
+      {d.costs.history.length > 0 && (
+        <table aria-label="Unit cost history" className={GRID}>
+          <thead>
+            <tr>
+              <th className={cx(TH, 'text-left')}>Since</th>
+              <th className={cx(TH, 'text-right')}>Cost</th>
+              <th className={cx(TH, 'text-left')}>Source</th>
+              <th className={cx(TH, 'text-left')}>Variant</th>
+            </tr>
+          </thead>
+          <tbody>
+            {d.costs.history.map((h, i) => (
+              <tr key={i}>
+                <td>{fmtDay(h.since)}</td>
+                <td className="text-right">{cents(h.value, h.currency ?? currency)}</td>
+                <td>{costSource(h.source)}</td>
+                <td className={cx(!h.variant && 'text-muted')}>{h.variant ?? 'All variants'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
+
+/** SA-92: the refund lines its Refunds number adds up, newest first. */
+function Refunds({ d, currency }: { d: SaProductDetail; currency?: string }) {
+  const { rows, note } = d.refundLines;
+  if (note || !rows.length) return <p className="text-[12px] text-muted">{note ? `${note}.` : 'No refunds in this period.'}</p>;
+  return (
+    <table aria-label="Refund lines" className={GRID}>
+      <thead>
+        <tr>
+          <th className={cx(TH, 'text-left')}>Day</th>
+          <th className={cx(TH, 'text-left')}>Order</th>
+          <th className={cx(TH, 'text-left')}>Variant</th>
+          <th className={cx(TH, 'text-right')}>Units</th>
+          <th className={cx(TH, 'text-right')}>Amount</th>
+          <th className={cx(TH, 'text-left')}>Restocked</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((r) => (
+          <tr key={r.id}>
+            <td>{fmtDay(r.date)}</td>
+            <td>{r.orderId}</td>
+            <td>{r.variant ?? dash()}</td>
+            <td className="text-right">{r.quantity ?? dash()}</td>
+            <td className="text-right">{cents(r.amount, currency)}</td>
+            <td>{r.restocked == null ? dash() : r.restocked ? 'Yes' : 'No'}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
 export function ProductDrawer({ s, id }: { s: AnalyticsPage & { store: string }; id: string }) {
   const ctx = useSaContext(s.store).data;
   const q = useSaProduct(s.store, id, periodParams(s));
   // what opened it (a row, a flag): focus goes back there once the drawer is gone
   const opener = useRef(document.activeElement as HTMLElement | null);
   useEffect(() => () => opener.current?.focus(), []);
-  const [tab, setTab] = useState<'performance' | 'variants' | 'channels'>('performance');
+  const [tab, setTab] = useState<'performance' | 'variants' | 'channels' | 'costs' | 'refunds'>('performance');
   const d = q.data;
   const r = d?.row;
   const label = (c: string) => (c === 'site' ? 'site' : ((ctx && channelsOf(ctx).find((x) => x.id === c)?.label) ?? PLATFORM_NAME[c as Platform] ?? c));
@@ -324,6 +429,8 @@ export function ProductDrawer({ s, id }: { s: AnalyticsPage & { store: string };
     { value: 'performance' as const, label: 'Performance' },
     { value: 'variants' as const, label: 'Variants', count: d.variants.rows.length },
     { value: 'channels' as const, label: 'Channels', count: d.channels.length },
+    { value: 'costs' as const, label: 'Costs' },
+    { value: 'refunds' as const, label: 'Refunds' },
   ];
   const pill = (text: string, tone: keyof typeof TONE, title?: string) => (
     <span key={text} title={title} className={cx('inline-flex items-center rounded-full border px-2 py-px text-[11px] font-semibold whitespace-nowrap', TONE[tone])}>
@@ -364,6 +471,8 @@ export function ProductDrawer({ s, id }: { s: AnalyticsPage & { store: string };
                 <Links s={s} d={d} own={ctx && channelsOf(ctx)[0]?.id} platform={ctx?.platform} channel={channel} />
               </Channels>
             )}
+            {tab === 'costs' && <Costs s={s} d={d} currency={ctx?.currency} />}
+            {tab === 'refunds' && <Refunds d={d} currency={ctx?.currency} />}
           </div>
           <FilterScope scope={d.scope} />
         </div>
