@@ -8,7 +8,7 @@ outcome checks.
 ## A run, end to end
 
 1. **Start** (`runs.ts` `createRunManager().start`): refused if the agent is offline, or if the store's AI budget for
-   today (or the agent's own, `dailyBudgetUsd`) is spent. Queued runs share the machine: 3 at once, 2 per store, one per agent. A run waiting on the owner holds no slot.
+   today (or the agent's own, `dailyBudgetUsd`) is spent. Queued runs share the machine: 3 at once and 2 per store unless Settings → Agents & Providers → Advanced says otherwise (`runLimits`, read at each pump), one per agent. A run waiting on the owner holds no slot.
 2. **Prompt** (`prompt.ts` `assemblePrompt`): role prompt and playbook (`playbooks/<role>.md`), then the platform pack
    (`packs/platform/`), the niche pack (`packs/niche/`, or a custom niche's pack: its Market Analyst drafts it when the store goes live, or when
    the owner asks, `POST /api/agents/:id/niche-pack`, never on the demo engine; saving it is a request), owner-approved niche

@@ -2,8 +2,10 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { Route, Routes } from 'react-router';
-import type { ConfigView, Store } from '@frontline/shared';
+import type { ConfigView, PrAgentRow, Store } from '@frontline/shared';
+import { CreateTeam } from '../../agents/CreateTeam';
 import { Deploy } from '../../agents/Deploy';
+import { ResearchDialog } from '../../product-research/ResearchDialog';
 import { Settings } from '../../pages/Settings';
 import { renderApp, reply, stubApi } from '../../test-utils';
 
@@ -30,6 +32,11 @@ function view(ws: Values, own?: Values, storeId?: string): ConfigView {
     const [value, origin] = own?.[k] !== undefined ? [own[k], 'store'] : ws[k] !== undefined ? [ws[k], 'workspace'] : [null, 'default'];
     v.values[id] = value;
     v.origins[id] = origin as ConfigView['origins'][string];
+  }
+  // The run limits: workspace only, with their registry defaults.
+  for (const [k, d] of [['retries', 2], ['atOnce', 3], ['perStore', 2]] as const) {
+    v.values[`runs.${k}`] = ws[k] ?? d;
+    v.origins[`runs.${k}`] = ws[k] === undefined ? 'default' : 'workspace';
   }
   return v;
 }
@@ -195,4 +202,45 @@ it("Deploy starts from the store's defaults and says where the model came from, 
   deploy('glow');
   expect((await screen.findByRole('link', { name: 'Workspace default' })).getAttribute('href')).toBe('/settings/agents#agentDefaults.model');
   expect(within(screen.getByRole('radiogroup', { name: 'Effort' })).getByRole('radio', { checked: true }).textContent).toBe('High');
+});
+
+it('Advanced holds the run limits at workspace scope only; lowering the total lowers per store with it', async () => {
+  const calls = api({ ws: { retries: 1 } });
+  renderApp(<Settings />, '/settings/agents');
+  fireEvent.click(await screen.findByRole('button', { name: 'Advanced · retries, runs at once' }));
+  expect(select('runs.retries').value).toBe('1');
+  expect([select('runs.atOnce').value, select('runs.perStore').value]).toEqual(['3', '2']);
+  fireEvent.change(select('runs.atOnce'), { target: { value: '1' } });
+  expect(select('runs.perStore').value).toBe('1');
+  expect((within(row('runs.perStore')).getByRole('option', { name: '2' }) as HTMLOptionElement).disabled).toBe(true);
+  fireEvent.click(await screen.findByRole('button', { name: 'Save changes' }));
+  await waitFor(() => expect(saved(calls)).toEqual([{ documents: [{ doc: 'workspace', version: 3, set: { 'runs.atOnce': 1, 'runs.perStore': 1 } }] }]));
+  cleanup();
+
+  api();
+  renderApp(<Settings />, '/settings/agents?store=glow');
+  await waitFor(() => expect(select('agentDefaults.runtime')).toBeTruthy());
+  expect(screen.queryByRole('button', { name: /^Advanced/ })).toBeNull();
+});
+
+it('Create team and Research a Product show the store runs at once from Settings, with a link', async () => {
+  api({ ws: { perStore: 1 } });
+  renderApp(<CreateTeam store={STORES[0]!} onClose={() => undefined} />, '/agents?store=glow');
+  const dialog = within(await screen.findByRole('dialog', { name: 'Create a team' }));
+  expect(await dialog.findByText(/^Tasks run at most 1 at once per store/)).toBeTruthy();
+  expect(dialog.getByRole('link', { name: 'Settings' }).getAttribute('href')).toBe('/settings/agents#runs.perStore');
+  expect([...(dialog.getByLabelText('At once') as HTMLSelectElement).options].map((o) => o.value)).toEqual(['1']);
+  cleanup();
+
+  const busy: PrAgentRow = { type: 'product_hunter', name: 'Product Researcher', custom: false, runtime: 'demo', model: null, effort: null, budgetUsd: null, state: 'busy', reason: null, busy: { conversationId: 'c9', title: 'Research: Cat perch', queued: 0, slotsFull: true, perStore: 1 } };
+  stubApi((url) => {
+    const u = new URL(url, 'http://x');
+    if (u.pathname === '/api/stores') return STORES;
+    if (u.pathname === '/api/pr/agents') return [busy];
+    if (u.pathname === '/api/pr/profile') return { storeId: 'glow', priceMin: null, priceMax: null, priceCurrency: 'USD' };
+    if (u.pathname === '/api/kb/cards') return { items: [], total: 0 };
+    return undefined;
+  });
+  renderApp(<ResearchDialog stores={STORES} store="glow" onClose={() => undefined} onStarted={() => undefined} />, '/research?store=glow');
+  expect(await screen.findByText('Working on “Research: Cat perch” · 0 queued in this conversation, then waits for a free store slot (1 per store)')).toBeTruthy();
 });

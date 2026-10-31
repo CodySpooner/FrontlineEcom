@@ -86,11 +86,12 @@ function Runtimes() {
   );
 }
 
-const KEYS = ['runtime', 'model', 'effort', 'stopAfterMin', 'knowledge'] as const;
+// The run limits (ST-22) are `runs.*` workspace entries, edited in the same form (one form per section).
+const KEYS = ['runtime', 'model', 'effort', 'stopAfterMin', 'knowledge', 'retries', 'atOnce', 'perStore'] as const;
 type Key = (typeof KEYS)[number];
-type Values = { runtime?: 'claude' | 'codex'; model?: string; effort?: string; stopAfterMin?: number; knowledge?: 'all' | 'store' };
+type Values = { runtime?: 'claude' | 'codex'; model?: string; effort?: string; stopAfterMin?: number; knowledge?: 'all' | 'store'; retries?: number; atOnce?: number; perStore?: number };
 type Form = Values & { version: number };
-const id = (k: Key) => `agentDefaults.${k}`;
+const id = (k: Key) => (k === 'retries' || k === 'atOnce' || k === 'perStore' ? `runs.${k}` : `agentDefaults.${k}`);
 
 /** The values set at this scope (the store's own, or the workspace's); an unset one is absent. */
 const own = (v: ConfigView, store?: string): Values => Object.fromEntries(KEYS.filter((k) => v.origins[id(k)] === (store ? 'store' : 'workspace')).map((k) => [k, v.values[id(k)]]));
@@ -128,12 +129,12 @@ function Defaults() {
   const f = useSettingsForm<Form>({
     key: `agents:${sid ?? 'workspace'}`,
     saved: q.data && toForm(q.data, sid),
-    labels: { runtime: 'Runtime', model: 'Model', effort: 'Effort', stopAfterMin: 'Stop a run after', knowledge: 'Knowledge' },
+    labels: { runtime: 'Runtime', model: 'Model', effort: 'Effort', stopAfterMin: 'Stop a run after', knowledge: 'Knowledge', retries: 'Retries', atOnce: 'Runs at once', perStore: 'Runs at once per store' },
     save: (changes, _version, base) =>
       api<ConfigView>('/api/config', json('PATCH', { documents: documentsOf(changes, base, sid) })).then(
         (v) => (qc.setQueryData(['config', 'view', sid ?? null], v), { ...toForm(v, sid), changes: v.changes }),
         (e: ApiError) => {
-          if (e.field?.startsWith('agentDefaults.')) e.field = e.field.slice('agentDefaults.'.length); // the row's own key
+          e.field = KEYS.find((k) => id(k) === e.field) ?? e.field; // the row's own key
           if (e.current) e.current = toForm(e.current as ConfigView, sid);
           throw e;
         },
@@ -181,10 +182,51 @@ function Defaults() {
     !sid ? undefined : d[k] === undefined ? { kind: 'workspace' } : { kind: 'store', workspace: show, same: same(d[k], inherited[k]), onUse: use };
   const row = (k: Key) => ({ setting: id(k), error: f.error(k), changed: f.dirty.includes(k) });
   const efforts = now.model?.efforts ?? [];
+  /** A run limit as it stands: the draft's, else the workspace's (or its default). */
+  const limit = (k: 'retries' | 'atOnce' | 'perStore') => Number(d[k] ?? q.data.values[id(k)]);
+  const upTo = (n: number) => Array.from({ length: n }, (_, i) => i + 1);
   const texts = documents.length ? (impact.data?.impacts.map((i) => i.text) ?? []) : [];
   return (
     <>
-      <SettingsSection title={title} help="Applies to runs started after you save. Runs already going keep the settings they started with.">
+      <SettingsSection
+        title={title}
+        help="Applies to runs started after you save. Runs already going keep the settings they started with."
+        advanced={
+          sid
+            ? undefined
+            : {
+                summary: 'retries, runs at once',
+                children: (
+                  <>
+                    <SettingRow {...row('retries')} label="Retries" htmlFor="run-retries" help="When the AI service is busy or failing, unless the run already changed something">
+                      <select id="run-retries" data-setting="runs.retries" value={limit('retries')} onChange={(e) => f.set('retries', Number(e.target.value))} className={cx(inputClass, 'w-[220px] py-1.5')}>
+                        <option value={0}>Never</option>
+                        <option value={1}>Once</option>
+                        <option value={2}>Twice</option>
+                      </select>
+                    </SettingRow>
+                    {/* Lowering the total lowers per store with it: per store is never above the total. */}
+                    <SettingRow {...row('atOnce')} label="Runs at once" htmlFor="run-total" help="Across every store. Lowering it never stops a run going.">
+                      <select id="run-total" data-setting="runs.atOnce" value={limit('atOnce')} onChange={(e) => (f.set('atOnce', Number(e.target.value)), limit('perStore') > Number(e.target.value) && f.set('perStore', Number(e.target.value)))} className={cx(inputClass, 'w-[220px] py-1.5')}>
+                        {upTo(5).map((n) => (
+                          <option key={n}>{n}</option>
+                        ))}
+                      </select>
+                    </SettingRow>
+                    <SettingRow {...row('perStore')} label="Runs at once per store" htmlFor="run-store" help="Never above the total. A team runs at most this many of its tasks at once.">
+                      <select id="run-store" data-setting="runs.perStore" value={limit('perStore')} onChange={(e) => f.set('perStore', Number(e.target.value))} className={cx(inputClass, 'w-[220px] py-1.5')}>
+                        {upTo(3).map((n) => (
+                          <option key={n} disabled={n > limit('atOnce')}>
+                            {n}
+                          </option>
+                        ))}
+                      </select>
+                    </SettingRow>
+                  </>
+                ),
+              }
+        }
+      >
         <SettingRow
           {...row('runtime')}
           label="Runtime"

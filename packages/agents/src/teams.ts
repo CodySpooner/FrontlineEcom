@@ -3,7 +3,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { z } from 'zod';
 import { AGENT_ROLES, gist, INTERRUPTED, type AgentRole, type AgentRun, type CreateTeamInput, type RuntimeCapabilities, type SquadMission, type SquadMissionStep, type Store, type TeamContribution, type TeamNoteInput, type TeamParticipantInput } from '@frontline/shared';
 import { isAccountError } from './claude-engine';
-import { agentDefaults, customRole, getConfig, resolveType, saveConfig, validateConfig } from './configs';
+import { agentDefaults, customRole, getConfig, resolveType, runLimits, saveConfig, validateConfig } from './configs';
 import { conversationPreface, getConversation, indexConversation } from './conversations';
 import { untrustedBlock } from './kb-sources';
 import { finalText, getRun, teamCost, turnedDown, type StartOptions } from './runs';
@@ -28,7 +28,6 @@ export const TEAM_PLAN = "Plan the team's work.";
 export const TEAM_TASK = 'Your task in the team';
 export const TEAM_SYNTHESIS = "Write the team's synthesis.";
 /** The run manager's per-store limit: a team never runs more at once than its store can. */
-const STORE_LIMIT = 2;
 const BACKOFF_MS = [30_000, 120_000];
 const FAILED_FOR_GOOD = ['error', 'cancelled', 'blocked'];
 
@@ -84,15 +83,21 @@ export function parseContribution(text: string): TeamContribution {
   return { summary: c.data.summary, output: c.data.output, evidence: c.data.evidence, openQuestions: c.data.open_questions, disagreesWith: c.data.disagrees_with };
 }
 
-/** decision 9's team checks: retries 0–2, 1–6 participants, at once ≥ 1 (kept to the store's limit), a positive budget. */
-export function validateTeam(b: Partial<CreateTeamInput>): { retries: number; maxConcurrent: number; budgetUsd?: number } | { field: string; error: string } {
+/** A team's "at once", never above the store's runs at once. */
+const atOnce = (db: DatabaseSync, r: Record<string, unknown>) => {
+  const per = runLimits(db).perStore;
+  return Math.min(Number(r.max_concurrent ?? per), per);
+};
+
+/** decision 9's team checks: retries 0–2, 1–6 participants, at once ≥ 1 (kept to `storeLimit`, the store's runs at once), a positive budget. */
+export function validateTeam(b: Partial<CreateTeamInput>, storeLimit: number): { retries: number; maxConcurrent: number; budgetUsd?: number } | { field: string; error: string } {
   const retries = b.retries ?? 2;
   if (!Number.isInteger(retries) || retries < 0 || retries > 2) return { field: 'retries', error: 'Retries per task are 0, 1 or 2.' };
   if (!Array.isArray(b.participants) || !b.participants.length || b.participants.length > 6) return { field: 'participants', error: 'A team has 1–6 participants, the lead first.' };
-  const at = b.maxConcurrent ?? STORE_LIMIT;
+  const at = b.maxConcurrent ?? storeLimit;
   if (!Number.isInteger(at) || at < 1) return { field: 'maxConcurrent', error: '"At once" is 1 or more.' };
   if (b.budgetUsd != null && !(typeof b.budgetUsd === 'number' && Number.isFinite(b.budgetUsd) && b.budgetUsd > 0)) return { field: 'budgetUsd', error: 'The team budget must be a positive amount in dollars.' };
-  return { retries, maxConcurrent: Math.min(at, STORE_LIMIT), ...(b.budgetUsd != null ? { budgetUsd: b.budgetUsd } : {}) };
+  return { retries, maxConcurrent: Math.min(at, storeLimit), ...(b.budgetUsd != null ? { budgetUsd: b.budgetUsd } : {}) };
 }
 
 type Refused = { status: 400 | 404 | 409; error: string; field?: string };
@@ -132,7 +137,7 @@ export function createTeam(db: DatabaseSync, store: Store, input: unknown, caps:
   }
   const same = db.prepare('SELECT m.id FROM conversations c JOIN squad_missions m ON m.conversation_id = c.id WHERE c.store_id = ? AND c.client_request_id = ?').get(store.id, b.clientRequestId);
   if (same) return { team: getTeam(db, String(same.id))!, repeated: true };
-  const limits = validateTeam(b);
+  const limits = validateTeam(b, runLimits(db).perStore);
   if ('field' in limits) return { status: 400, ...limits };
   const picked: Participant[] = [];
   for (const [i, p] of b.participants!.entries()) {
@@ -331,7 +336,8 @@ export function advanceTeam(db: DatabaseSync, r: Record<string, unknown>, start:
   }
 
   const steps = teamSteps(db, stored);
-  let free = Number(r.max_concurrent ?? STORE_LIMIT) - steps.filter((s) => s.status === 'queued' || s.status === 'running').length;
+  // At once is clamped to the store's runs at once as it is now (Settings may have lowered it since the team started).
+  let free = atOnce(db, r) - steps.filter((s) => s.status === 'queued' || s.status === 'running').length;
   const budget = r.budget_usd == null ? undefined : Number(r.budget_usd);
   const spent = budget !== undefined && teamCost(db, String(r.id)) >= budget - 0.01;
   stored.forEach((s, i) => {
@@ -412,7 +418,7 @@ export function toTeam(db: DatabaseSync, r: Record<string, unknown>): SquadMissi
     }),
     ...(r.budget_usd != null ? { budgetUsd: Number(r.budget_usd) } : {}),
     spentUsd: teamCost(db, String(r.id)),
-    maxConcurrent: Number(r.max_concurrent ?? STORE_LIMIT),
+    maxConcurrent: atOnce(db, r),
     retries: Number(r.retries ?? 2),
     ...(r.conversation_id ? { conversationId: String(r.conversation_id) } : {}),
     ownerNotes: JSON.parse(String(r.owner_notes_json ?? '[]')),

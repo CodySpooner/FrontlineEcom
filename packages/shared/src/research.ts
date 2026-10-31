@@ -424,8 +424,8 @@ export interface PrAgentRow {
   state: 'available' | 'busy' | 'not_ready';
   /** Not ready: why, as the owner's next step. */
   reason: string | null;
-  /** Busy: the running conversation, its queued turns, and whether the store's 2 slots are full. */
-  busy: { conversationId: string; title: string; queued: number; slotsFull: boolean } | null;
+  /** Busy: the running conversation, its queued turns, and whether the store's slots (`perStore`, Settings' run limit) are full. */
+  busy: { conversationId: string; title: string; queued: number; slotsFull: boolean; perStore?: number } | null;
 }
 
 /** A research task's status, derived from its run (decision 6), never stored. */

@@ -17,6 +17,16 @@ function after(db: Db, w: DocWrite | undefined, doc: 'workspace' | 'store_caps',
   return json;
 }
 
+/** Runs at once per store is never above the total (decision 9), as this save leaves the workspace. */
+export function checkRunLimits(db: Db, documents: DocWrite[]) {
+  const w = documents.find((d) => d.doc === 'workspace');
+  if (!w || ![...Object.keys(w.set ?? {}), ...(w.unset ?? [])].some((k) => k.startsWith('runs.'))) return;
+  const json = after(db, w, 'workspace');
+  const [total, per] = ['runs.atOnce', 'runs.perStore'].map((id) => json[id] ?? SETTINGS.find((d) => d.id === id)!.default);
+  // A value of the wrong type: the writer's own check says so.
+  if (typeof total === 'number' && typeof per === 'number' && per > total) throw new ConfigError(400, { error: `Runs at once per store can't be above the total (${total}).`, field: 'runs.perStore' });
+}
+
 export async function checkAgentDefaults(db: Db, documents: DocWrite[]) {
   const mine = documents.filter((w) => (w.doc === 'workspace' || w.doc === 'store_caps') && ours(w));
   // A value of the wrong type or an unknown id: the writer's own check says so.

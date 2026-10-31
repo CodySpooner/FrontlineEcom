@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import { AGENT_ROLES, gist, hasEffects, INTERRUPTED, type AgentEvent, type AgentRole, type AgentRun, type AgentRunDetail, type RunAttachment, type RunStatus, type RunUsage, type RuntimeId, type Store } from '@frontline/shared';
-import { agentDefaults, customRole, getConfig } from './configs';
+import { agentDefaults, customRole, getConfig, runLimits } from './configs';
 import { conversationPreface, conversationQuery } from './conversations';
 import { defaultEngine, runAgent, type Engine, type RunInput } from './engine';
 import { researchContext } from './kb-research';
@@ -20,9 +20,9 @@ export interface RunManagerOptions {
   env: ToolEnv;
   store: (id: string) => Store | undefined;
   engine?: Engine;
-  /** Runs at once across all stores. */
+  /** Runs at once across all stores; Settings' run limit when unset. */
   concurrency?: number;
-  /** Runs at once per store. One agent never runs twice at once. */
+  /** Runs at once per store; Settings' run limit when unset. One agent never runs twice at once. */
   perStore?: number;
   /** Queued, started, finished. */
   onRun?: (run: AgentRun) => void;
@@ -36,7 +36,13 @@ export type RunManager = ReturnType<typeof createRunManager>;
 
 
 export function createRunManager(opts: RunManagerOptions) {
-  const { db, env, concurrency = 3, perStore = 2 } = opts;
+  const { db, env } = opts;
+  /** Runs at once in all and per store (decision 9): the options, else Settings' run limits, read at each pump. */
+  const limits = () => {
+    const l = runLimits(db);
+    const total = opts.concurrency ?? l.atOnce;
+    return { total, perStore: Math.min(opts.perStore ?? l.perStore, total) };
+  };
   const engine = opts.engine ?? defaultEngine();
   const active = new Map<string, { storeId: string; agentId: string; conversationId?: string; teamId?: string; abort: AbortController; done: Promise<void>; transcript: AgentEvent[]; seq: number; waiting?: boolean; budget?: number; spent?: number }>();
   /** Runs paused on the owner's decision don't hold a slot, so one unanswered request can't stall the store's other work. */
@@ -105,7 +111,10 @@ export function createRunManager(opts: RunManagerOptions) {
     // Under a cent left is used up, as the queue counts it (execute): a run taken here and turned down there would come
     // back as a mission step and be turned down again, forever.
     const cap = env.caps?.(agent.storeId).agentCostPerDay;
-    if (cap !== undefined && Math.min(cap / perStore, cap - costToday(db, agent.storeId)) < 0.01) return `Today's AI budget for this store ($${cap}) is used up. Raise it in Settings.`;
+    const { perStore } = limits();
+    if (cap !== undefined && cap - costToday(db, agent.storeId) < 0.01) return `Today's AI budget for this store ($${cap}) is used up. Raise it in Settings.`;
+    // A run gets at most cap ÷ runs at once per store (budgetFor).
+    if (cap !== undefined && cap / perStore < 0.01) return `Today's AI budget for this store ($${cap}) is under a cent a run at ${perStore} runs at once per store. Raise it in Settings.`;
     if (agent.dailyBudgetUsd !== undefined && agent.dailyBudgetUsd - costToday(db, agent.storeId, agentId) < 0.01) return ownUsedUp(agent.dailyBudgetUsd);
     const picked = config ? db.prepare('SELECT runtime, model, effort FROM agent_configs WHERE id = ?').get(config) : undefined;
     // A job that fires again while its last copy still waits in the queue (the agent is busy, e.g. on a request the owner
@@ -187,13 +196,14 @@ export function createRunManager(opts: RunManagerOptions) {
     const cap = env.caps?.(storeId).agentCostPerDay;
     if (cap === undefined) return undefined;
     const held = working().reduce((n, a) => n + (a.storeId === storeId ? Math.max(0, (a.budget ?? 0) - (a.spent ?? 0)) : 0), 0);
-    return Math.max(0, Math.min(cap / perStore, cap - costToday(db, storeId) - held));
+    return Math.max(0, Math.min(cap / limits().perStore, cap - costToday(db, storeId) - held));
   }
 
   function pump() {
     const queued = db.prepare(`SELECT * FROM agent_runs WHERE status = 'queued' ORDER BY created_at, rowid`).all().map(toRun);
+    const { total, perStore } = limits();
     for (const run of queued) {
-      if (working().length >= concurrency) return;
+      if (working().length >= total) return;
       if (busy(run) || working().filter((a) => a.storeId === run.storeId).length >= perStore) continue;
       const share = budgetFor(run.storeId);
       if (share !== undefined && share < 0.01 && working().some((a) => a.storeId === run.storeId)) continue; // waits for a share to free up
@@ -394,8 +404,9 @@ export function createRunManager(opts: RunManagerOptions) {
             emit({ type: 'notice', text: 'The earlier session had ended, so this reply started from a summary of the earlier work.' });
             continue;
           }
-          // A busy or failing service is tried again, twice at most, unless the attempt already changed something.
-          if (end.type !== 'error' || !TRANSIENT.includes(end.code ?? '') || acted || retries >= RETRY_MS.length || signal.aborted) break;
+          // A busy or failing service is tried again, as often as Settings' run limits say (twice at most), unless the
+          // attempt already changed something.
+          if (end.type !== 'error' || !TRANSIENT.includes(end.code ?? '') || acted || retries >= Math.min(runLimits(db).retries, RETRY_MS.length) || signal.aborted) break;
           await pause(RETRY_MS[retries++]!, signal);
           if (signal.aborted) {
             end = { type: 'error', message: 'Cancelled' };

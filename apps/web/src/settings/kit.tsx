@@ -26,6 +26,7 @@ export function SettingsSection({ title, help, aside, advanced, children, classN
         <>
           <button
             type="button"
+            data-action="settings.advanced"
             aria-expanded={open}
             aria-controls={`${id}-adv`}
             onClick={() => setOpen((o) => !o)}

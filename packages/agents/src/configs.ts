@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
-import { AGENT_ROLES, appearanceFor, CODEX_ULTRA, defaultEffort, EFFORT_LABEL, INTEGRATION_KINDS, OFFICE_DEPARTMENTS, OFFICE_DESKS, type AgentConfig, type AgentPreset, type AgentRole, type AgentTypeInfo, type CustomRole, type IntegrationKind, type RoleContract, type RuntimeCapabilities, type RuntimeId, type Store, type ToolGroup } from '@frontline/shared';
+import { AGENT_ROLES, appearanceFor, CODEX_ULTRA, defaultEffort, EFFORT_LABEL, INTEGRATION_KINDS, OFFICE_DEPARTMENTS, OFFICE_DESKS, SETTINGS, type AgentConfig, type AgentPreset, type AgentRole, type AgentTypeInfo, type CustomRole, type IntegrationKind, type RoleContract, type RuntimeCapabilities, type RuntimeId, type Store, type ToolGroup } from '@frontline/shared';
 import { agentModel, defaultModelGone } from './claude-engine';
 import { engineInfo } from './engine';
 import { BUILTIN_TYPES, contractOf, ROLES } from './roles';
@@ -180,6 +180,19 @@ export function agentDefaults(db: DatabaseSync, storeId: string): AgentDefaults 
   const [own, workspace] = [doc(db.prepare('SELECT value_json FROM store_caps WHERE store_id = ?').get(storeId)), doc(db.prepare("SELECT value_json FROM settings WHERE key = 'workspace'").get())];
   const d = Object.fromEntries(['runtime', 'model', 'effort', 'stopAfterMin', 'knowledge'].map((k) => [k, own[`agentDefaults.${k}`] ?? workspace[`agentDefaults.${k}`]]).filter(([, v]) => v != null));
   return { ...d, ...(d.knowledge && { knowledge: d.knowledge === 'store' ? ['store'] : ['store', 'general'] }) } as AgentDefaults;
+}
+
+/**
+ * Run limits (decision 9; Agents & Providers → Advanced, workspace only): retries for a busy or failing service, and runs
+ * at once in all and per store, never above the total. Read at each failure and each pump, so a change applies at once;
+ * lowering one never stops a run going.
+ */
+export function runLimits(db: DatabaseSync) {
+  const r = db.prepare("SELECT value_json FROM settings WHERE key = 'workspace'").get();
+  const w = r ? (JSON.parse(String(r.value_json)) as Record<string, unknown>) : {};
+  const at = (id: string) => Number(w[id] ?? SETTINGS.find((d) => d.id === id)!.default);
+  const atOnce = at('runs.atOnce');
+  return { retries: at('runs.retries'), atOnce, perStore: Math.min(at('runs.perStore'), atOnce) };
 }
 
 /**

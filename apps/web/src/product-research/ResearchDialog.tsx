@@ -317,7 +317,7 @@ function AgentRow({ r, picked, mode, pick }: { r: PrAgentRow; picked: boolean; m
           {r.state === 'not_ready' && r.reason && <span className="block text-[11.5px] text-[#ff5a66]">{r.reason}</span>}
           {r.busy && (
             <span className="block text-[11.5px] text-muted">
-              Working on &ldquo;{r.busy.title}&rdquo; · {r.busy.queued} queued in this conversation{r.busy.slotsFull ? ', then waits for a free store slot (2 per store)' : ''}
+              Working on &ldquo;{r.busy.title}&rdquo; · {r.busy.queued} queued in this conversation{r.busy.slotsFull ? `, then waits for a free store slot (${r.busy.perStore ?? 2} per store)` : ''}
             </span>
           )}
         </span>

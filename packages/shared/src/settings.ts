@@ -197,6 +197,9 @@ const GENERAL = 'apps/server/src/config/general.test.ts';
 const PROMPT = 'packages/agents/src/prompt.test.ts';
 const COMMON = 'apps/server/src/connectors/common.test.ts';
 const DEFAULTS = 'apps/server/src/config/agent-defaults.test.ts';
+const LIMITS = 'apps/server/src/config/run-limits.test.ts';
+const runLimit = (key: string, d: Without<SettingDef, 'id' | 'section' | 'scopes' | 'owner' | 'applies' | 'export'>) =>
+  ({ id: `runs.${key}`, section: 'agents', scopes: ['workspace'], owner: 'apps/server/src/config/agent-defaults.ts#checkRunLimits', applies: 'now', export: true, ...d }) as SettingDef;
 const agentDefault = (key: string, d: Without<SettingDef, 'id' | 'section' | 'scopes' | 'inherits' | 'default' | 'owner' | 'applies' | 'export'>) =>
   ({ id: `agentDefaults.${key}`, section: 'agents', scopes: ['workspace', 'store'], inherits: 'workspace', default: undefined, owner: 'apps/server/src/config/agent-defaults.ts#checkAgentDefaults', applies: 'new runs', export: true, ...d }) as SettingDef;
 
@@ -232,6 +235,11 @@ export const SETTINGS: SettingDef[] = [
   agentDefault('effort', { type: 'string', maxLength: 20, label: 'Default effort', help: "The default model's effort level.", consumers: ['packages/agents/src/configs.ts#seatDefault', 'packages/agents/src/claude-engine.ts#input.defaults?.effort'], proof: `${DEFAULTS}#the workspace model reaches a new conversation and a run without a config; a store's own wins there only` }),
   agentDefault('stopAfterMin', { type: 'number', min: 1, max: 1440, integer: true, label: 'Stop a run after', help: 'Minutes of work. New conversations only; Codex needs it.', consumers: ['packages/agents/src/configs.ts#seatDefault'], proof: `${DEFAULTS}#"stop after" reaches new conversations only` }),
   agentDefault('knowledge', { type: 'string', enum: ['all', 'store'], label: 'Knowledge', help: "This store's and General, or this store's only.", consumers: ['packages/agents/src/configs.ts#seatDefault', 'packages/agents/src/runs.ts#defaults?.knowledge'], proof: `${DEFAULTS}#store only leaves General out of retrieval, for a run without a config and a new conversation` }),
+
+  // Run limits (decision 9): workspace only, read at each failure and each pump; lowering one never stops a run going.
+  runLimit('retries', { type: 'number', min: 0, max: 2, integer: true, default: 2, label: 'Retries', help: 'Times a run is tried again when the AI service is busy or failing, unless it already changed something.', consumers: ['packages/agents/src/runs.ts#runLimits(db).retries'], proof: `${LIMITS}#retries 0: a busy service isn't tried again; 1: once` }),
+  runLimit('atOnce', { type: 'number', min: 1, max: 5, integer: true, default: 3, label: 'Runs at once', help: 'Across every store.', consumers: ['packages/agents/src/runs.ts#limits'], proof: `${LIMITS}#a total of 1: a second store's run queues until the first is done` }),
+  runLimit('perStore', { type: 'number', min: 1, max: 3, integer: true, default: 2, label: 'Runs at once per store', help: 'Never above the total. A team runs at most this many of its tasks at once.', consumers: ['packages/agents/src/runs.ts#limits', 'packages/agents/src/teams.ts#atOnce'], proof: `${LIMITS}#per store 1: a second run on the store queues; lowered with 2 going, both go on and the next waits` }),
 
   autopilot('ads.set_budget', 'Change ad budgets', 'apps/server/src/routes/agents-approvals.test.ts#approves on its own within the store cap for that kind, then asks'),
   autopilot('ads.pause_campaign', 'Pause campaigns', 'apps/server/src/routes/agents-approvals.test.ts#pauses and cuts count the budget they touch against their autopilot cap; only raises count as added spend'),

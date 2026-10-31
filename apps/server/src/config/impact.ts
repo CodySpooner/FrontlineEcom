@@ -103,6 +103,13 @@ const zoneMoved: ImpactOf = (db, w, id, value) => {
   return [...schedules, { setting: id, text: `Today's usage counters restart at ${here(restart)} (midnight ${value})${usage.length ? `: ${usage.join('; ')}` : ''}` }];
 };
 
+/** Runs at once changed: the next pump reads it, and lowering it never stops a run going (decision 9). Said once a save. */
+const atOnce: ImpactOf = (db, w, id) => {
+  if ([...Object.keys(w.set ?? {}), ...(w.unset ?? [])].find((k) => k === 'runs.atOnce' || k === 'runs.perStore') !== id) return [];
+  const n = Number(db.prepare("SELECT count(*) AS n FROM agent_runs WHERE status = 'running'").get()!.n);
+  return [{ setting: id, text: `Applies to the next run that starts; ${count(n, 'run')} going now ${n === 1 ? 'keeps' : 'keep'} going` }];
+};
+
 export const IMPACTS: Record<string, ImpactOf[]> = {
   baseCurrency: [rerank],
   timezone: [zoneMoved],
@@ -110,6 +117,8 @@ export const IMPACTS: Record<string, ImpactOf[]> = {
   'caps.adSpendChangePerDay': [workspaceDefault],
   'caps.higgsfieldCreditsPerDay': [workspaceDefault],
   ...Object.fromEntries(['runtime', 'model', 'effort', 'stopAfterMin', 'knowledge'].map((k) => [`agentDefaults.${k}`, [agentDefault]])),
+  'runs.atOnce': [atOnce],
+  'runs.perStore': [atOnce],
 };
 
 /** Every sentence a save of `documents` would earn, before it's made. */

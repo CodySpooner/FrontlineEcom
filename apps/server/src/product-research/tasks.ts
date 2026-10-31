@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { agentDefaults, costToday, getAgent, getConfig, getConversation, getRun, resolveType, seatDefault, stateOf, type RunManager } from '@frontline/agents';
+import { agentDefaults, costToday, getAgent, getConfig, getConversation, getRun, resolveType, runLimits, seatDefault, stateOf, type RunManager } from '@frontline/agents';
 import {
   AGENT_ROLES,
   INTERRUPTED,
@@ -64,6 +64,7 @@ function latestConfig(db: Db, storeId: string, type: string) {
 export function agentRows(db: Db, store: Store, caps: RuntimeCapabilities[]): PrAgentRow[] {
   const seat = seatProblem(db, store);
   const running = Number(db.prepare(`SELECT count(*) AS n FROM agent_runs WHERE store_id = ? AND status = 'running'`).get(store.id)!.n);
+  const { perStore } = runLimits(db);
   return eligibleTypes(db, store.id).map(({ type, name, custom }) => {
     const latest = db
       .prepare(`SELECT runtime, model, effort, json_extract(permissions_json, '$.budgetUsd') AS budget FROM agent_configs WHERE store_id = ? AND agent_id = ? AND custom_role_id IS ? ORDER BY created_at DESC, rowid DESC LIMIT 1`)
@@ -90,7 +91,7 @@ export function agentRows(db: Db, store: Store, caps: RuntimeCapabilities[]): Pr
       budgetUsd: latest?.budget == null ? null : Number(latest.budget),
       state: reason ? 'not_ready' : active ? 'busy' : 'available',
       reason,
-      busy: active ? { conversationId: String(active.id), title: String(active.title), queued: Number(active.queued), slotsFull: running >= 2 } : null,
+      busy: active ? { conversationId: String(active.id), title: String(active.title), queued: Number(active.queued), slotsFull: running >= perStore, perStore } : null,
     };
   });
 }
@@ -178,7 +179,7 @@ export function getTask(db: Db, id: string, storeId: string): PrTask | undefined
     detail = null;
     if (status === 'queued') {
       const ahead = run.conversationId && db.prepare(`SELECT 1 FROM agent_runs WHERE conversation_id = ? AND status = 'running'`).get(run.conversationId);
-      detail = ahead ? `Behind "${getConversation(db, run.conversationId!)?.title ?? 'the current work'}"` : 'Waiting for a free store slot (2 per store)';
+      detail = ahead ? `Behind "${getConversation(db, run.conversationId!)?.title ?? 'the current work'}"` : `Waiting for a free store slot (${runLimits(db).perStore} per store)`;
     } else if (status === 'failed') detail = run.error ?? null;
   }
   return {

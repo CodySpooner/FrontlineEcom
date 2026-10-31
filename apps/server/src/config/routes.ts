@@ -6,7 +6,7 @@ import type { ConfigDoc, ConfigWrite } from '@frontline/shared';
 import type { Db } from '../db';
 import { claudeLogin } from '../routes/agents-runtimes';
 import { getStore, parseStoreInput } from '../stores';
-import { checkAgentDefaults } from './agent-defaults';
+import { checkAgentDefaults, checkRunLimits } from './agent-defaults';
 import { applyRoutes } from './apply';
 import { changeRoutes, toChange } from './changes';
 import { checklist } from './checklist';
@@ -66,6 +66,7 @@ export function configRoutes(db: Db) {
       if (!Array.isArray(docs)) return c.json({ error: docs.error }, docs.status);
       const requestId = randomUUID();
       try {
+        checkRunLimits(db, docs);
         await checkAgentDefaults(db, docs);
         writeConfig(db, docs, { requestId, current: (w) => effective(db, { storeId: w.storeId }) });
       } catch (e) {

@@ -1,9 +1,9 @@
 import { useRef, useState, type FormEvent, type ReactNode } from 'react';
-import { useNavigate, useSearchParams } from 'react-router';
+import { Link, useNavigate, useSearchParams } from 'react-router';
 import { Lock, Plus, X } from 'lucide-react';
 import { useQueries } from '@tanstack/react-query';
-import { CODEX_ULTRA, type AgentConfig, type AgentTypeInfo, type ConversationConfigInput, type SquadMission, type Store, type TeamParticipantInput } from '@frontline/shared';
-import { conversationQuery, useAgentTypes, useConversation, useConversations, useCreateTeam, useRuntimes, useStores, useTeamAction } from '../api/client';
+import { CODEX_ULTRA, settingsUrl, type AgentConfig, type AgentTypeInfo, type ConversationConfigInput, type SquadMission, type Store, type TeamParticipantInput } from '@frontline/shared';
+import { conversationQuery, useAgentTypes, useConfig, useConversation, useConversations, useCreateTeam, useRuntimes, useStores, useTeamAction } from '../api/client';
 import { Button, cx, Dialog } from '../components/ui';
 import { withParams } from '../knowledge/url';
 import { runtimeLabel } from './Conversation';
@@ -19,8 +19,6 @@ const select = `h-[34px] w-full min-w-0 rounded-lg border border-[#2c2c33] bg-[#
 const input = 'h-[34px] rounded-lg border border-[#2c2c33] bg-[#0c0c0f] px-2.5 text-[13px] text-text placeholder:text-muted focus:border-red/60 focus:outline-none';
 const small = `ml-auto h-7 w-20 rounded-lg border border-[#2c2c33] bg-[#0c0c0f] pr-8 pl-2 text-[13px] text-[#e6e6ea] focus:border-red/60 focus:outline-none ${ARROW}`;
 const error = 'text-xs text-[#ff6b76]';
-// ponytail: the server keeps "at once" to the store's limit (teams.ts STORE_LIMIT, 2); expose it if it ever varies.
-const AT_ONCE = [1, 2];
 
 /** `?create=team` opens Create team; `&from=<conversation>` is Collaborate (that conversation's agent leads). */
 export function useTeamDialog() {
@@ -136,7 +134,11 @@ export function CreateTeam({ store: initial, from, onClose }: { store: Store; fr
   const [typed, setObjective] = useState<string>();
   const objective = typed ?? source?.title ?? '';
   const [budget, setBudget] = useState('');
-  const [atOnce, setAtOnce] = useState(2);
+  // The server keeps "at once" to the store's runs at once (Settings' run limits, decision 9; never above the total).
+  const values = useConfig().data?.values;
+  const perStore = Math.min(Number(values?.['runs.perStore'] ?? 2), Number(values?.['runs.atOnce'] ?? 3));
+  const [chosen, setAtOnce] = useState<number>();
+  const atOnce = Math.min(chosen ?? 2, perStore);
   const [retries, setRetries] = useState(2);
   const [clientRequestId] = useState(() => crypto.randomUUID());
   const create = useCreateTeam(store.id);
@@ -264,7 +266,7 @@ export function CreateTeam({ store: initial, from, onClose }: { store: Store; fr
             <label className="flex min-h-8 items-center gap-2">
               At once
               <select aria-label="At once" value={atOnce} onChange={(e) => setAtOnce(Number(e.target.value))} className={small}>
-                {AT_ONCE.map((n) => (
+                {Array.from({ length: perStore }, (_, i) => i + 1).map((n) => (
                   <option key={n}>{n}</option>
                 ))}
               </select>
@@ -285,6 +287,12 @@ export function CreateTeam({ store: initial, from, onClose }: { store: Store; fr
               </span>
             </span>
           </div>
+          <span className="text-xs text-muted">
+            Tasks run at most {perStore} at once per store ·{' '}
+            <Link to={settingsUrl('agents', { setting: 'runs.perStore' })} className="text-[#ff6b76] hover:underline">
+              Settings
+            </Link>
+          </span>
           {claude && <span className="text-xs text-muted">The team budget counts Claude participants only.</span>}
           {/^(budgetUsd|maxConcurrent|retries)$/.test(field) && <span className={error}>{create.error!.message}</span>}
         </div>
