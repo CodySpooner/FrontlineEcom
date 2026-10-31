@@ -88,6 +88,9 @@ Anything else in another lane → append to that lane's backlog **Inbox** (`- [ 
 ## Blocked
 
 ## Done
+
+- 2026-10-31 ECO-51: Added close-range lens controls, bindings, fasteners, vents and the story-library paper bird; clarified scenery versus execution data in Office Settings. Original procedural details preserve readable fit composition and real-data showpieces. Browser fit/research/library views and production build verified; pnpm check 336 files / 2601 tests passed (1 skipped). Before/after captures: `.agent/eco-51-*.png`.
+
 - 2026-10-31 ECO-50: Recomposed headquarters around a layered octagonal atrium and stepped projector base; differentiated technical/reading/industrial rooflines, upper glazing and structural cornices, with foreground braces outside the walk grid. Darker corridors and quieter skyline separate room, foreground and background. Existing desk IDs/routes and real equipment retained. Orca and 30-worker fit/close views (.agent/eco-50-*.png), web build and pnpm check green (336 files, 2595 passed, 1 skipped).
 
 - 2026-10-31 ECO-49: All eight roles now use original field-specialist costumes, instruments and layered materials, retaining deterministic saved cosmetics and distinct human/synthetic head treatments. Explicit agent roles drive matching scene/profile/feed/deploy/editor portraits; legacy unknown-role fallback retained. All-role pose bounds, legacy tests, browser cast/fit/close review (.agent/eco-49-*.png), web build and pnpm check pass (336 files, 2595 passed, 1 skipped).
@@ -285,7 +288,7 @@ Items (stages from brief §11):
   role tools) with per-agent variation; old saved appearances still load; portraits match.
 - [x] ECO-50 Stage 3 — World concept and composition: clear focal point, readable regions, pathways, foreground/main/
   background depth; role spaces functional only where a real feature backs them.
-- [ ] ECO-51 Stage 3 — Detail at three scales (distance, normal, close-up), restrained Easter eggs, no invented numbers.
+- [x] ECO-51 Stage 3 — Detail at three scales (distance, normal, close-up), restrained Easter eggs, no invented numbers.
 - [ ] ECO-52 Stage 4 — Motion language: ambient, interaction and event tiers; role-specific idles; varied timing, no
   shared bounce; quiet zones.
 - [ ] ECO-53 Stage 4 — Real-state behavior: idle / working / collaborating / waiting / completed / failed tied to real

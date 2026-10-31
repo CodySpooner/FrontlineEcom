@@ -71,6 +71,12 @@ export function paintOffice(theme: OfficeTheme = OFFICE_THEMES.frontline) {
     const x=atrium.x+side*(165+i*10), y=atrium.y+55-i*5;
     poly([x,y,x+side*5,y-3,x+side*5,y+1,x,y+4],i%3===0?theme.rail:'#728597');
   }
+  // Flush access hatches and recessed fasteners reward close inspection without adding obstacles.
+  for(const x of [16,32,48]) for(const y of [16,32]) {
+    const p=iso({x,y});diamond(p.x,p.y-8,18,9,'#101b29','#596c7e');
+    for(const side of [-1,1]) {rect(p.x+side*10-1,p.y,2,2,'#a6b5c0');rect(p.x+side*5-1,p.y+4,2,1,'#6c8196');}
+    rect(p.x-4,p.y,8,1,'#42566c');rect(p.x-3,p.y+2,6,1,'#42566c');
+  }
   // Recessed circulation lights are floor decoration, never simulated task traffic.
   const lanes = [
     [{x:15.5,y:1},{x:15.5,y:47}], [{x:47.5,y:1},{x:47.5,y:47}],
@@ -225,7 +231,7 @@ export function paintOffice(theme: OfficeTheme = OFFICE_THEMES.frontline) {
       box(lounge.x-34,lounge.y-2,5,9,13,'#555f73'); box(lounge.x+21,lounge.y+24,5,9,13,'#555f73');
       const table=iso({x:room.x+7,y:room.y+10});
       box(table.x,table.y+3,12,6,12,'#ac8d73','#5d4f48','#342e30');
-      rect(table.x-3,table.y-5,5,4,'#eee7d5'); rect(table.x-2,table.y-6,3,1,'#79543c');
+      rect(table.x-10,table.y-6,6,4,'#756753');rect(table.x-9,table.y-7,5,3,'#dfd2b8');rect(table.x-7,table.y-7,1,3,room.color);rect(table.x-3,table.y-5,5,4,'#eee7d5'); rect(table.x-2,table.y-6,3,1,'#79543c');
     }});
     const decor = iso({x:room.x+10.5,y:room.y+10.5});
     props.push({depth:decor.y,draw:()=> {

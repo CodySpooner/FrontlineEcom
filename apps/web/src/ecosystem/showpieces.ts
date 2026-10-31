@@ -68,6 +68,39 @@ export function departmentShowpieces(world: Container) {
       for (const [x, y] of [[-57, -30], [51, -25], [-30, 10], [28, 10]] as const) { line([0, -45, 0, -25, x, y], room.color, 3); r(x - 11, y - 10, 22, 17, '#43536b'); r(x - 7, y - 7, 14, 8, '#a7d7ef'); }
       line([-18, -80, -8, -70, -18, -60], '#b0eaff', 3); line([17, -80, 7, -70, 17, -60], '#b0eaff', 3);
     }
+    // Structural details are decorative; only the chart, parcels and packets below carry data.
+    for(const x of [-57,57]) { r(x-2,-7,4,3,'#c3cfd6');r(x-1,-6,2,1,'#344554'); }
+    g.poly([-59,2,0,32,59,2],false).stroke({color:'#6c8395',width:1});
+    if(room.id==='research') {
+      r(-28,-116,56,10,'#253c4c');r(-24,-115,48,2,'#bdcfd1');
+      for(const x of [-18,0,18]) {g.circle(x,-101,6).fill('#162838').stroke({color:'#92b3bd',width:2});g.circle(x-1,-102,2).fill('#c0f4ed');}
+      for(const x of [-45,44]) {r(x,-78,3,50,'#899ea8');for(let y=-75;y<-30;y+=9)r(x-1,y,5,1,'#203644');}
+      line([-35,-12,-25,-7,-35,-2],'#a7e8df',1);line([35,-12,25,-7,35,-2],'#a7e8df',1);
+    } else if(room.id==='creative') {
+      r(-54,-115,109,5,'#dad6c5');r(-48,-110,3,62,'#89dbb7');
+      for(const x of [-48,-39,-30]) {r(x,-54,5,3,'#94a6b9');r(x+1,-53,2,1,'#202e44');}
+      g.circle(-33,-45,5).fill('#192d43').stroke({color:'#b3d7e6',width:1});r(-35,-48,2,2,'#edf8fb');
+      line([40,-72,47,-65,43,-57],'#fffaf1',1);
+    } else if(room.id==='copywriting') {
+      for(let shelf=0;shelf<3;shelf++) for(let i=0;i<11;i++){r(-48+i*9,-92+shelf*28,6,1,'#ead5ab');r(-46+i*9,-88+shelf*28,2,3,'#4a3f43');}
+      for(let i=0;i<4;i++){line([-23,-16+i*3,-5,-12+i*3],'#a59b8a',1);line([6,-13+i*3,22,-17+i*3],'#a59b8a',1);}
+      // A folded paper bird rests by the folio. It is scenery, never an achievement.
+      g.poly([34,-16,41,-24,48,-19,56,-26,52,-11,42,-9]).fill('#e4dccb');line([34,-16,48,-19,42,-9],'#8f9ead',1);
+      r(-59,-109,118,3,'#c4a37b');r(-54,-105,3,89,'#a18365');
+    } else if(room.id==='operations') {
+      for(const x of [-56,-37,-18,1,20,39,57]) {g.circle(x,-9-Math.abs(x)*.35,3).fill('#b2bcc5').stroke({color:'#354554',width:1});}
+      for(let i=0;i<6;i++){r(-64+i*8,-88,4,2,i%2?'#cfb578':'#384552');}
+      r(-68,-72,3,28,'#ded5bb');
+    } else if(room.id==='development'||room.id==='integrations') {
+      for(const x of [-41,25]) {g.circle(x,-23,8).fill('#0f1c2d').stroke({color:'#748b9d',width:1});for(const d of [-4,0,4])line([x-5,-23+d,x+5,-23+d],'#435c72',1);}
+      line([-57,1,-43,8,-26,0,-12,8],'#a2bcc8',1);
+    } else if(room.id==='analytics') {
+      for(const x of [-75,72]) {r(x,-114,3,95,'#a4c4d2');r(x+1,-111,1,10,'#e4f6f7');}
+      r(-68,-18,136,2,'#4c7187');
+    } else if(room.id==='retention') {
+      for(const angle of [-2.4,-1.2,0,1.2]){const x=Math.cos(angle)*41,y=-63+Math.sin(angle)*41;g.circle(x,y,3).fill('#bad4df');}
+      line([-25,-47,-9,-61,0,-57,9,-61,25,-47],'#89a9bb',1);
+    }
     const label = new Text({ text: caption, style: { fontFamily: 'monospace', fontSize: 11, fill: room.color, stroke: { color: '#0b1020', width: 3 } } }); label.anchor.set(.5); label.y = 44; root.addChild(label);
   }
   const parcels = new Map<string, Graphics>(), packets = new Map<string, Graphics>();
