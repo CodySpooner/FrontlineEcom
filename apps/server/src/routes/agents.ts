@@ -37,6 +37,7 @@ import {
   runDeliverables,
   stateOf,
   getAgent,
+  automationPaused,
   getConfig,
   getPageDraft,
   kbGoLive,
@@ -538,7 +539,8 @@ function activateConnectedStores(db: Db, runs: RunManager) {
         const later = ads ? '' : ` The ${ADS_JOB.toLowerCase()} starts once an ad account has a running campaign.`;
         notify(db, { kind: 'info', title: `${store.name} is live: the squad's scheduled jobs are on`, body: `${names.join(', ')}.${later} They run on your Claude login; pause or change them in Automation.`, storeId: store.id, link: '/automation' });
       }
-      if (store.niche === 'other' && store.nicheDetail && !customNichePack(store.nicheDetail)) runs.start(`${store.id}:market_analyst`, draftNichePackTask(store));
+      // Not while new automation is paused (settings decision 14): the owner asks for the pack in Knowledge.
+      if (store.niche === 'other' && store.nicheDetail && !customNichePack(store.nicheDetail) && !automationPaused(db)) runs.start(`${store.id}:market_analyst`, draftNichePackTask(store));
     } else if (ads && db.prepare('DELETE FROM done_once WHERE ref = ?').run(`ads-job-wait:${store.id}`).changes && enableDefaultJobs(db, store.id, [ADS_JOB])) {
       notify(db, { kind: 'info', title: `${store.name}: the ${ADS_JOB.toLowerCase()} is on`, body: 'Its ad account has a running campaign, so the Ad Strategist reviews campaigns every morning on your Claude login. Pause it in Automation.', storeId: store.id, link: '/automation' });
     }

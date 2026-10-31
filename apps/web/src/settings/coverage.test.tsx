@@ -22,6 +22,7 @@ const ACTIONS: Record<string, string> = {
   'settings.advanced': 'apps/web/src/settings/kit.test.tsx#the Advanced expander is a real button that shows and hides its rows',
   'settings.scope': 'apps/web/src/settings/sections/Agents.test.tsx#the scope switch edits one store: its values, under ?store=',
   'kb.schedule': "apps/web/src/settings/sections/Knowledge.test.tsx#schedules: the store's research automations, to remove or add",
+  'automation.cancel': 'apps/web/src/settings/sections/AutomationApprovals.test.tsx#Cancel running asks first, then lists what happened to each run and its requests',
   'pr.copy': "apps/web/src/settings/sections/ProductResearch.test.tsx#Copy from another store previews each field that differs and saves exactly those over the version read; a band in another currency isn't copied",
   'agents.claude.check': 'apps/web/src/settings/sections/Agents.test.tsx#Check again asks the Claude login again and shows what it says',
   'agents.codex.setup': "apps/web/src/settings/sections/Agents.test.tsx#Set up Codex starts the sign-in on the app's Codex folder, then Check again reads it",

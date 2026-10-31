@@ -2,7 +2,7 @@
 import { useState, type FormEvent } from 'react';
 import { Link } from 'react-router';
 import { CalendarClock, History, Plus, TrendingDown, Zap } from 'lucide-react';
-import { AGENT_ROLES, type ActionKind, type AgentRole, type AutomationRule, type AutomationRuleInput, type AutomationRunStatus, type AutomationTrigger, type MetricTotals } from '@frontline/shared';
+import { AGENT_ROLES, settingsUrl, type ActionKind, type AgentRole, type AutomationRule, type AutomationRuleInput, type AutomationRunStatus, type AutomationTrigger, type MetricTotals } from '@frontline/shared';
 import { useActionLog, useApprovals, useAutomationActions, useAutomationRuns, useAutomations } from '../api/client';
 import { ApprovalCard } from '../components/Chat';
 import { DemoJobsNote } from '../components/DemoJobsNote';
@@ -10,6 +10,7 @@ import { Hero } from '../components/Hero';
 import { StoreFilter, useStoreSelection } from '../components/StoreFilter';
 import { Badge, Button, ConfirmDelete, cx, Dialog, EmptyState, ErrorState, Field, inputClass, LoadingState, Panel, Segmented, Switch } from '../components/ui';
 import { describeChange, describeTrigger, METRICS, parseCron, toCron, WEEKDAYS, when, type Schedule } from '../lib/automation';
+import { useAutomationStatus } from '../settings/sections/AutomationApprovals';
 import { ago } from '../lib/format';
 import { NAV } from '../nav';
 
@@ -31,6 +32,7 @@ const roleOf = (agentId: string) => agentId.split(':')[1] as AgentRole;
 
 export function Automation() {
   const nav = NAV.find((n) => n.path === '/automation')!;
+  const paused = useAutomationStatus().data?.paused; // settings ST-29
   const { has } = useStoreSelection();
   const q = useAutomations();
   const rules = (q.data ?? []).filter((r) => has(r.storeId));
@@ -44,6 +46,14 @@ export function Automation() {
   return (
     <>
       <Hero title={nav.title} subtitle={nav.subtitle} icon={nav.icon} />
+      {paused && (
+        <p role="status" className="mb-3.5 rounded-xl border border-[rgba(245,183,84,.35)] bg-[rgba(245,183,84,.08)] px-4 py-2.5 text-[13px] text-text-2">
+          <b className="text-[#f5b754]">New automation is paused.</b> Rules don't start runs, and slots missed now are skipped. Runs already going keep going.{' '}
+          <Link to={settingsUrl('automation', { setting: 'automation.paused' })} className="text-red hover:underline">
+            Resume in Settings
+          </Link>
+        </p>
+      )}
       <div className="mb-3.5">
         <StoreFilter />
       </div>

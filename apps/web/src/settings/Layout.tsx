@@ -1,6 +1,6 @@
 // Settings frame (ST-02, board A1): the settings sidebar and a main column of at most 860 px under the page's Hero.
 import type { ComponentType } from 'react';
-import { Bell, BookOpen, Cpu, Database, Gauge, Palette, Plug, Settings as Gear, Store, Target, User, type LucideIcon } from 'lucide-react';
+import { Bell, BookOpen, Cpu, Database, Gauge, Palette, Plug, Settings as Gear, Store, Target, User, Zap, type LucideIcon } from 'lucide-react';
 import type { SettingsSection } from '@frontline/shared';
 import { Hero } from '../components/Hero';
 import { NAV } from '../nav';
@@ -9,6 +9,7 @@ import { ScopeSwitch, useScope } from './kit';
 import { Account } from './sections/Account';
 import { Agents } from './sections/Agents';
 import { Appearance } from './sections/Appearance';
+import { AutomationApprovals } from './sections/AutomationApprovals';
 import { General } from './sections/General';
 import { Knowledge } from './sections/Knowledge';
 import { YourData } from './sections/legacy';
@@ -53,6 +54,7 @@ export const SECTIONS: SectionDef[] = [
   },
   { slug: 'knowledge', group: 'AI & Connections', label: 'Knowledge', icon: BookOpen, sub: 'How agents research for the knowledge base, for General and each store.', Page: Knowledge, scoped: 'knowledge' },
   { slug: 'product-research', group: 'AI & Connections', label: 'Product Research', icon: Target, sub: "Each store's research profile: how products are ranked, flagged and found for it.", Page: ProductResearch, scoped: 'store' },
+  { slug: 'automation', group: 'AI & Connections', label: 'Automation & Approvals', icon: Zap, sub: 'Pause what the app starts by itself, and stop the runs it started.', Page: AutomationApprovals },
   { slug: 'usage', group: 'Operations', label: 'Usage & Limits', icon: Gauge, sub: "Daily limits the agents can't cross, and what today has used.", Page: Usage, scoped: true },
   { slug: 'data', group: 'Operations', label: 'Data & Backups', icon: Database, sub: 'Where your data lives on this computer, and its backups.', Page: () => <div data-legacy="ST-31"><YourData /></div> },
 ];

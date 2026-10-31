@@ -8,6 +8,7 @@ import { claudeLogin } from '../routes/agents-runtimes';
 import { getStore, parseStoreInput } from '../stores';
 import { checkAgentDefaults, checkRunLimits } from './agent-defaults';
 import { applyRoutes } from './apply';
+import { automationRoutes } from './automation';
 import { changeRoutes, toChange } from './changes';
 import { checklist } from './checklist';
 import { effective } from './effective';
@@ -37,6 +38,7 @@ export function configRoutes(db: Db) {
   return new Hono()
     .route('/', changeRoutes(db))
     .route('/', applyRoutes(db))
+    .route('/', automationRoutes(db))
     .get('/api/config', (c) => {
       const storeId = c.req.query('store') || undefined;
       if (storeId && !getStore(db, storeId)) return c.json({ error: 'store not found' }, 404);

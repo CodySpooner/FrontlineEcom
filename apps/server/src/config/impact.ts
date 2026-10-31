@@ -6,6 +6,7 @@ import { nextCronTime, parseCron } from '../cron';
 import type { Db } from '../db';
 import { getCaps } from '../settings';
 import { rankedProducts } from './apply';
+import { pauseImpact } from './automation';
 import { effective, pathIn } from './effective';
 import { validZone } from './write';
 
@@ -129,6 +130,7 @@ export const IMPACTS: Record<string, ImpactOf[]> = {
   ...Object.fromEntries(['runtime', 'model', 'effort', 'stopAfterMin', 'knowledge'].map((k) => [`agentDefaults.${k}`, [agentDefault]])),
   'runs.atOnce': [atOnce],
   'runs.perStore': [atOnce],
+  'automation.paused': [(db, w, _, value) => (w.doc === 'workspace' ? pauseImpact(db, value) : [])],
 };
 
 /** Every sentence a save of `documents` would earn, before it's made. */

@@ -1,4 +1,4 @@
-import { promotedAs, promotionPending, promotionTask } from '@frontline/agents';
+import { automationPaused, promotedAs, promotionPending, promotionTask } from '@frontline/agents';
 import { AGENT_ROLES, KB_STAGES, type KbStage } from '@frontline/shared';
 import { once, type Db } from '../db';
 import { listStores } from '../stores';
@@ -19,6 +19,7 @@ export function drafter(c: { storeId: string; authorId: string }): string {
  */
 // ponytail: pairwise word overlap over the live stores' accepted cards; FTS lookups if they grow past a few thousand.
 export function proposeKbPromotions(db: Db, start: (agentId: string, task: string) => unknown) {
+  if (automationPaused(db)) return; // settings decision 14: nothing is marked offered, so the pass after resume offers it
   const activated = db.prepare('SELECT 1 FROM done_once WHERE ref = ?');
   const live = new Map(listStores(db).filter((s) => s.connected && activated.get(`activate:${s.id}`)).map((s) => [s.id, s.name]));
   const cards = db

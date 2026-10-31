@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { Hono } from 'hono';
-import { workspaceZone } from '@frontline/agents';
+import { automationPaused, workspaceZone } from '@frontline/agents';
 import type { AnalyticsRange, AutomationRule, AutomationRun, AutomationRunStatus, AutomationTrigger, MetricTotals } from '@frontline/shared';
 import { loadRows, salesShares, totalsOf } from './analytics';
 import { approvalsHook } from './approvals';
@@ -186,7 +186,9 @@ export function startScheduler(db: Db, runTask: RunTask, { everyMs = 60_000, met
     const t = now();
     const zone = workspaceZone(db);
     const check = db.prepare('UPDATE automation_rules SET checked_at = ? WHERE id = ?');
-    // A rule that's off moves on too: switched back on, it doesn't replay the slots it was off for.
+    // A rule that's off moves on too: switched back on, it doesn't replay the slots it was off for. So does every rule
+    // while new automation is paused (settings decision 14): a slot missed then is skipped, not caught up on resume.
+    if (automationPaused(db)) return void db.prepare('UPDATE automation_rules SET checked_at = ?').run(t.toISOString());
     db.prepare('UPDATE automation_rules SET checked_at = ? WHERE enabled = 0').run(t.toISOString());
     for (const r of db.prepare('SELECT * FROM automation_rules WHERE enabled = 1').all()) {
       const rule = toRule(r);

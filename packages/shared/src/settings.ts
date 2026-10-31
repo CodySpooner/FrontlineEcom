@@ -85,6 +85,32 @@ export interface ConfigImpact {
   storeId?: string;
   text: string;
 }
+/** GET /api/config/automation (ST-29, decision 14): the pause, and the runs automations started that are still going. */
+export interface AutomationStatus {
+  paused: boolean;
+  /** When it was paused (its change row), while it is. */
+  pausedAt: string | null;
+  running: AutomationRunning[];
+}
+export interface AutomationRunning {
+  runId: string;
+  ruleName: string;
+  storeId: string;
+  storeName: string;
+  agentId: string;
+  status: 'queued' | 'running';
+  startedAt: string;
+}
+/** POST /api/config/automation/cancel-running: what really happened to each run, read once it ended. */
+export interface AutomationCancelled {
+  runId: string;
+  ruleName: string;
+  storeName: string;
+  status: import('./index').RunStatus;
+  approvals: { id: string; title: string; status: string }[];
+  /** "Stopped before it changed anything", "Stopped; its N requests stay in Requests" or "Already finished". */
+  outcome: string;
+}
 /** GET /api/config/checklist (ST-17): one setup step, `done` only when its real condition holds. */
 export interface SetupItem {
   id: string;
@@ -207,6 +233,7 @@ const LIMITS = 'apps/server/src/config/run-limits.test.ts';
 const AUTOSAVE = 'apps/server/src/config/auto-save.test.ts';
 const PRPROFILE = 'apps/server/src/config/pr-profile.test.ts';
 const PRASSUME = 'apps/server/src/config/pr-assumptions.test.ts';
+const PAUSE = 'apps/server/src/config/automation.test.ts';
 const runLimit = (key: string, d: Without<SettingDef, 'id' | 'section' | 'scopes' | 'owner' | 'applies' | 'export'>) =>
   ({ id: `runs.${key}`, section: 'agents', scopes: ['workspace'], owner: 'apps/server/src/config/agent-defaults.ts#checkRunLimits', applies: 'now', export: true, ...d }) as SettingDef;
 const agentDefault = (key: string, d: Without<SettingDef, 'id' | 'section' | 'scopes' | 'inherits' | 'default' | 'owner' | 'applies' | 'export'>) =>
@@ -299,6 +326,9 @@ export const SETTINGS: SettingDef[] = [
   ] as const).map(([k, label, help]) =>
     pr(k, { type: 'number', min: 0, max: 100, nullable: true, label, help, default: null, applies: 'now', consumers: ['apps/server/src/product-research/economics.ts#derived'], proof: `${PRASSUME}#the store's default assumptions read as Your assumption; null keeps today's; a product's own figure wins; a missing cost stays Unknown` }),
   ),
+
+  // Pause new automation (ST-29, decision 14): read at each automatic start, the sites in config/automation.ts RUN_STARTS.
+  { id: 'automation.paused', section: 'automation', type: 'boolean', label: 'Pause new automation', help: "Stops new work the app starts by itself: scheduled and metric rules, self-directed and scheduled research, Knowledge promotion drafts, re-running what a restart interrupted, and go-live drafting. Your conversations, teams, missions under way, syncs and backups go on. Slots missed while paused are skipped, not caught up.", scopes: ['workspace'], default: false, owner: 'apps/server/src/config/write.ts#writeConfig', applies: 'now', export: false, consumers: ['apps/server/src/automations.ts#startScheduler', 'apps/server/src/kb/autonomy.ts#autonomousResearch', 'apps/server/src/kb/promote.ts#proposeKbPromotions', 'packages/agents/src/runs.ts#createRunManager', 'apps/server/src/routes/agents.ts#activateConnectedStores'], proof: `${PAUSE}#while paused a due slot doesn't fire, and on resume the missed slot is skipped, not caught up` },
 
   // Locked policies (decision 4): shown with a lock, never written by any scope, import or API call.
   { id: 'policy.approvals', section: 'automation', type: 'boolean', label: 'Spending, publishing and live-store edits', help: 'Always ask you first. The one exception is autopilot for ad budget changes and pausing campaigns, within each store\'s daily cap.', scopes: ['workspace'], locked: true, default: true, owner: 'packages/agents/src/tools.ts#requestApproval', applies: 'now', consumers: ['packages/agents/src/tools.ts#requestApproval'] },

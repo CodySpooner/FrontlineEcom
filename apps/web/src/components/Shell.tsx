@@ -10,6 +10,7 @@ import { Onboarding } from './Onboarding';
 import { useStoreSelection } from './StoreFilter';
 import { UpdatePrompt } from './UpdatePrompt';
 import { useMotion } from '../settings/motion';
+import { useAutomationStatus } from '../settings/sections/AutomationApprovals';
 import { Button, buttonClass, Card, LoadingState, ProgressBar, StatusDot, cx } from './ui';
 
 export function Shell() {
@@ -20,6 +21,7 @@ export function Shell() {
   const title = pageTitle(pathname, useStoreSelection().name);
   // AI Agents stays lit on its conversation and team URLs; Integrations on /settings/integrations/*, Settings on the rest.
   const active = navFor(pathname);
+  const paused = useAutomationStatus().data?.paused; // settings ST-29: new automation paused
   useEffect(() => {
     document.title = title;
   }, [title]);
@@ -60,7 +62,7 @@ export function Shell() {
             <Link
               key={n.path}
               to={n.path}
-              title={n.label}
+              title={paused && n.path === '/automation' ? `${n.label} (paused)` : n.label}
               aria-current={n === active ? 'page' : undefined}
               className={cx(
                 'flex items-center justify-center gap-3 rounded-[9px] p-2.5 text-sm font-medium whitespace-nowrap transition duration-150 min-[900px]:justify-start min-[900px]:px-3 min-[900px]:py-[9px]',
@@ -69,6 +71,9 @@ export function Shell() {
             >
               <n.icon className="size-[18px] shrink-0" strokeWidth={1.8} />
               <span className="sr-only min-[900px]:not-sr-only">{n.label}</span>
+              {paused && n.path === '/automation' && (
+                <span className="ml-auto hidden rounded-full bg-[rgba(245,183,84,.14)] px-2 py-px text-[11px] font-semibold text-[#f5b754] min-[900px]:inline">Paused</span>
+              )}
             </Link>
           ))}
         </nav>

@@ -189,6 +189,15 @@ export function autoSave(db: DatabaseSync, storeId: string) {
 }
 
 /**
+ * "Pause new automation" (decision 14; Settings → Automation & Approvals), workspace only: read at each start the app
+ * makes by itself (the call-site table, apps/server/src/config/automation.ts `RUN_STARTS`). The owner's own starts never read it.
+ */
+export function automationPaused(db: DatabaseSync) {
+  const r = db.prepare("SELECT value_json FROM settings WHERE key = 'workspace'").get();
+  return !!r && (JSON.parse(String(r.value_json)) as Record<string, unknown>)['automation.paused'] === true;
+}
+
+/**
  * Run limits (decision 9; Agents & Providers → Advanced, workspace only): retries for a busy or failing service, and runs
  * at once in all and per store, never above the total. Read at each failure and each pump, so a change applies at once;
  * lowering one never stops a run going.

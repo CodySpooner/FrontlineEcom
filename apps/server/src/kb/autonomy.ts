@@ -3,7 +3,7 @@
 // An hourly pass looks for one trigger per store; an automation's research action asks the same gate. Loop guards: what
 // self-directed research made never triggers more of it, a card and trigger cool down for 14 days, a topic open or
 // researched in the last day is left alone, and a contradiction research found doesn't start research.
-import { createResearchTask, engineInfo, estimateResearch, freshness, getAgent, KB_CONTROLS, kbControls, kbRoleArea } from '@frontline/agents';
+import { automationPaused, createResearchTask, engineInfo, estimateResearch, freshness, getAgent, KB_CONTROLS, kbControls, kbRoleArea } from '@frontline/agents';
 import {
   AGENT_ROLES, KB_RESEARCH_DEPTHS, KB_TRIGGERS, type AgentRole, type ApprovalRequest, type AutomationAction, type KbControls, type KbControlsState, type KbResearchBrief, type KbTaskBrief,
   type KbTrigger, type KbWorkspace,
@@ -242,8 +242,10 @@ function responsible(db: Db, c: KbControls, category: string): AgentRole | undef
   return (Object.keys(AGENT_ROLES) as AgentRole[]).find((r) => c.roles[r] && (c.roles[r]!.length ? c.roles[r]!.includes(category) : kbRoleArea(r, name)));
 }
 
-/** The hourly pass: in each store that has self-directed research on, the first trigger its controls let start. */
+/** The hourly pass: in each store that has self-directed research on, the first trigger its controls let start. None while
+ * new automation is paused (settings decision 14). */
 export function autonomousResearch(db: Db, deps: AutoDeps): Started[] {
+  if (automationPaused(db)) return [];
   const stores = db.prepare('SELECT store_id FROM kb_controls WHERE store_id IS NOT NULL').all().map((r) => String(r.store_id));
   return stores.flatMap((storeId) => {
     const c = kbControls(db, storeId);

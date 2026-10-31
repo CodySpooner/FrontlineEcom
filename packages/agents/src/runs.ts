@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import { AGENT_ROLES, gist, hasEffects, INTERRUPTED, type AgentEvent, type AgentRole, type AgentRun, type AgentRunDetail, type RunAttachment, type RunStatus, type RunUsage, type RuntimeId, type Store } from '@frontline/shared';
-import { agentDefaults, customRole, getConfig, runLimits } from './configs';
+import { agentDefaults, automationPaused, customRole, getConfig, runLimits } from './configs';
 import { conversationPreface, conversationQuery } from './conversations';
 import { defaultEngine, runAgent, type Engine, type RunInput } from './engine';
 import { researchContext } from './kb-research';
@@ -518,9 +518,14 @@ export function createRunManager(opts: RunManagerOptions) {
 
   // ...and the ones from the last 6 hours run again: closing the app at 8:01 shouldn't cost the day's briefing (the
   // scheduler counts it as fired). Chat follow-ups are left for the owner to resend; a retry is never retried. A
-  // conversation's turn or a team's step shows as interrupted, and the owner resumes it.
+  // conversation's turn or a team's step shows as interrupted, and the owner resumes it. With new automation paused
+  // (decision 14) only a mission's step runs again: missions already under way go on.
+  const paused = automationPaused(db);
+  const missionStep = db.prepare('SELECT 1 FROM squad_missions WHERE ended_at IS NULL AND instr(steps_json, ?) > 0');
   for (const r of interrupted) {
-    if (r.resume || r.conversation_id || r.team_id || Date.now() - Date.parse(String(r.created_at)) > 6 * 3_600_000 || !once(db, `retried:${r.id}`)) continue;
+    if (r.resume || r.conversation_id || r.team_id || Date.now() - Date.parse(String(r.created_at)) > 6 * 3_600_000) continue;
+    if (paused && !missionStep.get(`"runId":"${r.id}"`)) continue;
+    if (!once(db, `retried:${r.id}`)) continue;
     start(String(r.agent_id), String(r.task), undefined, r.parent_run_id ? String(r.parent_run_id) : undefined, { retryOf: String(r.id), ...(r.mode ? { mode: String(r.mode) } : {}) });
   }
 
