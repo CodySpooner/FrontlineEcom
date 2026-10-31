@@ -70,7 +70,7 @@ describe('KpiStrip (SA-70)', () => {
     strip({ onSelect, selected: 'net_sales' });
     expect(screen.getAllByRole('button')).toHaveLength(6);
     expect(within(tile('Net sales')).getByRole('button').getAttribute('aria-pressed')).toBe('true');
-    fireEvent.click(within(tile('Orders')).getByRole('button'));
+    fireEvent.click(screen.getByRole('button', { name: 'Orders 1,086' })); // named by label and value
     expect(onSelect).toHaveBeenCalledWith('orders');
   });
 });

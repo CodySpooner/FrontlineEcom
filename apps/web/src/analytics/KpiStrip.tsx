@@ -2,6 +2,7 @@
 // registry's definition line, or the value's coverage line when it covers less than everything. A value with no number
 // says why (<Unavailable>, never 0). With `onSelect` a click picks the chart's metric; "Breakdown →" appears once its tab
 // exists.
+import { useId } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { Info } from 'lucide-react';
 import { SA_METRICS, type SaChange, type SaContext, type SaMetric, type SaMetricId, type SaMetricResult } from '@frontline/shared';
@@ -56,6 +57,7 @@ function Value({ m, currency }: { m: SaMetricResult; currency?: string }) {
 
 export function KpiStrip({ metrics, ctx, selected, onSelect, tabs }: { metrics: SaMetricResult[]; ctx?: SaContext; selected?: SaMetricId; onSelect?: (id: SaMetricId) => void; tabs: string[] }) {
   const [params] = useSearchParams();
+  const uid = useId();
   const tabHref = (tab: string) => {
     const p = new URLSearchParams(params);
     p.set('tab', tab);
@@ -71,7 +73,9 @@ export function KpiStrip({ metrics, ctx, selected, onSelect, tabs }: { metrics: 
         return (
           <div key={m.id} onClick={onSelect && (() => onSelect(m.id))} className={cx('flex min-w-0 flex-col gap-[3px] px-3.5 pt-3 pb-[11px]', on ? 'bg-[#18181c] shadow-[inset_0_-2px_0_var(--color-red)]' : 'bg-[#121215]', onSelect && !on && 'cursor-pointer hover:bg-[#151518]')}>
             <span className="flex min-w-0 items-center gap-[5px] text-[11.5px] whitespace-nowrap text-muted">
-              <span className="truncate">{def.label}</span>
+              <span id={`${uid}${m.id}`} className="truncate">
+                {def.label}
+              </span>
               <Tooltip tip={def.formula}>
                 <span tabIndex={0} aria-label={`How ${def.label.toLowerCase()} is worked out`} className="inline-flex" onClick={(e) => e.stopPropagation()}>
                   <Info aria-hidden className="size-3" />
@@ -79,7 +83,7 @@ export function KpiStrip({ metrics, ctx, selected, onSelect, tabs }: { metrics: 
               </Tooltip>
             </span>
             {onSelect ? (
-              <button type="button" aria-pressed={on} className="cursor-pointer text-left outline-none focus-visible:ring-1 focus-visible:ring-red/60">
+              <button type="button" id={`${uid}${m.id}v`} aria-labelledby={`${uid}${m.id} ${uid}${m.id}v`} aria-pressed={on} className="cursor-pointer text-left outline-none focus-visible:ring-1 focus-visible:ring-red/60">
                 <Value m={m} currency={ctx?.currency} />
               </button>
             ) : (
