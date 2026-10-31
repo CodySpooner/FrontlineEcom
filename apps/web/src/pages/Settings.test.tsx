@@ -48,7 +48,7 @@ describe('routes and deep links', () => {
     const nav = await screen.findByRole('navigation', { name: 'Settings' });
     await within(nav).findByRole('link', { name: 'Stores2' });
     expect(within(nav).queryByRole('link', { name: /History/ })).toBeNull();
-    expect(within(nav).getAllByRole('link').map((a) => a.textContent)).toEqual(['Account', 'Appearance', 'Notifications', 'General', 'Stores2', 'Agents & Providers', 'Integrations', 'Knowledge', 'Usage & Limits', 'Data & Backups']);
+    expect(within(nav).getAllByRole('link').map((a) => a.textContent)).toEqual(['Account', 'Appearance', 'Notifications', 'General', 'Stores2', 'Agents & Providers', 'Integrations', 'Knowledge', 'Product Research', 'Usage & Limits', 'Data & Backups']);
   });
 
   it.each(SECTIONS.map((s) => [s.slug, s.label]))('/settings/%s renders its section', async (slug, label) => {

@@ -1,6 +1,6 @@
 // Settings frame (ST-02, board A1): the settings sidebar and a main column of at most 860 px under the page's Hero.
 import type { ComponentType } from 'react';
-import { Bell, BookOpen, Cpu, Database, Gauge, Palette, Plug, Settings as Gear, Store, User, type LucideIcon } from 'lucide-react';
+import { Bell, BookOpen, Cpu, Database, Gauge, Palette, Plug, Settings as Gear, Store, Target, User, type LucideIcon } from 'lucide-react';
 import type { SettingsSection } from '@frontline/shared';
 import { Hero } from '../components/Hero';
 import { NAV } from '../nav';
@@ -13,6 +13,7 @@ import { General } from './sections/General';
 import { Knowledge } from './sections/Knowledge';
 import { YourData } from './sections/legacy';
 import { Notifications } from './sections/Notifications';
+import { ProductResearch } from './sections/ProductResearch';
 import { Stores } from './sections/Stores';
 import { Usage } from './sections/Usage';
 import { Sidebar } from './Sidebar';
@@ -27,8 +28,11 @@ export interface SectionDef {
   /** The one line under the section title. */
   sub: string;
   Page: ComponentType;
-  /** Has store overrides: the header gets the "Editing" switch (`?store=`); `knowledge` names its sides General and a store. */
-  scoped?: boolean | 'knowledge';
+  /**
+   * Has store overrides: the header gets the "Editing" switch (`?store=`); `knowledge` names its sides General and a store;
+   * `store`: stores only (no `?store=` is the first store).
+   */
+  scoped?: boolean | 'knowledge' | 'store';
 }
 
 /** The sections with content, in sidebar order. A section is listed in the same commit as its content (decision 1). */
@@ -48,11 +52,12 @@ export const SECTIONS: SectionDef[] = [
     Page: () => <div data-legacy="ST-37a"><Integrations /></div>,
   },
   { slug: 'knowledge', group: 'AI & Connections', label: 'Knowledge', icon: BookOpen, sub: 'How agents research for the knowledge base, for General and each store.', Page: Knowledge, scoped: 'knowledge' },
+  { slug: 'product-research', group: 'AI & Connections', label: 'Product Research', icon: Target, sub: "Each store's research profile: how products are ranked, flagged and found for it.", Page: ProductResearch, scoped: 'store' },
   { slug: 'usage', group: 'Operations', label: 'Usage & Limits', icon: Gauge, sub: "Daily limits the agents can't cross, and what today has used.", Page: Usage, scoped: true },
   { slug: 'data', group: 'Operations', label: 'Data & Backups', icon: Database, sub: 'Where your data lives on this computer, and its backups.', Page: () => <div data-legacy="ST-31"><YourData /></div> },
 ];
 
-function Scope({ variant }: { variant?: 'knowledge' }) {
+function Scope({ variant }: { variant?: 'knowledge' | 'store' }) {
   const s = useScope();
   return (
     s.stores.length > 0 && (
@@ -82,7 +87,7 @@ export function SettingsLayout({ section }: { section: SectionDef }) {
                 </h2>
                 <p className="mt-0.5 text-[12.5px] text-muted">{section.sub}</p>
               </div>
-              {section.scoped && <Scope variant={section.scoped === 'knowledge' ? 'knowledge' : undefined} />}
+              {section.scoped && <Scope variant={section.scoped === true ? undefined : section.scoped} />}
             </header>
             <section.Page />
           </div>

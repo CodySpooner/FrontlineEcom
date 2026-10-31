@@ -160,25 +160,11 @@ describe('Product Research page', () => {
     expect(await screen.findByText('CJdropshipping is disconnected: API key refused. Reconnect it in Integrations.')).toBeTruthy();
   });
 
-  it('Edit research profile saves the fields as the API takes them', async () => {
-    const f = api();
+  // The profile's fields and their save are Settings → Product Research's (settings ST-27, ProductResearch.test.tsx).
+  it("Edit research profile opens Settings → Product Research on the store's profile", async () => {
+    api();
     renderApp(<Research />, '/research');
-    fireEvent.click(await screen.findByRole('button', { name: 'Edit research profile' }));
-    fireEvent.change(screen.getByLabelText('Audience'), { target: { value: 'US dog owners' } });
-    fireEvent.change(screen.getByLabelText('To (USD)'), { target: { value: '39.99' } });
-    fireEvent.change(screen.getByLabelText('Avoided terms'), { target: { value: 'airtag, Airtag , lithium' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Save profile' }));
-    await waitFor(() => expect(f.mock.calls.some(([, i]) => i?.method === 'PUT')).toBe(true));
-    const [url, init] = f.mock.calls.find(([, i]) => i?.method === 'PUT')!;
-    expect(url).toBe('/api/pr/profile?store=paws');
-    expect(JSON.parse(String(init!.body))).toEqual({
-      version: 0, audience: 'US dog owners', priceMin: 1500, priceMax: 3999, shipTo: null, maxDeliveryDays: 12,
-      warehouses: ['US'], includeCategories: [], avoidCategories: ['batteries'], avoidTerms: ['airtag', 'Airtag', 'lithium'], keywords: [],
-    });
-    fireEvent.click(await screen.findByRole('button', { name: 'Edit research profile' }));
-    fireEvent.change(screen.getByLabelText('To (USD)'), { target: { value: 'forty' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Save profile' }));
-    expect(screen.getByRole('alert').textContent).toBe('Enter the price band as amounts in USD, like 15 or 39.99.');
+    expect((await screen.findByRole('link', { name: 'Edit research profile' })).getAttribute('href')).toBe('/settings/product-research?store=paws');
   });
 
   it('scale: 10,000 matches load 48 at a time; past 300 cards only the rows near the viewport stay in the DOM, and they follow the scroll', async () => {
@@ -231,7 +217,7 @@ describe('Product Research page', () => {
     expect(alert.textContent).toBe("The research profile didn't load (database is locked): ranking and Ship to wait for it. Try again");
     down = false;
     fireEvent.click(within(alert).getByRole('button', { name: 'Try again' }));
-    await screen.findByRole('button', { name: 'Edit research profile' });
+    await screen.findByRole('link', { name: 'Edit research profile' });
     expect(screen.queryByRole('alert')).toBeNull();
     expect(screen.getByText('Nothing in Flagged yet')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Show all matches' }));

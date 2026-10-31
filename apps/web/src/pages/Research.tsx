@@ -1,9 +1,9 @@
 // Product Research (PR-10, design concept A): scope, search, ship-to and sort; the store's research profile; filter
 // chips; view tabs with server counts; the source strip; and the product grid. Every number comes from `/api/pr/*`.
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
-import { useSearchParams } from 'react-router';
+import { Link, useSearchParams } from 'react-router';
 import { Plus, Search, TriangleAlert } from 'lucide-react';
-import { PR_COMPARE_MAX, PR_SORTS, PR_VIEWS, type PrSort, type PrSourceState, type PrView } from '@frontline/shared';
+import { PR_COMPARE_MAX, PR_SORTS, PR_VIEWS, settingsUrl, type PrSort, type PrSourceState, type PrView } from '@frontline/shared';
 import { useStores } from '../api/client';
 import { useStored } from '../agents/layout';
 import { Hero } from '../components/Hero';
@@ -17,7 +17,6 @@ import { Watches } from '../product-research/Watches';
 import { activeFilters, discoveryQuery, FilterChips, type Filters } from '../product-research/Filters';
 import { countryName, profileLine, sourceItem } from '../product-research/format';
 import { DetailPanel, PANEL_TABS, type PanelTab } from '../product-research/Panel';
-import { ProfileDialog } from '../product-research/ProfileDialog';
 import { ResearchDialog } from '../product-research/ResearchDialog';
 import { useRowWindow } from '../product-research/rowWindow';
 import { SourceHealth } from '../product-research/SourceHealth';
@@ -77,7 +76,6 @@ export function Research() {
   const shipTo = store ? (profile.data?.shipTo ?? null) : allShipTo;
   const tray = store ? (trays[store.id] ?? []) : [];
   const setTray = (ids: string[]) => store && setTrays({ ...trays, [store.id]: ids });
-  const [editProfile, setEditProfile] = useState(false);
   const [health, setHealth] = useState(false);
   const [researching, setResearching] = useState<{ product?: { id: string; title: string }; template?: string } | null>(null);
 
@@ -205,9 +203,9 @@ export function Research() {
         <p className="mt-3 text-[12.5px] text-text-2">
           Ranked for <b className="text-text">{store.name}</b>
           {profileLine(store, profile.data).map((part) => ` · ${part}`)} ·{' '}
-          <button type="button" onClick={() => setEditProfile(true)} className="cursor-pointer text-red hover:underline">
+          <Link to={settingsUrl('product-research', { store: store.id })} className="text-red hover:underline">
             Edit research profile
-          </button>
+          </Link>
         </p>
       )}
       {store && profile.isError && (
@@ -218,7 +216,6 @@ export function Research() {
           </button>
         </p>
       )}
-      {store && profile.data && editProfile && <ProfileDialog open onClose={() => setEditProfile(false)} store={store.id} storeName={store.name} profile={profile.data} />}
 
       <FilterChips d={first} filters={filters} set={setFilters} store={store?.id ?? null} currency={currency} />
 

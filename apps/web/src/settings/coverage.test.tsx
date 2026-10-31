@@ -15,7 +15,6 @@ import { SECTIONS } from './Layout';
 /** Editable entries with no row outside `data-legacy` yet. The item that renders a row removes its id; ST-48 empties it. */
 const ALLOWLIST = [
   'autopilot.ads.set_budget', 'autopilot.ads.pause_campaign', // ST-30
-  'pr.audience', 'pr.priceMax', 'pr.shipTo', 'pr.warehouses', 'pr.maxDeliveryDays', 'pr.includeCategories', 'pr.keywords', // ST-27
 ];
 
 /** `data-action` names, each with the test that proves what it does (`path#test name`). */
@@ -54,6 +53,7 @@ describe('every control on a settings page is real', () => {
       if (url.startsWith('/api/caps')) return [caps]; // GET /api/caps answers a list
       if (url === '/api/health') return { ok: true, uptimeSec: 1, version: 'dev', connectors: [] };
       if (url.startsWith('/api/kb/controls?')) return { autonomous: false, roles: {}, triggers: ['gap'], taskBudgetUsd: 1, dailyBudgetUsd: 3, depth: 'standard', approval: true, review: true, trustedDomains: [], blockedDomains: [], freshDays: {}, retentionDays: null, reservedUsd: 0, version: 0 };
+      if (url.startsWith('/api/pr/profile?')) return { storeId: 'peak', audience: null, priceMin: null, priceMax: null, priceCurrency: 'USD', shipTo: 'US', shipToDefault: true, warehouses: [], maxDeliveryDays: null, avoidCategories: [], avoidTerms: [], includeCategories: [], keywords: [], updatedAt: null, version: 0 };
       if (url.startsWith('/api/kb/categories?')) return [{ id: 'c1', storeId: url.includes('ws=peak') ? 'peak' : null, parentId: null, name: 'Advertising', position: 1, createdAt: '', cards: 0, freshDays: 45 }];
       if (url === '/api/ecosystem/stats') return { activeTasks: 0, completedTasks: 0, failedTasks: 0, successRate: null, activeTeams: 0, inputTokens: 0, outputTokens: 0, costUsd: 0 };
       if (url === '/api/runtimes') return ['claude', 'codex'].map((runtime) => ({ runtime, connected: runtime === 'claude', ...(runtime === 'codex' ? { reason: 'Set up Codex' } : {}), source: 'registry', checkedAt: '', models: [{ id: 'm', label: 'M', efforts: ['low', 'high'], default: true }] }));

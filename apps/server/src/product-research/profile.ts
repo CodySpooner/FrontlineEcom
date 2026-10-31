@@ -117,7 +117,8 @@ export function saveProfile(db: Db, store: Store, body: Record<string, unknown>,
     if (v !== null && !(Number.isInteger(v) && (v as number) >= 0 && (v as number) <= 1e9)) return { error: `${k} must be a whole amount in minor units (cents), or null`, field: `pr.${k}` };
     next[k] = v as number | null;
   }
-  if (next.priceMin !== null && next.priceMax !== null && next.priceMin > next.priceMax) return { error: 'priceMin must be at most priceMax', field: has('priceMin') ? 'pr.priceMin' : 'pr.priceMax' };
+  // Checked only when sent: Settings doesn't offer priceMin (no fit rule reads it), so a stored one never blocks a maximum.
+  if (has('priceMin') && next.priceMin !== null && next.priceMax !== null && next.priceMin > next.priceMax) return { error: 'priceMin must be at most priceMax', field: 'pr.priceMin' };
   if (has('shipTo')) {
     const v = body.shipTo;
     if (v !== null && (typeof v !== 'string' || !/^[A-Za-z]{2}$/.test(v))) return { error: 'shipTo must be a two-letter country code, or null for the default', field: 'pr.shipTo' };

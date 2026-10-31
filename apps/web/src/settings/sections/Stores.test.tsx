@@ -107,7 +107,7 @@ test("the store page links to the store's knowledge, niche pack, research profil
   expect(within(links).getAllByRole('link').map((a) => [a.textContent, a.getAttribute('href')])).toEqual([
     ['Knowledge workspace', '/knowledge?ws=peak'],
     ['Niche pack', '/knowledge?view=library&tab=niche&doc=fitness'],
-    ['Research profile and ship-to', '/research?store=peak'],
+    ['Research profile and ship-to', '/settings/product-research?store=peak'],
     ['Integrations', '/settings/integrations?store=peak'],
   ]);
 });

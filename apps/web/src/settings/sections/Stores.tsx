@@ -205,7 +205,7 @@ function StorePage({ id }: { id: string }) {
           {[
             ['Knowledge workspace', `/knowledge?ws=${encodeURIComponent(id)}`],
             ['Niche pack', `/knowledge?view=library&tab=niche&doc=${encodeURIComponent(nicheKey(store))}`],
-            ['Research profile and ship-to', `/research?store=${encodeURIComponent(id)}`], // ST-27 moves it to Settings → Product Research
+            ['Research profile and ship-to', settingsUrl('product-research', { store: id })],
             ['Integrations', settingsUrl('integrations', { store: id })],
           ].map(([label, to]) => (
             <li key={label}>

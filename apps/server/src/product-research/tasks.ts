@@ -24,6 +24,7 @@ import { researchStarted } from './edits';
 import { fence } from './fence';
 import { refreshProduct } from './evaluate';
 import { canonicalUrl, checkUrl, previewFields } from './preview';
+import { getProfile } from './profile';
 import { REAL_REPORT } from './reports';
 
 // Research tasks (decision 6, PR-15): the owner asks an agent to research one product for one store. The run is the AI
@@ -153,12 +154,34 @@ function earlier(db: Db, store: Store, productId: string): string {
   return text.length > EARLIER_MAX ? `${text.slice(0, EARLIER_MAX)}…` : text;
 }
 
-/** The four-part message (decision 6): header, the owner's instructions verbatim, then two fenced blocks. */
+/** The store's research profile (Settings → Product Research) as the task starts: what the product should fit. */
+function profile(db: Db, store: Store): string {
+  const p = getProfile(db, store);
+  const list = (l: string[], none: string) => (l.length ? l.join(', ') : none);
+  return [
+    `- Audience: ${p.audience ?? 'not set'}`,
+    `- Highest cost + shipping: ${p.priceMax === null ? 'not set' : money(p.priceMax, p.priceCurrency)}`,
+    `- Ship to: ${p.shipTo ?? 'not set'}${p.shipToDefault && p.shipTo ? " (the store currency's main country)" : ''}`,
+    `- Preferred ships-from: ${list(p.warehouses, 'any')}`,
+    `- Longest delivery: ${p.maxDeliveryDays === null ? 'not set' : `${p.maxDeliveryDays} days`}`,
+    `- Included categories: ${list(p.includeCategories, "the niche's only")}`,
+    `- Avoided categories: ${list(p.avoidCategories, 'none')}`,
+    `- Avoided terms: ${list(p.avoidTerms, 'none')}`,
+    `- Keywords: ${list(p.keywords, 'none')}`,
+  ].join('\n');
+}
+
+/**
+ * The message (decision 6): header, the owner's instructions verbatim, then fenced blocks: the store's research profile
+ * (settings ST-27), the product's facts and its history in the store. Read when the run starts, so a later profile
+ * change never rewrites an earlier task's.
+ */
 export function taskMessage(db: Db, store: Store, task: { id: string; productId: string; instructions: string; preview: string | null }): string {
   const title = String(db.prepare('SELECT title FROM pr_products WHERE id = ?').get(task.productId)!.title);
   return [
     `Research task ${task.id} for product ${task.productId} ("${title.replace(/\s+/g, ' ')}") in ${store.name}. Finish by calling save_research_report once with this research task id.`,
     `## The owner's instructions\n${task.instructions}`,
+    `## Store research profile\n${fence(profile(db, store), `${store.name}'s research profile`)}`,
     `## Product facts\n${fence(facts(db, store, task.productId, task.preview), 'Product Research facts for this product')}`,
     `## Earlier in ${store.name}\n${fence(earlier(db, store, task.productId), `Product Research history in ${store.name}`)}`,
   ].join('\n\n');
