@@ -16,6 +16,7 @@ import { productDetail } from './product';
 import { historyStart, storePeriod, zoneInfo } from './period';
 import { reconcile } from './reconcile';
 import { salesReport } from './sales-report';
+import { customersReport } from './customers';
 import { datasetFreshness, markVerified, sourceRows } from './sources';
 import { trafficBreakdown, trafficFunnel } from './traffic';
 
@@ -141,6 +142,16 @@ export function storeAnalyticsRoutes(db: Db) {
       const { conversion, ...funnel } = trafficFunnel(db, s.storeId, from, to); // conversion: the KPI's, in metrics
       const breakdowns = Object.fromEntries(SA_TRAFFIC_BREAKDOWNS.map((by) => [by, trafficBreakdown(db, s.storeId, from, to, by)])) as SaTraffic['breakdowns'];
       return c.json({ ...computeMetricSet(db, s, [...SA_TRAFFIC_REPORT], sp, filters), ...funnel, breakdowns } satisfies SaTraffic);
+    })
+    // SA-104 (spec §8 Customers and retention): customers, new and returning, repeat rate, orders per customer.
+    .get('/api/analytics/customers', (c) => {
+      const s = scoped(c);
+      if ('error' in s) return c.json({ error: s.error }, s.status);
+      const sp = storePeriod(db, s.storeId, (k) => c.req.query(k));
+      if (typeof sp === 'string') return c.json({ error: sp }, 400);
+      const filters = parseFilters(c.req.query('filters'));
+      if (typeof filters === 'string') return c.json({ error: filters }, 400);
+      return c.json(customersReport(db, s.storeId, sp.period, filters));
     })
     // SA-97: the orders behind the period's net sales, a page at a time, adding up to it.
     .get('/api/analytics/orders', (c) => {

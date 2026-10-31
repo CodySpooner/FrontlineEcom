@@ -882,6 +882,28 @@ export interface SaTraffic extends SaMetricSet {
   breakdowns: Record<SaTrafficBy, { rows: SaTrafficRow[]; reason?: SaReason; note?: string }>;
 }
 
+/**
+ * SA-104 (spec §8 Customers and retention; decision 20): `GET /api/analytics/customers`, store-wide over the period's
+ * counted orders. A customer is a ref with a counted order in the period; new means no counted order before it since
+ * `since`, the first synced order (earlier buyers count as new). Guests are counted apart, never as customers.
+ */
+export interface SaCustomers {
+  period: SaPeriod;
+  since: string | null;
+  customers: SaValue;
+  new: SaValue;
+  returning: SaValue;
+  /** Customers with 2 or more counted orders in the period ÷ customers. */
+  repeat_rate: SaValue;
+  /** Counted orders with a customer ÷ customers. */
+  orders_per_customer: SaValue;
+  /** The period's counted orders by what's known of the buyer. */
+  orders: { identified: number; guest: number; unknown: number };
+  /** SA-103: why there's no customer to follow, and the fix. */
+  missing?: Pick<SaValue, 'reason' | 'note' | 'fix'>;
+  scope: SaFilterScope;
+}
+
 /** SA-96: what `GET /api/analytics/sales/breakdown?by=` splits net sales and units by. */
 export const SA_BREAKDOWNS = ['channel', 'product', 'collection', 'country'] as const;
 export type SaBreakdownBy = (typeof SA_BREAKDOWNS)[number];
