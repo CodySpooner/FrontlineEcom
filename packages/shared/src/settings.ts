@@ -160,6 +160,12 @@ export interface ConfigChangesPage {
   changes: ConfigChange[];
   next?: string;
 }
+/** GET /api/config/changes/stores (ST-32): each store with history, a deleted one too, by its last recorded name. */
+export interface ChangeHistoryStore {
+  id: string;
+  name: string;
+  deleted: boolean;
+}
 /** PATCH /api/config: every document in one transaction; `unset` deletes an override key (back to inheriting). */
 export interface ConfigWrite {
   documents: { doc: ConfigDoc; storeId?: string; version: number; set?: Record<string, unknown>; unset?: string[] }[];

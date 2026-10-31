@@ -25,6 +25,9 @@ const ACTIONS: Record<string, string> = {
   'data.open': "apps/web/src/settings/sections/Data.test.tsx#Copy path copies the data folder, and Open folder goes through the desktop app when it's there, showing Windows' error",
   'backups.now': 'apps/web/src/settings/sections/Data.test.tsx#each backup says what made it; one from before kinds were recorded says so, and Back up now makes a manual one',
   'backups.restore': 'apps/web/src/settings/sections/Data.test.tsx#Restore lists everything it does first, then says to restart the dev server in a dev build',
+  'history.filter': 'apps/web/src/settings/sections/History.test.tsx#filters by scope, by a store that was deleted, and by a search over setting names',
+  'history.more': 'apps/web/src/settings/sections/History.test.tsx#200 changes page in by 50 with Show older, each once, newest first',
+  'history.retry': 'apps/web/src/settings/sections/History.test.tsx#only a failed apply has Retry, and it runs that change again',
   'pr.copy': "apps/web/src/settings/sections/ProductResearch.test.tsx#Copy from another store previews each field that differs and saves exactly those over the version read; a band in another currency isn't copied",
   'agents.claude.check': 'apps/web/src/settings/sections/Agents.test.tsx#Check again asks the Claude login again and shows what it says',
   'agents.codex.setup': "apps/web/src/settings/sections/Agents.test.tsx#Set up Codex starts the sign-in on the app's Codex folder, then Check again reads it",
@@ -54,6 +57,8 @@ describe('every control on a settings page is real', () => {
     stubApi((url) => {
       if (url === '/api/settings') return settings;
       if (url === '/api/config' || url.startsWith('/api/config?')) return { values: {}, origins: {}, versions: { app: 1 } };
+      if (url === '/api/config/changes/stores') return [{ id: 'gone', name: 'Old Shop', deleted: true }];
+      if (url.startsWith('/api/config/changes')) return { changes: [{ id: 'c1', at: '2026-10-31T09:00:00Z', actor: 'owner', scope: 'workspace', setting: 'baseCurrency', before: 'USD', after: 'EUR', state: 'failed', detail: 'No rate for EUR' }], next: 'x|1' };
       if (url === '/api/stores') return [peak];
       if (url === '/api/stores/peak/impact') return { removes: [], keeps: [] };
       if (url.startsWith('/api/caps')) return [caps]; // GET /api/caps answers a list

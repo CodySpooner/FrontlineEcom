@@ -141,3 +141,22 @@ test('retrying a failed job twice runs it once; a store row names its store', as
   expect((await send(app, 'POST', '/api/config/changes/plain/retry')).status).toBe(409);
   expect((await send(app, 'POST', '/api/config/changes/nope/retry')).status).toBe(404);
 });
+
+test('ST-32: search finds a setting by its id, label or synonym; a deleted store keeps its rows and its last name', async () => {
+  const { db, app } = setup();
+  const glow = { id: 'glow', name: 'Glow Haus' };
+  logChanges(db, { at: '2026-10-29T10:00:00.000Z', actor: 'owner', store: { id: 'glow', name: 'Glow Co' } }, [['store.feePercent', 3, 4, 'store']]);
+  logChanges(db, { at: '2026-10-30T10:00:00.000Z', actor: 'owner', store: glow }, [['store.feePercent', 4, 5, 'store']]);
+  logChanges(db, { at: '2026-10-31T10:00:00.000Z', actor: 'owner' }, [['baseCurrency', 'USD', 'EUR', 'workspace'], ['appearance.motion', 'system', 'reduce', 'personal']]);
+  const found = async (q: string) => ((await send(app, 'GET', `/api/config/changes?search=${encodeURIComponent(q)}`)).body as ConfigChangesPage).changes.map((c) => c.setting);
+  expect(await found('animation')).toEqual(['appearance.motion']); // a synonym
+  expect(await found('Display')).toEqual(['baseCurrency']); // the label, any case
+  expect(await found('FEEPERCENT')).toEqual(['store.feePercent', 'store.feePercent']); // the id
+  expect(await found('%')).toEqual(['store.feePercent', 'store.feePercent']); // its label is "Fees, % of revenue"
+  expect(await found('_')).toEqual([]); // matched as text, not as a LIKE pattern
+
+  expect((await send(app, 'DELETE', '/api/stores/glow?confirm=Glow%20Haus')).status).toBe(204);
+  expect((await send(app, 'GET', '/api/config/changes/stores')).body).toContainEqual({ ...glow, deleted: true });
+  const kept = ((await send(app, 'GET', '/api/config/changes?store=glow')).body as ConfigChangesPage).changes;
+  expect(kept.map((c) => [c.storeName, c.after])).toEqual([['Glow Haus', 5], ['Glow Co', 4]]);
+});

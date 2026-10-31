@@ -1,6 +1,6 @@
 // Settings frame (ST-02, board A1): the settings sidebar and a main column of at most 860 px under the page's Hero.
 import type { ComponentType } from 'react';
-import { Bell, BookOpen, Cpu, Database, Gauge, Palette, Plug, Settings as Gear, Store, Target, User, Zap, type LucideIcon } from 'lucide-react';
+import { Bell, BookOpen, Cpu, Database, Gauge, History as Clock, Palette, Plug, Settings as Gear, Store, Target, User, Zap, type LucideIcon } from 'lucide-react';
 import type { SettingsSection } from '@frontline/shared';
 import { Hero } from '../components/Hero';
 import { NAV } from '../nav';
@@ -10,6 +10,7 @@ import { Account } from './sections/Account';
 import { Agents } from './sections/Agents';
 import { Appearance } from './sections/Appearance';
 import { Data } from './sections/Data';
+import { History } from './sections/History';
 import { AutomationApprovals } from './sections/AutomationApprovals';
 import { General } from './sections/General';
 import { Knowledge } from './sections/Knowledge';
@@ -57,6 +58,7 @@ export const SECTIONS: SectionDef[] = [
   { slug: 'automation', group: 'AI & Connections', label: 'Automation & Approvals', icon: Zap, sub: 'Pause or stop automation, every schedule, autopilot, and who approves what.', Page: AutomationApprovals, scoped: true },
   { slug: 'usage', group: 'Operations', label: 'Usage & Limits', icon: Gauge, sub: "Daily limits the agents can't cross, and what today has used.", Page: Usage, scoped: true },
   { slug: 'data', group: 'Operations', label: 'Data & Backups', icon: Database, sub: 'Where your data lives on this computer, and its backups.', Page: Data },
+  { slug: 'history', group: 'Operations', label: 'Change History', icon: Clock, sub: 'Every setting change: who, where, when, and whether it applied.', Page: History },
 ];
 
 function Scope({ variant }: { variant?: 'knowledge' | 'store' }) {

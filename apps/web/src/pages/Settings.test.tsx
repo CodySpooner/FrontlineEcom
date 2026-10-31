@@ -40,12 +40,12 @@ describe('routes and deep links', () => {
 
   it('a section with no content yet is absent from the sidebar and lands on General, keeping the query', async () => {
     api();
-    renderApp(<Settings />, '/settings/history?store=peak');
+    renderApp(<Settings />, '/settings/advanced?store=peak');
     expect(screen.getByTestId('where').textContent).toBe('/settings/general?store=peak');
     const nav = await screen.findByRole('navigation', { name: 'Settings' });
     await within(nav).findByRole('link', { name: 'Stores2' });
-    expect(within(nav).queryByRole('link', { name: /History/ })).toBeNull();
-    expect(within(nav).getAllByRole('link').map((a) => a.textContent)).toEqual(['Account', 'Appearance', 'Notifications', 'General', 'Stores2', 'Agents & Providers', 'Integrations', 'Knowledge', 'Product Research', 'Automation & Approvals', 'Usage & Limits', 'Data & Backups']);
+    expect(within(nav).queryByRole('link', { name: /Advanced/ })).toBeNull();
+    expect(within(nav).getAllByRole('link').map((a) => a.textContent)).toEqual(['Account', 'Appearance', 'Notifications', 'General', 'Stores2', 'Agents & Providers', 'Integrations', 'Knowledge', 'Product Research', 'Automation & Approvals', 'Usage & Limits', 'Data & Backups', 'Change History']);
   });
 
   it.each(SECTIONS.map((s) => [s.slug, s.label]))('/settings/%s renders its section', async (slug, label) => {

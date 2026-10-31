@@ -23,6 +23,7 @@ const server = () => {
     if (url === '/api/settings') return saved;
     if (url === '/api/config') return { values: {}, origins: {}, versions: { app: 1 } };
     if (url === '/api/health') return { ok: true, uptimeSec: 1, version: 'dev', connectors: [] };
+    if (url.startsWith('/api/config/changes?') || url === '/api/config/changes') return { changes: [] }; // Change History (ST-32)
   });
   return { fetch, saved: () => saved };
 };
