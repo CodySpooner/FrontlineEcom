@@ -10,7 +10,7 @@ import { insights } from './insights';
 import { deleteLink, setLink } from './links';
 import { computeMetricSet, computeSeries, parseFilters } from './metric-set';
 import { listings, listingVariants } from './listings';
-import { orderRecords } from './orders';
+import { ORDERS_PAGE, orderRecords } from './orders';
 import { overview } from './overview';
 import { productDetail } from './product';
 import { historyStart, storePeriod, zoneInfo } from './period';
@@ -140,7 +140,9 @@ export function storeAnalyticsRoutes(db: Db) {
       if (basis !== 'refund_day' && basis !== 'order_day') return c.json({ error: 'refunds must be refund_day or order_day' }, 400);
       const page = Number(c.req.query('page') || 1);
       if (!Number.isInteger(page) || page < 1) return c.json({ error: 'page must be a whole number from 1' }, 400);
-      return c.json(orderRecords(db, s, sp, filters, basis, page));
+      const ids = c.req.query('ids')?.split(',').filter(Boolean);
+      if (ids && (ids.length > 200 || ids.some((x) => x.length > 100))) return c.json({ error: 'ids takes up to 200 order ids' }, 400);
+      return c.json(orderRecords(db, s, sp, filters, basis, page, ORDERS_PAGE, ids));
     })
     // SA-24: Dashboard's revenue to v1 net sales for the period, line by line.
     .get('/api/analytics/reconcile', (c) => {

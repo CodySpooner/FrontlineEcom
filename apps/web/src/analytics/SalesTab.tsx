@@ -2,13 +2,14 @@
 // orders, AOV, units and cancellations (SA-95); the picked metric's trend and the report's rows by day, week or month;
 // net sales by channel, product, collection or country (SA-96); and the orders behind any day or row (SA-97), opened
 // from here or from the Overview's trend chart (`orders=from..to`). The refunds view switches every value refunds
-// touch, each labelled.
-import { useState } from 'react';
+// touch, each labelled. The reconciliation (SA-99) bridges Dashboard's revenue to net sales, each line's orders a click
+// away (`oids=`).
+import { useState, type ReactNode } from 'react';
 import { useSearchParams } from 'react-router';
 import { SA_BREAKDOWNS, SA_METRICS, SA_REASONS, SA_SALES_GRAINS, SA_SALES_REPORT, type SaBreakdownBy, type SaContext, type SaMetricId, type SaSalesReport, type SaSeriesPoint, type SaValue } from '@frontline/shared';
 import { Button, cx, Dialog, ErrorState, LoadingState, Segmented, Table } from '../components/ui';
 import { cents, fmtDay, money } from '../lib/format';
-import { useSaBreakdown, useSaContext, useSaOrders, useSaSales, useSaSeries } from './api';
+import { useSaBreakdown, useSaContext, useSaOrders, useSaReconcile, useSaSales, useSaSeries } from './api';
 import { FilterScope } from './FilterScope';
 import { channelsOf } from './Filters';
 import { Change, fmtValue, KpiStrip, Value } from './KpiStrip';
@@ -232,9 +233,9 @@ function Breakdown({ s, ctx, by, onBy }: { s: S; ctx?: SaContext; by: SaBreakdow
 }
 
 /** SA-97: the orders behind a day or row, adding up to its net sales; a copy is listed but not counted. */
-function Orders({ s, from, to, ctx, onClose }: { s: S; from: string; to: string; ctx?: SaContext; onClose: () => void }) {
+function Orders({ s, from, to, ids, ctx, onClose }: { s: S; from: string; to: string; ids?: string; ctx?: SaContext; onClose: () => void }) {
   const [page, setPage] = useState(1);
-  const q = useSaOrders(s, from, to, page);
+  const q = useSaOrders(s, from, to, page, ids);
   const d = q.data;
   const currency = ctx?.currency;
   const names = ctx ? channelsOf(ctx) : [];
@@ -245,7 +246,7 @@ function Orders({ s, from, to, ctx, onClose }: { s: S; from: string; to: string;
       open
       onClose={onClose}
       title="Orders"
-      subtitle={`${from === to ? fmtDay(from) : range(from, to)}${total != null ? ` · they add up to ${money(total, currency)} net sales` : ''}`}
+      subtitle={`${from === to ? fmtDay(from) : range(from, to)}${ids ? ` · ${d?.count ?? '…'} named by the reconciliation` : total != null ? ` · they add up to ${money(total, currency)} net sales` : ''}`}
       width={900}
       footer={
         d && d.count > d.pageSize ? (
@@ -305,7 +306,7 @@ function Orders({ s, from, to, ctx, onClose }: { s: S; from: string; to: string;
                   <td className="text-right">{m(r.tax)}</td>
                   <td className="text-right">{m(r.shipping)}</td>
                   <td className="text-right">{m(r.refunds)}</td>
-                  <td className="text-right font-semibold">{r.duplicateOf ? <span className="font-normal">Copy of {r.duplicateOf}, not counted</span> : m(r.net)}</td>
+                  <td className="text-right font-semibold">{r.duplicateOf ? <span className="font-normal">Copy of {r.duplicateOf}, not counted</span> : r.counted ? m(r.net) : <span className="font-normal">Not counted</span>}</td>
                 </tr>
               ))}
             </tbody>
@@ -313,6 +314,75 @@ function Orders({ s, from, to, ctx, onClose }: { s: S; from: string; to: string;
         )}
       </div>
     </Dialog>
+  );
+}
+
+/** SA-99 (spec §9 Reconciliation): Dashboard's revenue to net sales line by line, and what dedupe left out. */
+function Reconciliation({ s, ctx, onOrders }: { s: S; ctx?: SaContext; onOrders: (ids: string[]) => void }) {
+  const q = useSaReconcile(s);
+  const d = q.data;
+  const currency = ctx?.currency;
+  const names = ctx ? channelsOf(ctx) : [];
+  const n = (count: number, ids?: string[]) =>
+    ids?.length ? (
+      <button type="button" onClick={() => onOrders(ids)} className="cursor-pointer underline decoration-line-3 underline-offset-[3px] hover:text-white">
+        {count} {count === 1 ? 'order' : 'orders'}
+      </button>
+    ) : count ? (
+      `${count}`
+    ) : (
+      ''
+    );
+  const line = (label: string, amount: number | null, count?: ReactNode, strong?: boolean) => (
+    <tr key={label} className={cx('border-t border-[#1c1c21] [&>td]:py-[7px]', strong && 'font-semibold')}>
+      <td className="pr-3">{label}</td>
+      <td className="pr-3 text-right text-text-2">{count}</td>
+      <td className="text-right">{amount == null ? '–' : cents(amount, currency)}</td>
+    </tr>
+  );
+  return (
+    <section className="card min-w-0 p-4">
+      <div className="mb-3 flex flex-wrap items-baseline gap-x-2">
+        <h2 className="font-display text-base font-semibold tracking-[.02em]">Reconciliation</h2>
+        <span className="text-xs text-muted">Dashboard's revenue to net sales, store-wide</span>
+      </div>
+      {q.isError ? (
+        <ErrorState message="Couldn't load the reconciliation." onRetry={() => q.refetch()} />
+      ) : !d ? (
+        <LoadingState rows={4} />
+      ) : (
+        <>
+          <table aria-label="Reconciliation" className="w-full text-[12.5px] tabular-nums">
+            <tbody>
+              {line("Dashboard's revenue", d.legacy, undefined, true)}
+              {d.lines.map((l) => line(l.label, l.amount, n(l.count, l.ids)))}
+              {line('Net sales', d.net_sales.value, <Basis s={s} />, true)}
+              {d.unexplained !== 0 && line('Not explained by the lines above', d.unexplained)}
+            </tbody>
+          </table>
+          {(d.info.length > 0 || !!d.dedupe?.channels.length || !!d.dedupe?.unmapped) && (
+            <ul className="mt-3 grid gap-1 text-[12px] text-text-2">
+              <li className="text-[11px] text-muted">In neither total, or not yet</li>
+              {d.info.map((l) => (
+                <li key={l.key}>
+                  {l.label}: {n(l.count, l.ids) || '0'} · {cents(l.amount, currency)}
+                </li>
+              ))}
+              {d.dedupe?.channels.map((c) => {
+                const name = names.find((x) => x.id === c.channel)?.label ?? c.channel;
+                return (
+                  <li key={c.channel}>
+                    {name} copies: {n(c.matched, c.ids.matched) || '0'} matched, {n(c.unmatched, c.ids.unmatched) || '0'} without a match
+                    {c.outside > 0 && <>; {n(c.outside, c.ids.outside)} counted outside the days {name} has synced</>}
+                  </li>
+                );
+              })}
+              {!!d.dedupe?.unmapped && <li>From other sales-channel apps, never matched automatically: {n(d.dedupe.unmapped, d.dedupe.unmappedIds)}</li>}
+            </ul>
+          )}
+        </>
+      )}
+    </section>
   );
 }
 
@@ -334,6 +404,20 @@ export function SalesTab({ s }: { s: S }) {
   if (!q.data) return <LoadingState rows={3} />;
   const d = q.data;
   const open = (p: { from: string; to: string }) => put('orders', ordersParam(p));
+  const named = (ids: string[]) =>
+    setParams((p) => {
+      const n = new URLSearchParams(p);
+      n.set('orders', ordersParam(d.period));
+      n.set('oids', ids.join(','));
+      return n;
+    });
+  const close = () =>
+    setParams((p) => {
+      const n = new URLSearchParams(p);
+      n.delete('orders');
+      n.delete('oids');
+      return n;
+    });
   return (
     <div className="mb-4 grid gap-3.5">
       <div className="flex flex-wrap items-center gap-2.5">
@@ -362,7 +446,8 @@ export function SalesTab({ s }: { s: S }) {
         <Rows s={s} d={d} currency={ctx?.currency} grain={d.grain} onGrain={(g) => put('grain', g)} onOrders={open} />
         <Breakdown s={s} ctx={ctx} by={by} onBy={(b) => put('by', b === 'channel' ? undefined : b)} />
       </div>
-      {from && <Orders key={`${from}${to}`} s={s} from={from} to={to ?? from} ctx={ctx} onClose={() => put('orders', undefined)} />}
+      <Reconciliation s={s} ctx={ctx} onOrders={named} />
+      {from && <Orders key={`${from}${to}${params.get('oids')}`} s={s} from={from} to={to ?? from} ids={params.get('oids') || undefined} ctx={ctx} onClose={close} />}
     </div>
   );
 }

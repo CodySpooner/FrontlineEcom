@@ -56,13 +56,15 @@ describe('dedupeSummary (SA-52)', () => {
     const db = openDb();
     seedLedgerStore(db);
     expect(dedupeSummary(db, LEDGER_STORE, P1.from, P1.to)).toEqual({
-      channels: [{ channel: 'tiktok_shop', matched: 1, unmatched: 1, outside: 0 }],
+      channels: [{ channel: 'tiktok_shop', matched: 1, unmatched: 1, outside: 0, ids: { matched: ['#1009'], unmatched: ['#1010'], outside: [] } }],
       unmapped: 0,
+      unmappedIds: [],
       lines: ['1 TikTok Shop orders matched, 0 counted twice', '1 copy left out without a match'],
     });
     expect(dedupeSummary(db, LEDGER_STORE, P2.from, P2.to)).toEqual({
-      channels: [{ channel: 'tiktok_shop', matched: 0, unmatched: 0, outside: 1 }], // #1011, Oct 21
+      channels: [{ channel: 'tiktok_shop', matched: 0, unmatched: 0, outside: 1, ids: { matched: [], unmatched: [], outside: ['#1011'] } }], // Oct 21
       unmapped: 0,
+      unmappedIds: [],
       lines: ["1 TikTok Shop orders counted from Shopify, outside the days TikTok Shop has synced"],
     });
   });

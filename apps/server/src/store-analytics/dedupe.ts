@@ -50,20 +50,22 @@ export function markChannelCopies(db: Db, storeId: string) {
 export function dedupeSummary(db: Db, storeId: string, from: string, to: string): SaDedupe {
   const platform = String(db.prepare('SELECT platform FROM stores WHERE id = ?').get(storeId)?.platform);
   const count = db.prepare(
-    `SELECT count(*) FILTER (WHERE o.duplicate_of IS NOT NULL AND m.id IS NOT NULL) AS matched, count(*) FILTER (WHERE o.duplicate_of IS NOT NULL AND m.id IS NULL) AS unmatched,
-       count(*) FILTER (WHERE ${CANONICAL}) AS outside
+    `SELECT json_group_array(o.id ORDER BY o.local_date, o.id) FILTER (WHERE o.duplicate_of IS NOT NULL AND m.id IS NOT NULL) AS matched,
+       json_group_array(o.id ORDER BY o.local_date, o.id) FILTER (WHERE o.duplicate_of IS NOT NULL AND m.id IS NULL) AS unmatched,
+       json_group_array(o.id ORDER BY o.local_date, o.id) FILTER (WHERE ${CANONICAL}) AS outside
      FROM orders o LEFT JOIN orders m ON m.store_id = o.store_id AND m.id = o.duplicate_of
      WHERE o.store_id = ? AND o.source_kind = ? AND o.channel = ? AND o.local_date BETWEEN ? AND ?`,
   );
   const channels = Object.keys(PREFIX)
     .map((channel) => {
       const r = count.get(storeId, platform, channel, from, to)!;
-      return { channel, matched: Number(r.matched), unmatched: Number(r.unmatched), outside: Number(r.outside) };
+      const [matched, unmatched, outside] = [r.matched, r.unmatched, r.outside].map((x) => JSON.parse(String(x)) as string[]) as [string[], string[], string[]];
+      // SA-99: each count's orders, the first 100
+      return { channel, matched: matched.length, unmatched: unmatched.length, outside: outside.length, ids: { matched: matched.slice(0, 100), unmatched: unmatched.slice(0, 100), outside: outside.slice(0, 100) } };
     })
     .filter((c) => c.matched || c.unmatched || c.outside);
-  const unmapped = Number(
-    db.prepare(`SELECT count(*) AS n FROM orders o WHERE o.store_id = ? AND o.source_kind = ? AND o.channel = 'other' AND o.local_date BETWEEN ? AND ? AND ${CANONICAL}`).get(storeId, platform, from, to)!.n,
-  );
+  const others = db.prepare(`SELECT o.id FROM orders o WHERE o.store_id = ? AND o.source_kind = ? AND o.channel = 'other' AND o.local_date BETWEEN ? AND ? AND ${CANONICAL} ORDER BY o.local_date, o.id`).all(storeId, platform, from, to).map((r) => String(r.id));
+  const unmapped = others.length;
   const name = (k: string) => SA_SOURCES[k as SaSourceKind]?.name ?? k;
   const lines = channels.flatMap((c) => [
     ...(c.matched || c.unmatched ? [`${c.matched} ${name(c.channel)} orders matched, 0 counted twice`] : []),
@@ -71,5 +73,5 @@ export function dedupeSummary(db: Db, storeId: string, from: string, to: string)
     ...(c.outside ? [`${c.outside} ${name(c.channel)} orders counted from ${name(platform)}, outside the days ${name(c.channel)} has synced`] : []),
   ]);
   if (unmapped) lines.push(`${unmapped} orders from other sales-channel apps may duplicate a marketplace's: they're never matched automatically`);
-  return { channels, unmapped, lines };
+  return { channels, unmapped, unmappedIds: others.slice(0, 100), lines };
 }

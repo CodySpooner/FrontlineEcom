@@ -828,6 +828,8 @@ export interface SaOrderRow {
   refunds: number | null;
   net: number | null;
   duplicateOf: string | null;
+  /** In the period's net sales: paid, not a copy (SA-99: asked for by id, an order may not be). */
+  counted: boolean;
 }
 
 export interface SaOrders {
@@ -904,7 +906,7 @@ export interface SaReconcileLine {
   label: string;
   amount: number;
   count: number;
-  /** The orders behind it, for the identity line. */
+  /** The orders behind it (SA-99: every line with orders, the first 100). */
   ids?: string[];
 }
 
@@ -918,9 +920,12 @@ export interface SaDedupe {
     unmatched: number;
     /** The store platform's record of a marketplace order, counted: outside the days that marketplace has synced. */
     outside: number;
+    /** SA-99: the orders behind each count (the first 100). */
+    ids: { matched: string[]; unmatched: string[]; outside: string[] };
   }[];
   /** Orders from a sales-channel app with no marketplace mapping: never auto-marked, they may duplicate. */
   unmapped: number;
+  unmappedIds: string[];
   lines: string[];
 }
 

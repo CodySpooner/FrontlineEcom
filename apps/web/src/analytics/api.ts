@@ -52,6 +52,7 @@ export const useSaInsights = (s: AnalyticsState) => useSa<SaInsights>(s.store, '
 /** SA-95, SA-96, SA-97: the Sales tab's report, a breakdown, and the orders behind [from, to] a page at a time. */
 export const useSaSales = (s: AnalyticsState, grain?: string) => useSa<SaSalesReport>(s.store, 'sales', { ...periodParams(s), grain });
 export const useSaBreakdown = (s: AnalyticsState, by: SaBreakdownBy) => useSa<SaSalesBreakdown>(s.store, 'sales/breakdown', { ...periodParams(s), compare: 'none', by });
-export const useSaOrders = (s: AnalyticsState, from: string, to: string, page: number) =>
-  useSa<SaOrders>(s.store, 'orders', { ...periodParams(s), period: 'custom', from, to, compare: 'none', page: String(page) });
+/** With `ids` (SA-99, a reconciliation line's orders): those orders, store-wide like the reconciliation. */
+export const useSaOrders = (s: AnalyticsState, from: string, to: string, page: number, ids?: string) =>
+  useSa<SaOrders>(s.store, 'orders', { ...periodParams(s), period: 'custom', from, to, compare: 'none', page: String(page), ...(ids && { ids, filters: undefined }) });
 export const useSaReconcile = (s: AnalyticsState) => useSa<SaReconcile>(s.store, 'reconcile', { ...periodParams(s), filters: undefined });

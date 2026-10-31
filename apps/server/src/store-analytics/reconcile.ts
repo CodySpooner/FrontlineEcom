@@ -30,19 +30,25 @@ export function reconcile(db: Db, storeId: string, from: string, to: string, bas
   if (store.demo) return { from, to, legacy: stored, net_sales: net, lines: [], info: [{ key: 'demo', label: 'Demo data: net sales are the demo revenue split into its parts', amount: 0, count: 0 }], unexplained: cents((net.value ?? 0) - stored) };
   const { fx } = storeConverter(db, String(store.currency));
 
+  // SA-99: a line's orders, for its link (the first 100, once each)
+  const push = (l: SaReconcileLine, id: string) => {
+    l.ids ??= [];
+    if (l.ids.length < 100 && !l.ids.includes(id)) l.ids.push(id);
+  };
   const lines = new Map<string, SaReconcileLine>();
   const add = (key: string, label: string, amount: number, id?: string) => {
     const l = lines.get(key) ?? { key, label, amount: 0, count: 0 };
     l.amount += amount;
     l.count++;
-    if (id && key === 'identity') l.ids = [...(l.ids ?? []), id];
+    if (id) push(l, id);
     lines.set(key, l);
   };
   const info = new Map<string, SaReconcileLine>();
-  const note = (key: string, label: string, amount: number) => {
+  const note = (key: string, label: string, amount: number, id?: string) => {
     const l = info.get(key) ?? { key, label, amount: 0, count: 0 };
     l.amount += amount;
     l.count++;
+    if (id) push(l, id);
     info.set(key, l);
   };
 
@@ -61,19 +67,20 @@ export function reconcile(db: Db, storeId: string, from: string, to: string, bas
     const [total, tax, amz] = [Number(o.total), Number(o.tax ?? 0), Number(o.amzAmount) + Number(o.amzTax)];
     const legacy = o.legacy ? total - amz : 0;
     recomputed += legacy;
-    if (o.dup != null) note('duplicates', 'Channel copies of an order, left out of both', total);
-    else if (!o.legacy && !o.v1 && o.status !== 'refunded') note('excluded', 'Test, unpaid or voided orders, left out of both', total);
+    const oid = String(o.id);
+    if (o.dup != null) note('duplicates', 'Channel copies of an order, left out of both', total, oid);
+    else if (!o.legacy && !o.v1 && o.status !== 'refunded') note('excluded', 'Test, unpaid or voided orders, left out of both', total, oid);
     if (!o.legacy && !o.v1) continue;
     if (!o.parts) {
       // Synced before money parts: v1 estimates total − tax − its refund lines; legacy also took the refund lines' tax off.
-      if (o.legacy && o.v1) add('estimates', 'Orders synced before money parts (v1 estimate): their tax', -tax + Number(o.amzTax));
-      else if (o.v1) add('v1_only', 'Orders v1 counts that legacy leaves out', total - tax - Number(o.amzAmount));
-      else add('legacy_only', 'Orders legacy counts as paid that v1 leaves out (no paid time)', -legacy);
+      if (o.legacy && o.v1) add('estimates', 'Orders synced before money parts (v1 estimate): their tax', -tax + Number(o.amzTax), oid);
+      else if (o.v1) add('v1_only', 'Orders v1 counts that legacy leaves out', total - tax - Number(o.amzAmount), oid);
+      else add('legacy_only', 'Orders legacy counts as paid that v1 leaves out (no paid time)', -legacy, oid);
       continue;
     }
     const x = fx(String(o.day), o.cur, o.locked, 1);
     if (x == null) {
-      if (o.legacy) add('fx', 'Left out of v1, no exchange rate for their day', -legacy);
+      if (o.legacy) add('fx', 'Left out of v1, no exchange rate for their day', -legacy, oid);
       continue;
     }
     const [gross, disc, ship] = [Number(o.gross ?? 0), Number(o.disc ?? 0), Number(o.ship ?? 0)];
@@ -82,17 +89,17 @@ export function reconcile(db: Db, storeId: string, from: string, to: string, bas
       continue;
     }
     if (!o.v1) {
-      add('legacy_only', 'Orders legacy counts as paid that v1 leaves out (no paid time)', -legacy);
+      add('legacy_only', 'Orders legacy counts as paid that v1 leaves out (no paid time)', -legacy, oid);
       continue;
     }
-    if (tax) add('tax', 'Tax in current totals', -tax);
-    if (ship) add('shipping', 'Shipping in current totals', -ship * x);
+    if (tax) add('tax', 'Tax in current totals', -tax, oid);
+    if (ship) add('shipping', 'Shipping in current totals', -ship * x, oid);
     // TikTok Shop's totals aren't net of refunds: legacy takes its refund lines off instead, so they aren't netted twice.
     const notNet = String(o.id).startsWith('tt-');
-    if (Number(o.refunded) && !notNet) add('refunds_netted', 'Refunds already taken off current totals (v1 dates them instead)', Number(o.refunded) * x);
-    if (amz) add('legacy_refund_lines', 'Refund lines legacy took off (TikTok Shop, Amazon)', amz);
+    if (Number(o.refunded) && !notNet) add('refunds_netted', 'Refunds already taken off current totals (v1 dates them instead)', Number(o.refunded) * x, oid);
+    if (amz) add('legacy_refund_lines', 'Refund lines legacy took off (TikTok Shop, Amazon)', amz, oid);
     const id = checkOrderIdentity({ gross: gross * x, discounts: disc * x, shipping: ship * x, tax, refunds: Number(o.refunded) * x, total: notNet ? total - amz : total });
-    if (!id.ok) add('identity', 'Orders failing the identity (parts − refunds ≠ current total)', id.diff, String(o.id));
+    if (!id.ok) add('identity', 'Orders failing the identity (parts − refunds ≠ current total)', id.diff, oid);
   }
   const channel = db.prepare('SELECT coalesce(sum(revenue), 0) AS r, coalesce(sum(orders), 0) AS n FROM channel_daily WHERE store_id = ? AND date BETWEEN ? AND ?').get(storeId, from, to)!;
   recomputed += Number(channel.r);
@@ -102,12 +109,12 @@ export function reconcile(db: Db, storeId: string, from: string, to: string, bas
   const dayCol = basis === 'order_day' ? 'o.local_date' : 'r.local_date';
   for (const r of db
     .prepare(
-      `SELECT r.local_date AS day, o.currency AS cur, o.fx_rate AS locked, r.merchandise AS merch FROM refunds r JOIN orders o ON o.store_id = r.store_id AND o.id = r.order_id
+      `SELECT o.id, r.local_date AS day, o.currency AS cur, o.fx_rate AS locked, r.merchandise AS merch FROM refunds r JOIN orders o ON o.store_id = r.store_id AND o.id = r.order_id
        WHERE r.store_id = ? AND ${dayCol} BETWEEN ? AND ? AND r.merchandise IS NOT NULL AND o.breakdown_at IS NOT NULL AND ${CANONICAL}`,
     )
     .all(storeId, from, to)) {
     const x = fx(String(r.day), r.cur, r.locked, 0);
-    if (x != null) add('refunds', basis === 'order_day' ? "Merchandise refunds of the period's orders" : 'Merchandise refunds dated in the period', -Number(r.merch) * x);
+    if (x != null) add('refunds', basis === 'order_day' ? "Merchandise refunds of the period's orders" : 'Merchandise refunds dated in the period', -Number(r.merch) * x, String(r.id));
   }
   for (const r of db.prepare('SELECT merchandise AS m FROM refunds r WHERE r.store_id = ? AND r.local_date BETWEEN ? AND ? AND NOT EXISTS (SELECT 1 FROM orders o WHERE o.store_id = r.store_id AND o.id = r.order_id)').all(storeId, from, to))
     note('waiting', 'Refunds waiting for their order to sync, counted nowhere yet', Number(r.m ?? 0));

@@ -30,7 +30,16 @@ const BREAKDOWN: Record<string, unknown> = {
   product: { rows: [{ id: 'p1', label: 'Glow Serum', net_sales: 405.4, units: 14 }] },
   country: { rows: [], reason: 'needs_permission', note: "Shopify hasn't allowed reading the orders' shipping country (protected customer data)" },
 };
-const order = (id: string, more = {}) => ({ id, date: '2026-10-24', channel: 'site', status: 'paid', currency: 'USD', placed: true, estimated: false, gross: 68, discounts: 6.8, tax: 4.9, shipping: 4.99, refunds: null, net: 61.2, duplicateOf: null, ...more });
+const order = (id: string, more = {}) => ({ id, date: '2026-10-24', channel: 'site', status: 'paid', currency: 'USD', placed: true, estimated: false, gross: 68, discounts: 6.8, tax: 4.9, shipping: 4.99, refunds: null, net: 61.2, duplicateOf: null, counted: true, ...more });
+const RECONCILE = {
+  from: '2026-10-24', to: '2026-10-25', legacy: 470.37, net_sales: { value: 405.4, status: 'ok' }, unexplained: 0,
+  lines: [
+    { key: 'tax', label: 'Tax in current totals', amount: -31.97, count: 2, ids: ['#1003', '#1004'] },
+    { key: 'channel_daily', label: "Amazon's daily totals (v1 counts its orders instead)", amount: -33, count: 2 },
+  ],
+  info: [{ key: 'excluded', label: 'Test, unpaid or voided orders, left out of both', amount: 45, count: 1, ids: ['#1006'] }],
+  dedupe: { channels: [{ channel: 'tiktok_shop', matched: 1, unmatched: 1, outside: 0, ids: { matched: ['#1009'], unmatched: ['#1010'], outside: [] } }], unmapped: 0, unmappedIds: [], lines: [] },
+};
 
 function render(path: string) {
   const fetch = stubApi((url) => {
@@ -40,6 +49,9 @@ function render(path: string) {
     if (url.startsWith('/api/analytics/series')) return series(q.get('metric')!);
     if (url.startsWith('/api/analytics/sales/breakdown')) return { by: q.get('by'), period: PERIOD, total: { net_sales: metric('net_sales'), units: metric('units') }, scope: SCOPE, ...(BREAKDOWN[q.get('by')!] as object) };
     if (url.startsWith('/api/analytics/sales')) return q.get('grain') === 'week' ? { ...REPORT, grain: 'week', rows: [{ ...row('2026-10-24', 405.4), to: '2026-10-30' }] } : REPORT;
+    if (url.startsWith('/api/analytics/reconcile')) return RECONCILE;
+    if (url.startsWith('/api/analytics/orders') && q.get('ids'))
+      return { period: PERIOD, total: metric('net_sales'), count: 1, page: 1, pageSize: 50, scope: SCOPE, rows: [order('#1006', { status: 'test', counted: false, net: null })] };
     if (url.startsWith('/api/analytics/orders'))
       return { period: PERIOD, total: metric('net_sales'), count: 60, page: Number(q.get('page')), pageSize: 50, scope: SCOPE, rows: [order('#1003'), order('#1009', { channel: 'tiktok_shop', net: null, duplicateOf: 'tt-1' }), order('#1001', { placed: false, gross: null, discounts: null, tax: null, shipping: null, refunds: 20, net: -20, date: '2026-10-20' })] };
     if (url.startsWith('/api/analytics/products/')) return new Response('{}', { status: 500 }); // the drawer's own test covers it
@@ -141,5 +153,35 @@ describe('Sales tab (SA-98)', () => {
     await waitFor(() => expect(where()).toContain('tab=sales'));
     expect(drill()).toBe('2026-10-24');
     expect(await screen.findByRole('dialog', { name: 'Orders' })).toBeTruthy();
+  });
+
+  it("the reconciliation: Dashboard's revenue to net sales line by line, each line's and dedupe's orders a click away, store-wide", async () => {
+    const { calls } = render(`/analytics?store=a&tab=sales&filters=${encodeURIComponent('{"channels":["site"]}')}`);
+    const t = await screen.findByRole('table', { name: 'Reconciliation' });
+    expect(within(t).getAllByRole('row').map((r) => r.textContent)).toEqual([
+      "Dashboard's revenue$470.37",
+      'Tax in current totals2 orders-$31.97',
+      "Amazon's daily totals (v1 counts its orders instead)2-$33.00",
+      'Net sales· refund day$405.40',
+    ]);
+    const oids = () => new URLSearchParams(screen.getByTestId('where').textContent!.split('?')[1]).get('oids');
+    fireEvent.click(within(t).getByRole('button', { name: '2 orders' }));
+    const d = await screen.findByRole('dialog', { name: 'Orders' });
+    expect([drill(), oids()]).toEqual(['2026-10-24..2026-10-25', '#1003,#1004']);
+    await waitFor(() => expect(calls('orders').at(-1)).toContain('ids=#1003,#1004'));
+    expect(calls('orders').at(-1)).not.toContain('filters='); // like the reconciliation itself
+    expect(calls('reconcile').at(-1)).not.toContain('filters=');
+    expect(within(d).getByText(/1 named by the reconciliation/)).toBeTruthy();
+    expect(within(d).getAllByRole('row')[1]!.textContent).toMatch(/^#1006.*Not counted$/);
+    fireEvent.click(within(d).getByRole('button', { name: /close/i }));
+    await waitFor(() => expect([drill(), oids()]).toEqual([null, null]));
+
+    // dedupe: the copies left out without a match
+    const copies = screen.getByText(/^TikTok Shop copies:/);
+    expect(copies.textContent).toBe('TikTok Shop copies: 1 order matched, 1 order without a match');
+    fireEvent.click(within(copies).getAllByRole('button')[1]!);
+    await screen.findByRole('dialog', { name: 'Orders' });
+    expect(oids()).toBe('#1010');
+    expect(screen.getByText(/^Test, unpaid or voided orders/).textContent).toBe('Test, unpaid or voided orders, left out of both: 1 order · $45.00');
   });
 });

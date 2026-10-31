@@ -45,7 +45,7 @@ describe('order records (SA-97)', () => {
     ]);
     expect(o.rows.at(-1)).toEqual({
       id: '#1003', date: '2026-10-26', channel: 'site', status: 'paid', currency: 'USD', placed: true, estimated: false,
-      gross: 68, discounts: 6.8, tax: 4.9, shipping: 4.99, refunds: 16.2, net: 45, duplicateOf: null,
+      gross: 68, discounts: 6.8, tax: 4.9, shipping: 4.99, refunds: 16.2, net: 45, duplicateOf: null, counted: true,
     });
     expect(o.rows.find((r) => r.id === '#1012')).toMatchObject({ currency: 'EUR', gross: 54, channel: 'site' });
     expect(o.rows.find((r) => r.id === 'tt-5770001')!.channel).toBe('tiktok_shop');
@@ -65,7 +65,7 @@ describe('order records (SA-97)', () => {
     }
     // Nov 3: #1004's full refund; its order was placed Oct 27
     expect((await get(`orders?${range('2026-11-03', '2026-11-03')}`)).rows).toEqual([
-      { id: '#1004', date: '2026-10-27', channel: 'site', status: 'refunded', currency: 'USD', placed: false, estimated: false, gross: null, discounts: null, tax: null, shipping: null, refunds: 84, net: -84, duplicateOf: null },
+      { id: '#1004', date: '2026-10-27', channel: 'site', status: 'refunded', currency: 'USD', placed: false, estimated: false, gross: null, discounts: null, tax: null, shipping: null, refunds: 84, net: -84, duplicateOf: null, counted: true },
     ]);
   });
 
@@ -110,3 +110,51 @@ describe('order records (SA-97)', () => {
     for (const p of ['0', '1.5', 'x']) expect((await app.request(`/api/analytics/orders?${range(LEDGER_PERIODS.P1.from, LEDGER_PERIODS.P1.to)}&page=${p}`)).status).toBe(400);
   });
 });
+
+describe("a reconciliation line's orders (SA-99)", () => {
+  it('by id: those orders in the period whatever their state, saying which count; the period total stays', async () => {
+    const { get, range } = setup();
+    const { from, to } = LEDGER_PERIODS.P1;
+    const o = await get(`orders?${range(from, to)}&ids=${encodeURIComponent('#1006,#1007,#1009,#1003,#1001')}`);
+    // #1006 a test order, #1007 unpaid, #1009 a copy, #1003 counted; #1001 is P2's
+    expect(o.rows.map((r) => [r.id, r.status, r.counted, r.net])).toEqual([
+      ['#1009', 'paid', false, null],
+      ['#1007', 'pending', false, null],
+      ['#1006', 'test', false, null],
+      ['#1003', 'paid', true, 45],
+    ]);
+    expect([o.count, o.total.value]).toEqual([4, 405.4]);
+    // a refund line's order: Nov 3's refund of #1004
+    expect((await get(`orders?${range('2026-11-02', '2026-11-08')}&ids=${encodeURIComponent('#1004')}`)).rows.map((r) => [r.id, r.placed, r.net])).toEqual([['#1004', false, -84]]);
+  });
+
+  it("reconcile's lines and dedupe carry their orders, each line's once and in the period", async () => {
+    const { get, range } = setup();
+    const { from, to } = LEDGER_PERIODS.P1;
+    const r = await get<import('@frontline/shared').SaReconcile>(`reconcile?${range(from, to)}`);
+    const ids = Object.fromEntries([...r.lines, ...r.info].map((l) => [l.key, l.ids ?? []]));
+    expect(ids.duplicates).toEqual(['#1009', '#1010']);
+    expect(ids.excluded).toEqual(['#1006', '#1007']);
+    expect(ids.refunds).toEqual(['#1003', '#1005']); // refund day: Oct 28 and Oct 29
+    expect(ids.shipping).toEqual(['#1003']);
+    expect(r.dedupe!.channels[0]!.ids).toEqual({ matched: ['#1009'], unmatched: ['#1010'], outside: [] });
+    // an order with a second refund line in the period is named once, its line counting both
+    const { db } = setup();
+    db.prepare("INSERT INTO refunds (store_id, id, refund_id, order_id, refunded_at, local_date, merchandise, source) VALUES (?, 'r-again', 'RA', '#1003', '2026-10-30T15:00:00Z', '2026-10-30', 5, 'shopify')").run(LEDGER_STORE);
+    const again = (await (await createApp(db).request(`/api/analytics/reconcile?${range(from, to)}`)).json()) as import('@frontline/shared').SaReconcile;
+    expect(again.lines.find((l) => l.key === 'refunds')).toMatchObject({ count: 3, ids: ['#1003', '#1005'] });
+    // every line's orders open by id
+    for (const [key, list] of Object.entries(ids)) {
+      if (!list.length) continue;
+      const o = await get(`orders?${range(from, to)}&ids=${encodeURIComponent(list.join(','))}`);
+      expect([key, o.rows.map((x) => x.id).sort()]).toEqual([key, [...list].sort()]);
+    }
+  });
+
+  it('ids are bounded', async () => {
+    const { app, range } = setup();
+    const many = Array.from({ length: 201 }, (_, i) => `#${i}`).join(',');
+    expect((await app.request(`/api/analytics/orders?${range('2026-10-26', '2026-11-01')}&ids=${encodeURIComponent(many)}`)).status).toBe(400);
+  });
+});
+
