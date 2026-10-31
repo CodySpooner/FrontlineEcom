@@ -40,7 +40,8 @@ describe('Product detail (SA-87)', () => {
     expect(d.channels).toEqual([{ channel: 'site', status: 'active', error: null, syncedAt: expect.any(String), publishedAt: null, units: row.units, netSales: row.netSales, refunds: row.refunds }]);
     expect(d.insights).toEqual([]);
     // the insights about it: its own, a group naming it, a failed listing of it
-    expect(productDetail(db, LEDGER_STORE, '8003', sp, {}, 'refund_day', LEDGER_NOW)!.insights.map((i) => i.rule)).toEqual(['unit_cost@1', 'variant_out@1']);
+    const lip = productDetail(db, LEDGER_STORE, '8003', sp, {}, 'refund_day', LEDGER_NOW)!;
+    expect([lip.insights.map((i) => i.rule), lip.rules.map((r) => r.id)]).toEqual([['unit_cost@1', 'variant_out@1'], ['unit_cost@1', 'variant_out@1']]); // and only their rules
     expect(productDetail(db, LEDGER_STORE, 'tt-9001', sp, {}, 'refund_day', LEDGER_NOW)!.insights.map((i) => i.rule)).toEqual(['unit_cost@1', 'listing_sync@1']);
   });
 

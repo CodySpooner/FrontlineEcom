@@ -88,6 +88,8 @@ export function productDetail(db: Db, storeId: string, id: string, sp: StorePeri
     ? db.prepare("SELECT cost AS value, 'demo' AS source, NULL AS since FROM products WHERE store_id = ? AND id = ? AND cost > 0").get(storeId, id)
     : db.prepare('SELECT cost AS value, source, effective_from AS since FROM unit_costs WHERE store_id = ? AND product_id = ? AND variant_id IS NULL AND effective_from <= ? ORDER BY effective_from DESC, recorded_at DESC LIMIT 1').get(storeId, id, sp.today);
   const failedOn = new Set(row.channels.filter((c) => c.status === 'failed').map((c) => c.channel));
+  const flags = insights(db, storeId, sp, now);
+  const mine = flags.insights.filter(({ target: t }) => (t.kind === 'product' && t.id === id) || (t.kind === 'products' && t.ids.includes(id)) || (t.kind === 'listings' && failedOn.has(t.channel)));
   return {
     period: sp.period,
     compare: sp.compare ?? null,
@@ -102,7 +104,8 @@ export function productDetail(db: Db, storeId: string, id: string, sp: StorePeri
       feeRule: { percent: Number(store.pct), perOrder: Number(store.per) },
     },
     variants: listingVariants(db, storeId, id, sp, rest, basis)!,
-    insights: insights(db, storeId, sp, now).insights.filter(({ target: t }) => (t.kind === 'product' && t.id === id) || (t.kind === 'products' && t.ids.includes(id)) || (t.kind === 'listings' && failedOn.has(t.channel))),
+    insights: mine,
+    rules: flags.rules.filter((r) => mine.some((i) => i.rule === r.id)),
     scope,
   };
 }

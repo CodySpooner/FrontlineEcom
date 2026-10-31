@@ -31,6 +31,15 @@ const MORE = [
 /** The board's two-letter channel marks; a site channel takes its platform's. */
 const SHORT: Record<string, string> = { shopify: 'SH', woocommerce: 'WC', tiktok_shop: 'TK', amazon: 'AZ', etsy: 'ET', walmart: 'WM' };
 const TINT: Record<string, string> = { shopify: 'border-good/35 text-[#b9f0c9]', tiktok_shop: 'border-[#9db4d6]/45 text-[#cbd9ef]' };
+/** The board's channel mark, two letters tinted by channel. */
+export function ChannelMark({ channel, platform, title }: { channel: string; platform?: string; title?: string }) {
+  const kind = channel === 'site' ? (platform ?? '') : channel;
+  return (
+    <span title={title} className={cx('inline-flex h-4 w-5 shrink-0 items-center justify-center rounded border bg-[#22222a] text-[9.5px] font-bold', TINT[kind] ?? 'border-line-2 text-text-2')}>
+      {SHORT[kind] ?? channel.slice(0, 2).toUpperCase()}
+    </span>
+  );
+}
 const plural = (n: number, unit: string) => `${n.toLocaleString('en-US')} ${unit}${n === 1 ? '' : 's'}`;
 
 const TH = 'border-b border-line bg-[#111114] px-2.5 py-[7px] text-[11px] font-semibold whitespace-nowrap text-muted';
@@ -58,12 +67,12 @@ function Menu({ id, label, value, on, more, children }: { id: string; label: str
   );
 }
 
-const dash = (v?: SaValue) => (
+export const dash = (v?: SaValue) => (
   <span className="text-muted" title={v?.note ?? (v?.reason && SA_REASONS[v.reason])}>
     –
   </span>
 );
-const val = (v: SaValue, f: (n: number) => string) => (v.value == null ? dash(v) : <span title={v.note}>{f(v.value)}</span>);
+export const val = (v: SaValue, f: (n: number) => string) => (v.value == null ? dash(v) : <span title={v.note}>{f(v.value)}</span>);
 
 /** Stock now: a count only where one is kept; FBA and supplier stock are never judged (decision 27). */
 function stock(r: Pick<SaListingRow, 'stock' | 'stockState' | 'coverDays'> & Partial<Pick<SaListingRow, 'variants' | 'variantsOut'>>): [text: string, tone?: string, title?: string] {
@@ -354,14 +363,9 @@ export function ListingsTab({ s, onOpen }: { s: AnalyticsPage & { store: string 
                       </td>
                       <td>
                         <span className="flex gap-1">
-                          {r.channels.map((c, k) => {
-                            const kind = c.channel === 'site' ? (ctx?.platform ?? '') : c.channel;
-                            return (
-                              <span key={k} title={`${name(c.channel)} · ${c.status}`} className={cx('inline-flex h-4 w-5 items-center justify-center rounded border bg-[#22222a] text-[9.5px] font-bold', TINT[kind] ?? 'border-line-2 text-text-2')}>
-                                {SHORT[kind] ?? c.channel.slice(0, 2).toUpperCase()}
-                              </span>
-                            );
-                          })}
+                          {r.channels.map((c, k) => (
+                            <ChannelMark key={k} channel={c.channel} platform={ctx?.platform} title={`${name(c.channel)} · ${c.status}`} />
+                          ))}
                         </span>
                       </td>
                       <td>

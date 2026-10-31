@@ -963,6 +963,8 @@ export interface SaProductDetail {
   costs: { unitCost: { value: number; source: string; since: string | null } | null; fees: SaValue; feeRule: { percent: number; perOrder: number } };
   variants: SaVariants;
   insights: SaInsight[];
+  /** SA-89: the rules behind `insights` (the Rule card's "Flags when"). */
+  rules: SaRule[];
   scope: SaFilterScope;
 }
 

@@ -1,15 +1,20 @@
 // SA-88 (the Listings board): the product drawer, opened by `product=` in the URL from a Listings row or a Needs
 // attention flag. Its header facts and pills come from the product endpoint (SA-87); its tabs render as their content
-// ships (decision 33). Closed, it hands focus back to what opened it.
-import { useEffect, useRef } from 'react';
-import type { Platform, SaListingRow } from '@frontline/shared';
+// ships (decision 33): Performance (SA-89). Closed, it hands focus back to what opened it.
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { Info } from 'lucide-react';
+import { SA_METRICS, type Platform, type SaListingRow, type SaMetricId, type SaMetricResult, type SaProductDetail } from '@frontline/shared';
 import { PLATFORM_NAME } from '../components/StoreForm';
-import { cx, Dialog, ErrorState, LoadingState } from '../components/ui';
-import { ago } from '../lib/format';
+import { Button, cx, Dialog, ErrorState, LoadingState, Tabs } from '../components/ui';
+import { ago, cents, fmtDay, money, pct } from '../lib/format';
 import { useSaContext, useSaProduct } from './api';
+import { BarChart } from './BarChart';
 import { FilterScope } from './FilterScope';
 import { channelsOf } from './Filters';
+import { Change, fmtValue } from './KpiStrip';
+import { ChannelMark, val } from './ListingsTab';
 import { periodParams, type AnalyticsPage } from './state';
+import { Unavailable } from './Unavailable';
 
 const TONE = { good: 'border-good/40 text-good', warn: 'border-amber/45 text-amber', red: 'border-red/50 text-[#ff6b77]', muted: 'border-line-2 text-text-2' };
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
@@ -34,12 +39,138 @@ function stockPill(r: SaListingRow): [string, keyof typeof TONE] {
   }
 }
 
+const TH = 'border-b border-line px-2 py-1.5 text-[11px] font-semibold whitespace-nowrap text-muted';
+/** Where a unit cost came from: a platform, the owner (Unit costs, the drawer's Costs tab) or the demo catalog. */
+const costSource = (s: string) => (s === 'owner' ? 'entered by you' : s === 'demo' ? 'demo' : (PLATFORM_NAME[s as Platform] ?? s));
+
+/** SA-89 (the Listings board): the mini metrics, units a day, the Rule card, the channel table and the price line. */
+function Performance({ d, currency, platform, channel }: { d: SaProductDetail; currency?: string; platform?: string; channel: (id: string) => string }) {
+  const [table, setTable] = useState(false);
+  const m = (id: SaMetricId) => d.metrics.find((x) => x.id === id)!;
+  const [net, units, contribution, refunds, rate] = (['net_sales', 'units', 'contribution_before_ads', 'refunds', 'refund_rate'] as const).map(m);
+  const tile = (x: SaMetricResult, label: string, line: ReactNode) => (
+    <div className="min-w-0">
+      <dt className="text-[11px] text-muted">{label}</dt>
+      <dd className="text-[13.5px] font-semibold tabular-nums">{x.value == null ? <Unavailable value={x} className="text-[12px]" /> : fmtValue(x.id, x.value, currency)}</dd>
+      <span className="text-[11px] text-muted">{line}</span>
+    </div>
+  );
+  const flag = d.insights[0];
+  const rule = flag && d.rules.find((r) => r.id === flag.rule);
+  const label = `Units sold per ${d.units.grain}`;
+  const { unitCost: uc, fees, feeRule } = d.costs;
+  return (
+    <div className="flex flex-col gap-3.5">
+      <dl className="grid grid-cols-2 gap-2.5 min-[480px]:grid-cols-4">
+        {tile(net!, 'Net sales', <Change change={net!.change} direction={SA_METRICS.net_sales.direction} />)}
+        {tile(units!, 'Units', <Change change={units!.change} direction={SA_METRICS.units.direction} />)}
+        {tile(contribution!, 'Contribution before ads', net!.value && contribution!.value != null ? `${Math.round((contribution!.value / net!.value) * 100)}% of net sales` : null)}
+        {tile(refunds!, 'Refunds', units!.value != null && rate!.value != null ? `${Math.round(units!.value * rate!.value).toLocaleString('en-US')} units · ${pct(rate!.value * 100)}` : null)}
+      </dl>
+      <div>
+        <div className="mb-1 flex flex-wrap items-center gap-3.5 text-[11.5px] text-muted">
+          <span className="inline-flex items-center gap-1.5">
+            <i aria-hidden className="size-[9px] rounded-[2px] bg-red" />
+            {label}
+          </span>
+          {/* SA-04: no connected source reports views per product */}
+          <span className="ml-auto inline-flex items-center gap-1" title="No connected source reports views per product, so there's no product conversion">
+            Product views: <span className="text-text-2">not tracked</span>
+            <Info aria-hidden className="size-3" />
+          </span>
+          <Button size="sm" variant="ghost" aria-pressed={table} onClick={() => setTable(!table)}>
+            {table ? 'Chart' : 'Table'}
+          </Button>
+        </div>
+        <BarChart points={d.units.points} grain={d.units.grain} label={label} table={table} />
+      </div>
+      {flag && (
+        <div className="flex flex-col gap-1.5 rounded-xl border border-line-2 bg-[#121216] px-3.5 py-3">
+          <div className="flex items-center gap-2">
+            <span className="rounded-[5px] bg-[#24242a] px-1.5 py-0.5 text-[9.5px] font-bold tracking-[.08em] text-text-2 uppercase">{flag.kind === 'data_health' ? 'Data health' : 'Rule'}</span>
+            <b className="text-[13px] font-semibold">{rule?.name ?? flag.title}</b>
+          </div>
+          <p className="text-[11.5px] leading-normal text-text-2">
+            {flag.detail}.{rule && ` Flags when ${rule.when.charAt(0).toLowerCase()}${rule.when.slice(1)}.`}
+          </p>
+        </div>
+      )}
+      <div>
+        <table aria-label="Channels" className="w-full border-collapse text-[12px] tabular-nums [&_td]:border-b [&_td]:border-[#1c1c21] [&_td]:px-2 [&_td]:py-[5px] [&_td]:whitespace-nowrap">
+          <thead>
+            <tr>
+              <th className={cx(TH, 'text-left')}>Channel</th>
+              <th className={cx(TH, 'text-left')}>Publication</th>
+              <th className={cx(TH, 'text-right')}>Units</th>
+              <th className={cx(TH, 'text-right')}>Net sales</th>
+              <th className={cx(TH, 'text-right')}>Refunds</th>
+            </tr>
+          </thead>
+          <tbody>
+            {d.channels.map((c) => (
+              <tr key={c.channel}>
+                <td>
+                  <span className="inline-flex items-center gap-1.5">
+                    <ChannelMark channel={c.channel} platform={platform} />
+                    {channel(c.channel)}
+                  </span>
+                </td>
+                <td className={cx(c.status === 'failed' && 'text-red', !c.status && 'text-muted')} title={c.error ?? undefined}>
+                  {c.status ? `${c.status.charAt(0).toUpperCase()}${c.status.slice(1)}${c.publishedAt ? ` · since ${fmtDay(c.publishedAt)}` : ''}` : 'Not listed'}
+                </td>
+                <td className="text-right">{val(c.units, (n) => n.toLocaleString('en-US'))}</td>
+                <td className="text-right">{val(c.netSales, (n) => money(n, currency))}</td>
+                <td className="text-right">{val(c.refunds, (n) => money(n, currency))}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {d.channelsNote && <p className="mt-1.5 text-[11px] text-muted">{d.channelsNote}.</p>}
+      </div>
+      <p className="text-[11px] text-text-2 tabular-nums">
+        Price <b className="text-text">{cents(d.row.price, currency)}</b>
+        {' · '}
+        {uc ? (
+          <>
+            unit cost <b className="text-text">{cents(uc.value, currency)}</b>{' '}
+            <span className="text-muted">
+              ({costSource(uc.source)}
+              {uc.since && `, since ${fmtDay(uc.since)}`})
+            </span>
+          </>
+        ) : (
+          <span className="text-muted">no unit cost</span>
+        )}
+        {' · '}
+        fees{' '}
+        {fees.value == null ? (
+          <span className="text-muted" title={fees.note}>
+            not available
+          </span>
+        ) : fees.status === 'ok' ? (
+          <>
+            <b className="text-text">{money(fees.value, currency)}</b> <span className="text-muted">(recorded)</span>
+          </>
+        ) : (
+          <span title={fees.note}>
+            <b className="text-text">
+              {feeRule.percent}% + {cents(feeRule.perOrder, currency)}
+            </b>{' '}
+            <span className="text-muted">(estimate)</span>
+          </span>
+        )}
+      </p>
+    </div>
+  );
+}
+
 export function ProductDrawer({ s, id }: { s: AnalyticsPage & { store: string }; id: string }) {
   const ctx = useSaContext(s.store).data;
   const q = useSaProduct(s.store, id, periodParams(s));
   // what opened it (a row, a flag): focus goes back there once the drawer is gone
   const opener = useRef(document.activeElement as HTMLElement | null);
   useEffect(() => () => opener.current?.focus(), []);
+  const [tab, setTab] = useState('performance');
   const d = q.data;
   const r = d?.row;
   const label = (c: string) => (c === 'site' ? 'site' : ((ctx && channelsOf(ctx).find((x) => x.id === c)?.label) ?? PLATFORM_NAME[c as Platform] ?? c));
@@ -67,7 +198,19 @@ export function ProductDrawer({ s, id }: { s: AnalyticsPage & { store: string };
         )
       }
     >
-      {q.isError ? <ErrorState message="Couldn't load this product." onRetry={() => q.refetch()} /> : !d ? <LoadingState rows={6} /> : <FilterScope scope={d.scope} />}
+      {q.isError ? (
+        <ErrorState message="Couldn't load this product." onRetry={() => q.refetch()} />
+      ) : !d ? (
+        <LoadingState rows={6} />
+      ) : (
+        <div className="flex flex-col gap-3.5">
+          <Tabs variant="underline" label="Product sections" tabs={[{ value: 'performance', label: 'Performance' }]} value={tab} onChange={setTab} className="-mx-5 -mt-5 px-5" />
+          <div role="tabpanel" aria-label="Performance">
+            <Performance d={d} currency={ctx?.currency} platform={ctx?.platform} channel={(c) => (c === 'site' ? ((ctx && channelsOf(ctx)[0]?.label) ?? 'Site') : label(c))} />
+          </div>
+          <FilterScope scope={d.scope} />
+        </div>
+      )}
     </Dialog>
   );
 }
