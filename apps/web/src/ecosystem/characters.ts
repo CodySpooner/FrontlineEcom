@@ -1,3 +1,4 @@
+import { paintFieldSpecialist } from './fieldCharacters';
 import { appearanceFor, type OfficeAppearance } from '@frontline/shared';
 
 export { appearanceFor };
@@ -19,7 +20,7 @@ export function frameAt(animation: Animation, elapsed: number, direction: Direct
 export const resolveAppearance = (look: OfficeAppearance, agentId: string): Required<OfficeAppearance> => ({ ...appearanceFor(agentId), ...look });
 
 /** Four frames and four directions per pose; thirty workers share a 3840 × 3840 atlas. */
-export function paintCharacters(looks: OfficeAppearance[]) {
+export function paintCharacters(looks: OfficeAppearance[], roles: (string | undefined)[] = []) {
   const canvas = document.createElement('canvas');
   canvas.width = SHEET.width * SHEET.columns;
   canvas.height = Math.max(1, Math.ceil(looks.length / SHEET.columns)) * SHEET.height;
@@ -28,14 +29,16 @@ export function paintCharacters(looks: OfficeAppearance[]) {
     const p = frameAt(animation, frame * (animation === 'walk' ? 110 : 230), direction as Direction, worker);
     c.save(); c.translate(p.x, p.y);
     if (direction % 2) { c.translate(CELL.width, 0); c.scale(-1, 1); }
-    paintPerson(c, look, animation, frame, direction >= 2);
+    if (roles[worker] === 'product_hunter') paintFieldSpecialist(c, resolveAppearance(look, String(worker)), animation, frame, direction >= 2);
+    else paintPerson(c, look, animation, frame, direction >= 2);
     c.restore();
   }
   return canvas;
 }
-export function paintPortrait(look: OfficeAppearance) {
+export function paintPortrait(look: OfficeAppearance, role?: string) {
   const canvas = document.createElement('canvas'); canvas.width = CELL.width; canvas.height = CELL.height;
-  paintPerson(canvas.getContext('2d')!, look, 'idle', 0, false);
+  if (role === 'product_hunter') paintFieldSpecialist(canvas.getContext('2d')!, resolveAppearance(look, role), 'idle', 0, false);
+  else paintPerson(canvas.getContext('2d')!, look, 'idle', 0, false);
   return canvas;
 }
 const shade = (hex: string, factor: number) => '#' + [1, 3, 5].map((at) => Math.min(255, Math.round(parseInt(hex.slice(at, at + 2), 16) * factor)).toString(16).padStart(2, '0')).join('');

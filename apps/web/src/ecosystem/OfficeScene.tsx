@@ -25,7 +25,7 @@ export function OfficeScene({ office, onSelect, focus, display, seats, persist =
   const meeting = kickoff(Object.values(office.missions), seats);
   const workers: OfficeWorker[] = seats.filter((s) => !s.archived).map((seat) => {
     const agent = office.agents.find((a) => a.id === seat.agentId);
-    return { seat, name: seat.displayName || (agent ? AGENT_ROLES[agent.role].name : seat.agentId), ...workerActivity(office, seat.agentId), handoff: recentHandoff(office, seat.agentId), meeting };
+    return { seat, role: agent?.role, name: seat.displayName || (agent ? AGENT_ROLES[agent.role].name : seat.agentId), ...workerActivity(office, seat.agentId), handoff: recentHandoff(office, seat.agentId), meeting };
   });
   const latestActiveTasks = useRef(activeTasks); latestActiveTasks.current = activeTasks;
   const readout = hubReadout(office, activeTasks);

@@ -4,6 +4,6 @@ import { CELL, paintPortrait, resolveAppearance } from './characters';
 
 export function WorkerPortrait({ appearance, name, agentId = name }: { appearance: OfficeAppearance; name: string; agentId?: string }) {
   const canvas = useRef<HTMLCanvasElement>(null);
-  useEffect(() => { const c = canvas.current!.getContext('2d')!; c.clearRect(0, 0, CELL.width, CELL.height); c.drawImage(paintPortrait(resolveAppearance(appearance, agentId)), 0, 0); }, [appearance, agentId]);
+  useEffect(() => { const c = canvas.current!.getContext('2d')!; c.clearRect(0, 0, CELL.width, CELL.height); c.drawImage(paintPortrait(resolveAppearance(appearance, agentId), agentId.split(':').at(-1)), 0, 0); }, [appearance, agentId]);
   return <canvas ref={canvas} width={CELL.width} height={CELL.height} role="img" aria-label={`${name} portrait`} className="eco-portrait" style={{ borderColor: appearance.color }} />;
 }

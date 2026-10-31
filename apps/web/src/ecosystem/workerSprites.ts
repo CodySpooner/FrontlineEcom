@@ -10,7 +10,7 @@ import { DEFAULT_DISPLAY, statusColor, type DisplayOptions } from './display';
 import { idleMoment } from './ambient';
 import { annotationScale } from './camera';
 
-export interface OfficeWorker { seat: OfficeSeat; name: string; animation: Animation; target?: Tile; status?: OfficeStatus; tool?: string; handoff?: Handoff; meeting?: MeetingPlan }
+export interface OfficeWorker { seat: OfficeSeat; role?: string; name: string; animation: Animation; target?: Tile; status?: OfficeStatus; tool?: string; handoff?: Handoff; meeting?: MeetingPlan }
 
 export function workerSprites(world: Container, select: (deskId: string, agentId: string) => void) {
   const connections = new Graphics(); world.addChild(connections);
@@ -31,10 +31,10 @@ export function workerSprites(world: Container, select: (deskId: string, agentId
     const active = data.filter((w) => !w.seat.archived).slice(0, 30);
     const plan = active.find((w) => w.meeting)?.meeting;
     if (plan && !meetingsSeen.has(plan.id)) { meeting = { plan, elapsed: 0, together: 0 }; meetingsSeen.add(plan.id); }
-    const next = JSON.stringify(active.map((w) => [w.seat.agentId, w.seat.appearance]));
+    const next = JSON.stringify(active.map((w) => [w.seat.agentId, w.role, w.seat.appearance]));
     if (next !== signature) {
       const old = atlas;
-      atlas = Texture.from(paintCharacters(active.map((w) => resolveAppearance(w.seat.appearance, w.seat.agentId))));
+      atlas = Texture.from(paintCharacters(active.map((w) => resolveAppearance(w.seat.appearance, w.seat.agentId)), active.map((w) => w.role)));
       atlas.source.scaleMode = 'nearest';
       for (const frame of frames.values()) frame.destroy();
       frames.clear(); signature = next;

@@ -1,0 +1,16 @@
+import { expect, test } from 'vitest';
+import { ANIMATIONS, appearanceFor, resolveAppearance } from './characters';
+import { paintFieldSpecialist } from './fieldCharacters';
+
+test('field specialist keeps every pose within its atlas cell and gives work a distinct tool gesture', () => {
+  const look = resolveAppearance(appearanceFor('glow:product_hunter'), 'glow:product_hunter');
+  const poses = new Set<string>();
+  for (const state of ANIMATIONS) for (const back of [false, true]) for (let frame=0;frame<4;frame++) {
+    let dy=0; const rects: number[][]=[];
+    const c = { fillRect: (x:number,y:number,w:number,h:number)=>rects.push([x,y+dy,w,h]), beginPath(){}, moveTo(){}, lineTo(){}, closePath(){}, fill(){}, save(){}, restore(){dy=0;}, translate(_x:number,y:number){dy+=y;} } as unknown as CanvasRenderingContext2D;
+    paintFieldSpecialist(c,look,state,frame,back);
+    for (const [x,y,w,h] of rects) { expect(x).toBeGreaterThanOrEqual(0);expect(y).toBeGreaterThanOrEqual(0);expect(x!+w!).toBeLessThanOrEqual(48);expect(y!+h!).toBeLessThanOrEqual(64); }
+    if (!back && frame === 1) poses.add(JSON.stringify(rects));
+  }
+  expect(poses.size).toBeGreaterThanOrEqual(7);
+});
