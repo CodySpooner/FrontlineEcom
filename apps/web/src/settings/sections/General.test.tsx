@@ -81,3 +81,20 @@ test('Account links its timezone line to this row', async () => {
   renderApp(<Settings />, '/settings/account');
   expect((await screen.findByRole('link', { name: 'workspace timezone' })).getAttribute('href')).toBe('/settings/general#timezone');
 });
+
+test('Demo mode shows whether the sample stores are there and switches them off and on at once', async () => {
+  let on = true;
+  const fetch = stubApi((url, init) => {
+    if (url === '/api/demo-mode' && init?.method === 'PUT') return { on: (on = JSON.parse(String(init.body)).on) };
+    if (url === '/api/demo-mode') return { on };
+    if (url === '/api/config') return view;
+  });
+  renderApp(<Settings />, '/settings/general');
+  const sw = (await screen.findByRole('switch', { name: 'Demo mode' })) as HTMLInputElement;
+  await vi.waitFor(() => expect([sw.checked, sw.disabled]).toEqual([true, false]));
+  fireEvent.click(sw);
+  await vi.waitFor(() => expect([sw.checked, sw.disabled]).toEqual([false, false]));
+  fireEvent.click(sw);
+  await vi.waitFor(() => expect(sw.checked).toBe(true));
+  expect(sent(fetch, '/api/demo-mode')).toEqual([{ on: false }, { on: true }]);
+});

@@ -18,6 +18,7 @@ import { demoSupplierProducts, searchCj } from './connectors/cj';
 import { listOrders, listProducts, setProductCost } from './catalog';
 import { competitorRoutes } from './competitors';
 import { dataDir, type Db } from './db';
+import { addSampleStores, sampleStoreIds } from './demo';
 import { addDays } from './dates';
 import { deleteIntegration, health, listIntegrations, putIntegration } from './integrations';
 import { listEvents, subscribe } from './live';
@@ -150,6 +151,19 @@ export const createApp = (db: Db, secretKey?: Buffer) => {
       if (c.req.query('confirm') !== store.name) return c.json({ error: `Type the store's name, ${store.name}, to delete it.`, field: 'confirm' }, 400);
       runManager(db).cancelStore(store.id); // its runs would otherwise wait forever on requests deleted with it
       return deleteStore(db, store.id) ? c.body(null, 204) : c.json({ error: 'store not found' }, 404);
+    })
+    // Settings → General → Demo mode: off deletes the sample stores, on brings them back fresh.
+    .get('/api/demo-mode', (c) => c.json({ on: sampleStoreIds(db).length > 0 }))
+    .put('/api/demo-mode', async (c) => {
+      const b = (await json(c.req.raw)) as { on?: unknown } | null;
+      if (typeof b?.on !== 'boolean') return c.json({ error: 'Expected { on: boolean }' }, 400);
+      if (b.on) for (const s of addSampleStores(db)) createSquad(db, s);
+      else
+        for (const id of sampleStoreIds(db)) {
+          runManager(db).cancelStore(id); // as DELETE /api/stores/:id
+          deleteStore(db, id);
+        }
+      return c.json({ on: sampleStoreIds(db).length > 0 });
     })
     .get('/api/events', (c) => {
       const limit = Math.min(200, Math.max(1, Number(c.req.query('limit')) || 20));

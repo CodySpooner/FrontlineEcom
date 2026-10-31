@@ -392,6 +392,20 @@ export function seedDemoStore(db: Db, storeId: string, today = localDate()) {
   topUp(db, storeId, today);
 }
 
+/** Settings → General → Demo mode: the sample stores still on demo data (a sample store the owner connected is theirs). */
+export const sampleStoreIds = (db: Db) => DEMO_STORES.map((s) => s.id).filter((id) => db.prepare('SELECT 1 FROM stores WHERE id = ? AND demo = 1').get(id));
+
+/** Demo mode back on: the sample stores the owner removed return with fresh history. Returns the ones added. */
+export function addSampleStores(db: Db, today = localDate()): Store[] {
+  return tx(db, () =>
+    DEMO_STORES.filter((s) => !db.prepare('SELECT 1 FROM stores WHERE id = ?').get(s.id)).map(({ params: _, ...s }) => {
+      insertStore(db, s, true);
+      seedDemoStore(db, s.id, today);
+      return s;
+    }),
+  );
+}
+
 /**
  * Seeds the three demo stores once per data dir (on an empty DB: stores the owner deleted stay deleted), then tops up
  * every demo store's history to `today`. Safe to run on every startup.

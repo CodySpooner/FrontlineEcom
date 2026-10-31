@@ -31,6 +31,7 @@ const ACTIONS: Record<string, string> = {
   'agents.codex.check': "apps/web/src/settings/sections/Agents.test.tsx#Set up Codex starts the sign-in on the app's Codex folder, then Check again reads it",
   'notifications.test': 'apps/web/src/settings/sections/Notifications.test.tsx#Send test shows what the server decided, and says where toasts appear',
   'stores.add': "apps/web/src/settings/sections/Stores.test.tsx#Add store says what adding does, then opens the new store's page",
+  'demo.toggle': 'apps/web/src/settings/sections/General.test.tsx#Demo mode shows whether the sample stores are there and switches them off and on at once',
   'stores.delete': "apps/web/src/settings/sections/Stores.test.tsx#Delete stays off until the store's name is typed, says what goes and what stays, and sends the name",
 };
 

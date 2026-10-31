@@ -75,3 +75,20 @@ test('route errors become JSON and land in the log; unknown paths are JSON 404s'
   const missing = await app.request('/api/nope');
   expect([missing.status, await missing.json()]).toEqual([404, { error: 'GET /api/nope not found' }]);
 });
+
+test('demo mode off deletes the sample stores, keeps the owner\'s, and on brings them back fresh', async () => {
+  const db = openDb();
+  seedDemo(db);
+  const app = createApp(db);
+  const put = (on: unknown) => app.request('/api/demo-mode', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ on }) });
+  const ids = async () => ((await (await app.request('/api/stores')).json()) as Store[]).map((s) => s.id);
+  await app.request('/api/stores', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: 'Mine', platform: 'shopify', niche: 'home' }) });
+  expect(await (await app.request('/api/demo-mode')).json()).toEqual({ on: true });
+  expect((await put('yes')).status).toBe(400);
+  expect(await (await put(false)).json()).toEqual({ on: false });
+  expect(await ids()).toEqual(['mine']);
+  expect(await (await put(true)).json()).toEqual({ on: true });
+  expect((await ids()).sort()).toEqual(['glow', 'mine', 'pawsome', 'peak']);
+  expect(db.prepare("SELECT count(*) AS n FROM daily_metrics WHERE store_id = 'glow'").get()!.n).toBeGreaterThan(300); // fresh history
+  expect(db.prepare("SELECT count(*) AS n FROM agents WHERE store_id = 'glow'").get()!.n).toBe(8); // and its squad
+});

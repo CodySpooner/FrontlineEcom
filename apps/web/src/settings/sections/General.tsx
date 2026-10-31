@@ -1,10 +1,10 @@
 // General (ST-16, decisions 8 and 13): the display currency for totals across stores, and the workspace timezone every
 // schedule and daily cap runs on. One explicit save through PATCH /api/config: the `app` row and the `workspace` row.
 import { useEffect } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ConfigImpact, ConfigView } from '@frontline/shared';
 import { api, json, useConfig, type ApiError } from '../../api/client';
-import { cx, ErrorState, inputClass, LoadingState } from '../../components/ui';
+import { cx, ErrorState, inputClass, LoadingState, Switch } from '../../components/ui';
 import { Checklist } from '../Checklist';
 import { useSettingsForm } from '../form';
 import { SaveBar, SettingRow, SettingsSection } from '../kit';
@@ -84,6 +84,30 @@ export function General() {
         impact={texts.length ? texts.map((t) => <span key={t} className="mt-0.5 block text-xs">{t}</span>) : undefined}
       />
       {f.dialogs}
+      <DemoMode />
     </>
+  );
+}
+
+/** The sample stores, on while any is still on demo data. Applies at once, outside the save bar. */
+function DemoMode() {
+  const qc = useQueryClient();
+  const q = useQuery({ queryKey: ['demo-mode'], queryFn: () => api<{ on: boolean }>('/api/demo-mode') });
+  const m = useMutation({
+    mutationFn: (on: boolean) => api<{ on: boolean }>('/api/demo-mode', json('PUT', { on })),
+    onSuccess: () => qc.invalidateQueries(), // every page's stores, agents and numbers change
+  });
+  return (
+    <SettingsSection title="Demo mode">
+      <SettingRow
+        label="Sample stores"
+        help="Glow Haus, Pawsome Gear and Peak Fit run on generated numbers so you can try the app. Turn off to delete them and everything in them; turn on to bring them back fresh. Your own stores aren't touched."
+        error={m.error?.message}
+      >
+        <label data-action="demo.toggle" className="flex cursor-pointer items-center">
+          <Switch aria-label="Demo mode" checked={m.isPending ? m.variables : !!q.data?.on} disabled={!q.data || m.isPending} onChange={(e) => m.mutate(e.target.checked)} />
+        </label>
+      </SettingRow>
+    </SettingsSection>
   );
 }
