@@ -1,5 +1,6 @@
 // SA-62: Store Analytics, one store at a time (decision 2): the title strip, the context bar and the tabs. A tab is
 // listed only once its content ships (decision 33). The legacy Unit costs panel sits under the Overview until SA-92.
+// `product=` opens the product drawer over any tab (SA-88).
 import type { ReactNode } from 'react';
 import { Link } from 'react-router';
 import { settingsUrl, type SaDataset } from '@frontline/shared';
@@ -8,6 +9,7 @@ import { ContextBar } from '../analytics/ContextBar';
 import { ListingsTab } from '../analytics/ListingsTab';
 import { UnitCosts } from '../analytics/legacy';
 import { Overview } from '../analytics/Overview';
+import { ProductDrawer } from '../analytics/ProductDrawer';
 import { useAnalyticsState, type AnalyticsPage } from '../analytics/state';
 import { Hero } from '../components/Hero';
 import { buttonClass, EmptyState, ErrorState, LoadingState, Tabs } from '../components/ui';
@@ -26,7 +28,7 @@ export const TABS: { value: string; label: string; datasets: SaDataset[]; render
       </>
     ),
   },
-  { value: 'listings', label: 'Listings & Products', datasets: ['catalog', 'inventory', 'orders', 'refunds'], render: (s) => <ListingsTab key={s.store} s={s} /> }, // a store's own selection and expanded rows
+  { value: 'listings', label: 'Listings & Products', datasets: ['catalog', 'inventory', 'orders', 'refunds'], render: (s) => <ListingsTab key={s.store} s={s} onOpen={(id) => s.set({ product: id })} /> }, // a store's own selection and expanded rows
 ];
 
 export function Analytics() {
@@ -51,6 +53,7 @@ export function Analytics() {
         <div role="tabpanel" aria-label={tab.label}>
           {tab.render({ ...s, store: s.store })}
         </div>
+        {s.product && <ProductDrawer key={s.product} s={{ ...s, store: s.store }} id={s.product} />}
       </>
     );
   // Under 640px the strip has no room beside its controls: the pill goes first in the page.

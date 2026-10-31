@@ -118,11 +118,10 @@ describe('Needs attention (SA-76)', () => {
     expect(await screen.findByRole('dialog', { name: 'Data sources' })).toBeTruthy();
 
     fireEvent.click(within(rows[0]!).getByRole('button', { name: /Hydra Barrier/ }));
-    expect(decodeURIComponent(screen.getByTestId('where').textContent!)).toContain('filters={"product":["8002"]}');
-    const calls = () => fetch.mock.calls.map((c) => decodeURIComponent(String(c[0])));
-    await within(p).findAllByRole('listitem');
-    expect(calls().some((u) => u.startsWith('/api/analytics/overview') && u.includes('"product":["8002"]'))).toBe(true);
-    expect(calls().filter((u) => u.startsWith('/api/analytics/insights')).every((u) => !u.includes('filters'))).toBe(true); // the rules read the whole store
+    expect(screen.getByTestId('where').textContent).toContain('product=8002'); // its drawer (SA-88), not a filter
+    fireEvent(await screen.findByRole('dialog', { name: 'Product' }), new Event('cancel', { cancelable: true }));
+    expect(fetch.mock.calls.some((c) => String(c[0]).startsWith('/api/analytics/products/8002?'))).toBe(true);
+    expect(screen.getByTestId('where').textContent).not.toContain('product=');
 
     fireEvent.click(within((await within(p).findAllByRole('listitem'))[2]!).getByRole('button', { name: /TikTok Shop listing/ }));
     const where = decodeURIComponent(screen.getByTestId('where').textContent!);

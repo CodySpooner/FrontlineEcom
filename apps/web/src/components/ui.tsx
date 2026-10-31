@@ -376,7 +376,8 @@ export function ErrorState({ message = "Couldn't load this.", onRetry }: { messa
 /** Modal (`side="center"`) or a drawer (`side="right"` or `"left"`) on the native <dialog>: focus trap, Esc and backdrop for free. */
 /**
  * `width` (px), `subtitle` and `headerExtra` (left of Close) for the larger dialogs; with a `footer` the header and footer
- * stay put and only the body scrolls.
+ * stay put and only the body scrolls. `lead` (a thumbnail before the title) and `meta` (a row under it) for a record's
+ * drawer, such as Store Analytics' product.
  */
 export function Dialog({
   open,
@@ -387,6 +388,8 @@ export function Dialog({
   subtitle,
   headerExtra,
   footer,
+  lead,
+  meta,
   children,
 }: {
   open: boolean;
@@ -397,6 +400,8 @@ export function Dialog({
   subtitle?: string;
   headerExtra?: ReactNode;
   footer?: ReactNode;
+  lead?: ReactNode;
+  meta?: ReactNode;
   children: ReactNode;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
@@ -429,8 +434,17 @@ export function Dialog({
             : 'm-auto w-[min(520px,calc(100vw-32px))]',
       )}
     >
-      <header className="flex items-center justify-between gap-3 border-b border-line px-5 py-3.5">
-        {subtitle ? (
+      <header className={cx('flex', lead || meta ? 'items-start' : 'items-center', 'justify-between gap-3 border-b border-line px-5 py-3.5')}>
+        {lead || meta ? (
+          <div className="flex min-w-0 items-start gap-3">
+            {lead}
+            <div className="min-w-0">
+              <h2 className="font-display text-base font-semibold">{title}</h2>
+              {subtitle && <p className="text-[12.5px] text-muted">{subtitle}</p>}
+              {meta}
+            </div>
+          </div>
+        ) : subtitle ? (
           <div className="min-w-0">
             <h2 className="font-display text-base font-semibold">{title}</h2>
             <p className="text-[12.5px] text-muted">{subtitle}</p>

@@ -326,7 +326,8 @@ export function ListingsTab({ s, onOpen }: { s: AnalyticsPage & { store: string 
                       tabIndex={onOpen && (i ? -1 : 0)}
                       onClick={onOpen && (() => onOpen(r.id))}
                       onKeyDown={onOpen && ((e) => e.target === e.currentTarget && e.key === 'Enter' && onOpen(r.id))}
-                      className={cx(onOpen && 'cursor-pointer outline-none hover:bg-white/2 focus-visible:bg-red-soft')}
+                      aria-current={s.product === r.id || undefined}
+                      className={cx(onOpen && 'cursor-pointer outline-none hover:bg-white/2 focus-visible:bg-red-soft', s.product === r.id && '[&>td]:bg-red/7 [&>td:first-child]:shadow-[inset_2px_0_0_var(--color-red)]')}
                     >
                       <td style={CHECK} onClick={(e) => e.stopPropagation()}>
                         <input type="checkbox" aria-label={`Select ${r.title}`} checked={picked.has(r.id)} onChange={() => pick([r.id], !picked.has(r.id))} className="cursor-pointer accent-red" />

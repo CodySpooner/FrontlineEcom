@@ -67,7 +67,7 @@ describe('Listings table (SA-82)', () => {
     expect(seen).toEqual(ALL.map((r) => r.title));
     expect((screen.getByRole('button', { name: 'Previous' }) as HTMLButtonElement).disabled).toBe(false);
     expect(screen.getByText(/Listings that are active now, with their sales from Sep 30 – Oct 29/)).toBeTruthy();
-    expect((await bodyRows())[0]!.getAttribute('tabindex')).toBeNull(); // no drawer yet (SA-88): rows do nothing
+    expect((await bodyRows())[0]!.getAttribute('tabindex')).toBe('0'); // the page opens a row in its drawer (SA-88)
   });
 
   it("each stock state, no sales, the refund rate, no unit cost and a failed sync read as the board's cells", async () => {

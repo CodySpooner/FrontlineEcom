@@ -161,10 +161,8 @@ const ROW = 'flex w-full items-center gap-2.5 border-t border-line px-4 py-[9px]
 function useInvestigate(s: AnalyticsPage, onChart: (k: string) => void) {
   const [, setParams] = useSearchParams();
   return (t: SaInsightTarget): Investigate | undefined => {
-    if (t.kind === 'product' || t.kind === 'products') {
-      const ids = t.kind === 'product' ? [t.id] : t.ids;
-      return { onClick: () => s.set({ filters: { ...s.filters, product: ids }, page: 1 }), title: ids.length === 1 ? 'Show this product only' : 'Show these products only' };
-    }
+    if (t.kind === 'product') return { onClick: () => s.set({ product: t.id }), title: 'Open this product' }; // SA-88: its drawer
+    if (t.kind === 'products') return { onClick: () => s.set({ filters: { ...s.filters, product: t.ids }, page: 1 }), title: 'Show these products only' };
     if (t.kind === 'sources') return { onClick: () => setParams((p) => (p.set('panel', 'sources'), p)), title: 'Open Data sources' };
     if (t.kind === 'metric') return { onClick: () => onChart(t.id === 'contribution_after_ads' ? 'contribution' : t.id), title: `Chart ${SA_METRICS[t.id].label.toLowerCase()}` };
     if (t.kind === 'orders') return { to: '/orders' };
