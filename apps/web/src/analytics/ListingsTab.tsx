@@ -3,13 +3,14 @@
 // the URL beside the page's; Channel and Collection are the page's filters. A row opens the product drawer through
 // `onOpen` (SA-88): without it rows aren't interactive (decision 33). A product with variants expands to them (SA-83);
 // Columns adds optional ones (SA-84). Export downloads the matching rows, or the checked ones (SA-85); 2 to 4 checked
-// ones open side by side in Compare (SA-86).
+// ones open side by side in Compare (SA-86). An empty store, a search or filters matching nothing, and an empty status
+// each say so (SA-94).
 import { Fragment, useDeferredValue, useState, type ReactNode } from 'react';
-import { useSearchParams } from 'react-router';
+import { Link, useSearchParams } from 'react-router';
 import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, Columns3, Download, Info, Plus, Search, TriangleAlert } from 'lucide-react';
-import { SA_LISTING_STATUSES, SA_REASONS, SA_STOCK_LABELS as STOCK, SA_LISTING_FILTERS, type SaListingRow, type SaListingStatus, type SaValue } from '@frontline/shared';
+import { SA_LISTING_STATUSES, SA_REASONS, SA_STOCK_LABELS as STOCK, SA_LISTING_FILTERS, settingsUrl, type SaListingRow, type SaListingStatus, type SaValue } from '@frontline/shared';
 import { hidePopover, Popover, rove } from '../agents/Popover';
-import { Button, buttonClass, cx, Dialog, ErrorState, LoadingState, Segmented } from '../components/ui';
+import { Button, buttonClass, cx, Dialog, EmptyState, ErrorState, LoadingState, Segmented } from '../components/ui';
 import { ago, cents, money, pct } from '../lib/format';
 import { saUrl, useSaCollections, useSaCompare, useSaContext, useSaListings, useSaVariants } from './api';
 import { FilterScope } from './FilterScope';
@@ -292,9 +293,40 @@ export function ListingsTab({ s, onOpen }: { s: AnalyticsPage & { store: string 
     );
   };
 
+  // SA-94: what narrows the matching set (the status doesn't: its counts sit in the switch), and clearing it in one go
+  const narrowed = ['q', 'stock', 'sales', 'cost', 'sync'].some((k) => get(k)) || Object.values(s.filters).some((v) => v?.length);
+  const clear = () =>
+    setParams((p) => {
+      const n = new URLSearchParams(p);
+      for (const k of ['q', 'stock', 'sales', 'cost', 'sync', 'filters', 'page']) n.delete(k);
+      return n;
+    });
+  const failed = ctx?.freshness.find((f) => f.dataset === 'catalog' && f.error);
+
   let body: ReactNode;
   if (q.isError) body = <ErrorState message="Couldn't load the listings." onRetry={() => q.refetch()} />;
   else if (!d) body = <LoadingState rows={8} />;
+  else if (!d.rows.length && !d.counts.all && !narrowed)
+    body = (
+      <div className="card">
+        <EmptyState
+          title="No products in this store yet"
+          action={
+            <Link to={settingsUrl('integrations', { store: s.store })} className={buttonClass('ghost', 'sm')}>
+              Integrations
+            </Link>
+          }
+        >
+          {failed ? `The last catalog read failed: ${failed.error}` : "They show here after the store's first catalog sync."}
+        </EmptyState>
+      </div>
+    );
+  else if (!d.rows.length && !d.counts.all)
+    body = (
+      <div className="card">
+        <EmptyState icon={Search} title="No listings match the search and filters" action={<Button size="sm" onClick={clear}>Clear search and filters</Button>} />
+      </div>
+    );
   else if (!d.rows.length) body = <p className="card p-6 text-center text-[13px] text-muted">No {status === 'all' ? '' : `${STATUS[status][0].toLowerCase()} `}listings match.</p>;
   else {
     const first = (d.page - 1) * d.pageSize + 1;

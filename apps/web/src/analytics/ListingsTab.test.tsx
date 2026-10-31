@@ -274,3 +274,59 @@ describe('Compare (SA-86)', () => {
     expect([compare().disabled, compare().title]).toEqual([true, 'Check 2 to 4 listings to compare them']);
   });
 });
+
+describe('Listings states (SA-94)', () => {
+  /** A listings API answering `answer` (its counts, no rows) for each call, with the context's catalog freshness. */
+  const stub = (answer: (n: number) => unknown, freshness: unknown[] = []) => {
+    let n = 0;
+    const fetch = stubApi((url) => {
+      if (url === '/api/stores') return [{ id: 'a', name: 'Glow Haus' }];
+      if (url.startsWith('/api/analytics/context')) return { ...CTX, freshness };
+      if (url.startsWith('/api/analytics/listings')) return answer(n++);
+      return [];
+    });
+    return fetch;
+  };
+  const none = (counts = { active: 0, draft: 0, archived: 0, all: 0 }) => ({ period: PERIOD, status: 'active', sort: 'units:desc', page: 1, pageSize: 25, total: 0, counts, variants: 0, channelListings: 0, rows: [], scope: { applied: [], ignored: [] } });
+  const where = () => decodeURIComponent(screen.getByTestId('where').textContent!);
+
+  it('an error retries; an empty store says why and where its connection is', async () => {
+    stub((n) => (n === 0 ? new Response('{}', { status: 500 }) : none()));
+    renderApp(<Analytics />, '/analytics?store=a&tab=listings');
+    fireEvent.click(await screen.findByRole('button', { name: /try again|retry/i }));
+    expect(await screen.findByText('No products in this store yet')).toBeTruthy();
+    expect(screen.getByText("They show here after the store's first catalog sync.")).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Integrations' }).getAttribute('href')).toBe('/settings/integrations?store=a');
+    cleanup();
+    stub(() => none(), [{ source: 'shopify', dataset: 'catalog', status: 'failed', lastSuccess: null, lastTry: '2026-10-29T10:00:00Z', stale: false, error: 'Shopify said 401: the access token was revoked', coveredFrom: null, coveredTo: null }]);
+    renderApp(<Analytics />, '/analytics?store=a&tab=listings');
+    expect(await screen.findByText('The last catalog read failed: Shopify said 401: the access token was revoked')).toBeTruthy();
+  });
+
+  it('a search and filters matching nothing clear in one go; an empty status says so; every status is reachable', async () => {
+    stub(() => none());
+    renderApp(<Analytics />, '/analytics?store=a&tab=listings&q=zzz&stock=out&cost=missing&page=2&filters={"channel":["site"]}');
+    expect(await screen.findByText('No listings match the search and filters')).toBeTruthy();
+    expect(screen.queryByText('No products in this store yet')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Clear search and filters' }));
+    expect(where()).toBe('/analytics?store=a&tab=listings');
+    expect(await screen.findByText('No products in this store yet')).toBeTruthy();
+    // without a search: the page's filter or the tab's own narrows it too
+    for (const path of ['&filters={"collection":["c1"]}', '&sales=with']) {
+      cleanup();
+      stub(() => none());
+      renderApp(<Analytics />, `/analytics?store=a&tab=listings${path}`);
+      expect(await screen.findByText('No listings match the search and filters')).toBeTruthy();
+    }
+    cleanup();
+
+    stub(() => none({ active: 3, draft: 0, archived: 0, all: 3 }));
+    renderApp(<Analytics />, '/analytics?store=a&tab=listings&status=draft');
+    expect(await screen.findByText('No draft listings match.')).toBeTruthy();
+    for (const [name, v] of [['Archived', 'archived'], ['All', 'all'], ['Active', null]] as const) {
+      fireEvent.click(screen.getByRole('radio', { name: new RegExp(`^${name}`) }));
+      await waitFor(() => expect(where().includes(`status=${v}`)).toBe(v != null));
+    }
+  });
+});
+
