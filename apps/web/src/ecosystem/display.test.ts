@@ -12,3 +12,9 @@ test('status beacons distinguish actual work, waiting, failure and unavailable w
   expect(statusColor('awaiting_approval')).toBe('#f4bc53'); expect(statusColor('collaborating')).toBe('#ce7aff');
   expect(statusColor('idle')).not.toBe(statusColor('running'));expect(statusColor()).toBe(statusColor('offline'));
 });
+
+
+test('ambient pause and quality are independent persisted choices',()=>{
+  expect(parseDisplay({pauseAmbient:true,lowPower:false})).toMatchObject({pauseAmbient:true,lowPower:false});
+  expect(parseDisplay({pauseAmbient:'true',lowPower:true})).toMatchObject({pauseAmbient:false,lowPower:true});
+});

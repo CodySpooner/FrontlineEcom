@@ -57,7 +57,7 @@ export function Ecosystem() {
         })}
       </div>
       <p className="eco-stat-scope">{demo ? 'DEMO DATA · simulated workers and outcomes' : `${storeIds.length ? 'Selected stores' : 'All store agents'} · success = completed / (completed + failed), all time`}{stats.isError ? ' · Statistics unavailable' : ''}</p>
-      <div className="eco-toolbar"><Tabs label="Ecosystem views" tabs={TABS} value={tab} onChange={setTab} /><Button size="sm" onClick={() => setFeed(!feed)} aria-expanded={feed}>Activity</Button></div>
+      <div className="eco-toolbar"><Tabs label="Ecosystem views" tabs={TABS} value={tab} onChange={setTab} /><Button size="sm" aria-pressed={display.pauseAmbient} onClick={()=>setDisplay({...display,pauseAmbient:!display.pauseAmbient})}>{display.pauseAmbient?"Resume ambience":"Pause ambience"}</Button><Button size="sm" onClick={() => setFeed(!feed)} aria-expanded={feed}>Activity</Button></div>
       <p className={`eco-connection ${demo ? 'eco-demo-banner' : ''}`} role="status"><StatusDot tone={office.connected && !office.error ? 'good' : 'idle'} />{demo ? 'DEMO MODE · All activity is simulated locally. No backend actions or model calls.' : office.error || (live.loading ? 'Loading agents and current work…' : office.connected ? 'Connected to agent execution' : 'Disconnected · showing last known state while reconnecting…')}</p>
       <div className={`eco-workspace ${feed ? '' : 'eco-no-feed'}`}>
         <section className="eco-stage" aria-label={tab}>

@@ -53,3 +53,5 @@
 .eco-locator{position:absolute;left:14px;top:66px;z-index:5;display:flex;gap:6px;max-width:calc(100% - 28px)}
 .eco-locator select{max-width:220px;min-height:34px;border:1px solid #384352;border-radius:6px;background:#111923;color:#dce7ed;padding:5px 10px;font-size:11px}
 @media(max-width:600px){.eco-locator{top:112px}.eco-locator select{max-width:170px;min-height:40px}.eco-locator button{min-height:40px}.eco-desk-access{top:160px}}
+
+@media(max-width:640px){.eco-toolbar{flex-wrap:wrap;justify-content:flex-end}.eco-toolbar [role=tablist]{flex-basis:100%;min-width:0}}

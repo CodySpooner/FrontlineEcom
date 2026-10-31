@@ -89,6 +89,9 @@ Anything else in another lane → append to that lane's backlog **Inbox** (`- [ 
 
 ## Done
 
+- 2026-10-31 ECO-55: Added persisted ambient pause and explicit full/reduced-effects quality controls; system reduced motion and Settings Always reduce remain authoritative and are reported in the scene. Offscreen/hidden scenes stop the ticker, culled workers skip texture-frame work, and teardown removes input/visibility/resize/intersection listeners. Browser verified preferences, both motion paths, mobile controls and frame suspension/resumption (97 ? 97 offscreen ? 157 visible); late initialization after unmount has a regression test. Build and pnpm check passed: 341 files / 2623 tests (1 skipped). Captures: `.agent/eco-55-*.png`.
+
+
 - 2026-10-31 ECO-54: Added a stationary agent locator and Inspect control; occupied-desk selection focuses the actual worker, including while travelling. Camera pan/focus/zoom stay inside map bounds, overview remains one action away, and the zoom readout follows camera motion. Keyboard navigation and 390px touch controls/profile access verified without POSTs; mobile controls do not overlap. Production build, browser and pnpm check passed: 341 files / 2621 tests (1 skipped), including extreme camera-bound cases. Captures: `.agent/eco-54-*.png`.
 
 
@@ -305,7 +308,7 @@ Items (stages from brief §11):
   store switching shows only that store's agents and activity.
 - [x] ECO-54 Stage 4 — Interaction: selection focuses without chasing a moving character, agent locator, bounded pan/
   zoom, easy return to overview, keyboard and touch, progressive detail; no click launches paid work or store changes.
-- [ ] ECO-55 Stage 5 — Quality levels and lifecycle: quality setting, pause/reduce ambient motion, reduced motion and
+- [x] ECO-55 Stage 5 — Quality levels and lifecycle: quality setting, pause/reduce ambient motion, reduced motion and
   the app's "Always reduce motion", offscreen culling, no leaks or duplicate loops across mount/unmount and resize.
 - [ ] ECO-56 Stage 5 — Performance verification: realistic and larger populations, 10+ minutes of viewing, repeated
   navigation, resizing, mixed states; record hardware and conditions here (no universal FPS claims).

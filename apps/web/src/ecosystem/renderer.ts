@@ -56,7 +56,7 @@ export async function createOffice(host: HTMLElement, onDesk: (id: string) => vo
   const ambient = ambientOffice(world);
   // Windows' reduced motion, or Settings → Appearance → Always reduce (settings ST-13): read each frame.
   const reduced = reducedMotion(matchMedia('(prefers-reduced-motion: reduce)'));
-  let lowPower = false, autoLow = false;
+  let lowPower = false, autoLow = false, pauseAmbient = false;
   app.ticker.maxFPS = 60;
   const workers = workerSprites(world, (desk, id) => { if (!dragged) { clickedWorker = id; selectDesk(desk); } });
   world.addChild(labels, telemetry.display);
@@ -87,8 +87,10 @@ export async function createOffice(host: HTMLElement, onDesk: (id: string) => vo
   let elapsed=0, frames=0, sampleFrames=0, sampleStart=performance.now(), slowSamples=0;
   const started = sampleStart;
   let metrics = { fps: 0, frames: 0, elapsedMs: 0, mode: 'Standard', scale: camera.scale };
-  const visibility = () => { if (document.hidden) app.ticker.stop(); else { sampleStart = performance.now(); sampleFrames = 0; app.ticker.start(); } };
+  let inView=true;
+  const visibility = () => { if (document.hidden || !inView) app.ticker.stop(); else { sampleStart = performance.now(); sampleFrames = 0; app.ticker.start(); } };
   document.addEventListener('visibilitychange', visibility);
+  const intersection=new IntersectionObserver(([entry])=>{inView=entry?.isIntersecting ?? false;visibility();});intersection.observe(host);visibility();
   app.ticker.add((ticker)=>{
     frames++; sampleFrames++;
     const now = performance.now(), period = now - sampleStart;
@@ -96,7 +98,7 @@ export async function createOffice(host: HTMLElement, onDesk: (id: string) => vo
       const fps = sampleFrames * 1000 / period;
       slowSamples = fps >= 10 && fps < 35 && !lowPower ? slowSamples + 1 : 0;
       if (slowSamples >= 5) { autoLow = true; app.ticker.maxFPS = 30; }
-      metrics = { fps, frames, elapsedMs: now - started, mode: lowPower || autoLow ? 'Low power' : 'Standard', scale: world.scale.x };
+      metrics = { fps, frames, elapsedMs: now - started, mode: reduced.matches ? 'Reduced motion' : lowPower || autoLow ? 'Low power' : pauseAmbient ? 'Ambient paused' : 'Standard', scale: world.scale.x };
       sampleStart = now; sampleFrames = 0;
     }
     const smooth=cameraBlend(ticker.deltaMS, reduced.matches || lowPower || autoLow);
@@ -105,7 +107,7 @@ export async function createOffice(host: HTMLElement, onDesk: (id: string) => vo
     telemetry.zoom(world.scale.x);
     workers.tick(Math.min(ticker.elapsedMS, 1000),reduced.matches || lowPower || autoLow,{x:-world.x/world.scale.x,y:-world.y/world.scale.x,width:host.clientWidth/world.scale.x,height:host.clientHeight/world.scale.x,scale:world.scale.x});
     objective.text = workers.meetingTitle() ? `TEAM KICKOFF\n${workers.meetingTitle()}` : '';
-    const still = reduced.matches || lowPower || autoLow;
+    const still = reduced.matches || lowPower || autoLow || pauseAmbient;
     if (!still) elapsed+=ticker.deltaMS;
     hologram.tick(elapsed, still);
     platforms.tick(elapsed, still);
@@ -117,6 +119,6 @@ export async function createOffice(host: HTMLElement, onDesk: (id: string) => vo
     if(still) return;
     lights.children.forEach((light,i)=>{light.alpha=.55+.08*Math.sin(elapsed/6500+i*1.7);});
   });
-  return { app, world, labels, fit, zoom, focus, setTheme, performance: () => ({ ...metrics, scale: world.scale.x, inspectionId: workers.inspectedId(), viewport: cameraViewport({ x: world.x, y: world.y, scale: world.scale.x }, host.clientWidth, host.clientHeight) }), previewWorker: workers.preview, focusWorker: (id: string) => { const p = workers.position(id); if (p) { workers.focus(id); focus(p); } }, setWorkers: (value: Parameters<typeof workers.update>[0]) => { workers.update(value); placards.update(value.map((w) => w.seat)); for (const [id,beacon] of beacons) { const worker=value.find((w)=>w.seat.deskId===id&&!w.seat.archived); beacon.tint=statusColor(worker?.status); beacon.alpha=worker ? worker.status === 'offline' ? .3 : .9 : 0; beacon.visible=showStatus&&!!worker; } }, setBusiness: (value: Parameters<typeof platforms.update>[0], activeTasks?: number) => { platforms.update(value); showpieces.update(value); telemetry.update(value, activeTasks); }, setDisplay: (value: DisplayOptions) => { showStatus=value.status; for (const beacon of beacons.values()) beacon.visible=showStatus&&beacon.alpha>0; labels.visible = value.departments; objective.visible = value.bubbles; lowPower = value.lowPower; autoLow = false; app.ticker.maxFPS = lowPower ? 30 : 60; workers.setDisplay(value); }, drainPositions: workers.drainPositions, destroy:()=>{ clearTimeout(clickTimer);resize.disconnect();document.removeEventListener('visibilitychange',visibility);app.destroy(true,{children:true});hologram.destroy();platforms.destroy();lighting.destroy();workers.destroy();mapTexture.destroy(true); } };
+  return { app, world, labels, fit, zoom, focus, setTheme, performance: () => ({ ...metrics, scale: world.scale.x, inspectionId: workers.inspectedId(), viewport: cameraViewport({ x: world.x, y: world.y, scale: world.scale.x }, host.clientWidth, host.clientHeight) }), previewWorker: workers.preview, focusWorker: (id: string) => { const p = workers.position(id); if (p) { workers.focus(id); focus(p); } }, setWorkers: (value: Parameters<typeof workers.update>[0]) => { workers.update(value); placards.update(value.map((w) => w.seat)); for (const [id,beacon] of beacons) { const worker=value.find((w)=>w.seat.deskId===id&&!w.seat.archived); beacon.tint=statusColor(worker?.status); beacon.alpha=worker ? worker.status === 'offline' ? .3 : .9 : 0; beacon.visible=showStatus&&!!worker; } }, setBusiness: (value: Parameters<typeof platforms.update>[0], activeTasks?: number) => { platforms.update(value); showpieces.update(value); telemetry.update(value, activeTasks); }, setDisplay: (value: DisplayOptions) => { showStatus=value.status; for (const beacon of beacons.values()) beacon.visible=showStatus&&beacon.alpha>0; labels.visible = value.departments; objective.visible = value.bubbles; lowPower = value.lowPower; pauseAmbient = value.pauseAmbient; autoLow = false; app.ticker.maxFPS = lowPower ? 30 : 60; workers.setDisplay(value); }, drainPositions: workers.drainPositions, destroy:()=>{ clearTimeout(clickTimer);resize.disconnect();intersection.disconnect();app.canvas.removeEventListener('pointerdown',down);app.canvas.removeEventListener('pointermove',move);app.canvas.removeEventListener('pointerup',up);app.canvas.removeEventListener('pointercancel',up);app.canvas.removeEventListener('wheel',wheel);app.canvas.removeEventListener('dblclick',double);app.canvas.removeEventListener('keydown',key);document.removeEventListener('visibilitychange',visibility);app.destroy(true,{children:true});hologram.destroy();platforms.destroy();lighting.destroy();workers.destroy();mapTexture.destroy(true); } };
 }
 export type OfficeRenderer = Awaited<ReturnType<typeof createOffice>>;

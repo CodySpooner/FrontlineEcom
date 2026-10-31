@@ -43,3 +43,14 @@ test('keyboard directory focus previews the actual occupant and clears on blur',
   fireEvent.focus(screen.getByRole('button', { name: 'executive-1' }));
   expect(renderer.previewWorker).toHaveBeenLastCalledWith(undefined);
 });
+
+
+test('an async renderer finishing after unmount is destroyed once without mounting a second loop',async()=>{
+  let finish!:(r:Awaited<ReturnType<typeof createOffice>>)=>void;
+  vi.mocked(createOffice).mockImplementation(()=>new Promise(resolve=>{finish=resolve;}));
+  const {unmount}=renderApp(<OfficeScene office={emptyOffice()} onSelect={vi.fn()} display={DEFAULT_DISPLAY} theme="frontline" seats={[]} />);
+  unmount();
+  const destroy=vi.fn();finish({destroy} as unknown as Awaited<ReturnType<typeof createOffice>>);
+  await Promise.resolve();await Promise.resolve();
+  expect(destroy).toHaveBeenCalledTimes(1);
+});

@@ -119,9 +119,10 @@ export function workerSprites(world: Container, select: (deskId: string, agentId
       } else if (motion.arrived) worker.direction = 2;
       const pos = iso(motion.position); worker.root.position.set(pos.x, pos.y + 12); worker.root.zIndex = pos.y;
       worker.root.renderable = !view || (pos.x > view.x - 200 && pos.x < view.x + view.width + 200 && pos.y > view.y - 80 && pos.y < view.y + view.height + 200);
+      if(!worker.root.renderable) continue;
       const receiving = [...visits.values()].some((v) => v.event.toAgentId === worker.data.seat.agentId && v.atDesk > 0);
       const animation = motion.next ? 'walk' : motion.arrived ? visit || receiving || inMeeting ? 'collaborate' : worker.data.animation : 'idle';
-      const elapsed = animation === 'sit' ? worker.data.status === 'idle' ? (worker.data.role ? specialistIdle(worker.elapsed, worker.data.seat.agentId, worker.data.role, reduced) : idleMoment(worker.elapsed, worker.index, reduced)) * 230 : 0 : reduced ? 0 : worker.elapsed;
+      const elapsed = animation === 'sit' ? worker.data.status === 'idle' ? (worker.data.role ? specialistIdle(worker.elapsed, worker.data.seat.agentId, worker.data.role, reduced || display.pauseAmbient) : idleMoment(worker.elapsed, worker.index, reduced || display.pauseAmbient)) * 230 : 0 : reduced ? 0 : worker.elapsed;
       const p = frameAt(animation, elapsed, worker.direction, worker.index);
       const key = `${p.x},${p.y}`;
       let frame = frames.get(key);
