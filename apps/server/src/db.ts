@@ -1473,6 +1473,12 @@ export const MIGRATIONS = [
   INSERT OR IGNORE INTO done_once (ref, at) SELECT 'sa-repull:' || id, strftime('%Y-%m-%dT%H:%M:%fZ', 'now') FROM integrations WHERE kind IN ('shopify', 'woocommerce', 'etsy', 'amazon');
   UPDATE integrations SET cursor = NULL WHERE kind IN ('shopify', 'woocommerce', 'etsy', 'amazon');
   `,
+  /* 59 (settings ST-28): a store's default assumptions for Product Research economics (decision 13), in percent. NULL
+     keeps the built-in ones: no discount, no returns, a full refund on a return. */ `
+  ALTER TABLE pr_store_profiles ADD COLUMN discount_pct REAL;
+  ALTER TABLE pr_store_profiles ADD COLUMN return_rate_pct REAL;
+  ALTER TABLE pr_store_profiles ADD COLUMN refund_pct REAL;
+  `,
 ];
 
 /** Opens (or creates) the DB and runs pending migrations. Default is in-memory, which is what tests use. */

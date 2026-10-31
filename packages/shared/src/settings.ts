@@ -206,6 +206,7 @@ const DEFAULTS = 'apps/server/src/config/agent-defaults.test.ts';
 const LIMITS = 'apps/server/src/config/run-limits.test.ts';
 const AUTOSAVE = 'apps/server/src/config/auto-save.test.ts';
 const PRPROFILE = 'apps/server/src/config/pr-profile.test.ts';
+const PRASSUME = 'apps/server/src/config/pr-assumptions.test.ts';
 const runLimit = (key: string, d: Without<SettingDef, 'id' | 'section' | 'scopes' | 'owner' | 'applies' | 'export'>) =>
   ({ id: `runs.${key}`, section: 'agents', scopes: ['workspace'], owner: 'apps/server/src/config/agent-defaults.ts#checkRunLimits', applies: 'now', export: true, ...d }) as SettingDef;
 const agentDefault = (key: string, d: Without<SettingDef, 'id' | 'section' | 'scopes' | 'inherits' | 'default' | 'owner' | 'applies' | 'export'>) =>
@@ -290,6 +291,14 @@ export const SETTINGS: SettingDef[] = [
   pr('keywords', { type: 'list', maxItems: 50, maxLength: 80, label: 'Keywords', help: 'Searched on CJ besides the niche.', default: [], applies: 'next daily plan', consumers: ['apps/server/src/product-research/profile.ts#discoveryQueries', 'apps/server/src/product-research/tasks.ts#taskMessage'], proof: 'apps/server/src/product-research/sources/cj.test.ts#discovery: a job pages through CJ for each query and stores listings with what CJ said, as CJ said it' }),
   pr('avoidCategories', { type: 'list', maxItems: 50, maxLength: 80, label: 'Avoided categories', help: 'Flagged, never hidden; a flag makes fit Weak until you dismiss it.', default: [], applies: 'now', consumers: ['apps/server/src/product-research/evaluate.ts#evaluate', 'apps/server/src/product-research/tasks.ts#taskMessage'], proof: `${PRPROFILE}#avoided categories and terms flag the store's products and make their fit Weak, never hiding them; only that store's` }),
   pr('avoidTerms', { type: 'list', maxItems: 50, maxLength: 80, label: 'Avoided terms', help: 'Words in a title. Flagged, never hidden.', default: [], applies: 'now', consumers: ['apps/server/src/product-research/evaluate.ts#evaluate', 'apps/server/src/product-research/tasks.ts#taskMessage'], proof: `${PRPROFILE}#avoided categories and terms flag the store's products and make their fit Weak, never hiding them; only that store's` }),
+  // Default assumptions (ST-28): a product's economics read them where it has no figure of its own; saved comparisons keep theirs.
+  ...([
+    ['discountPct', 'Discount', 'Off the selling price, on average. Empty: no discount.'],
+    ['returnRatePct', 'Return rate', 'Of orders returned. Empty: no returns.'],
+    ['refundPct', 'Refund on a return', 'Of the order value refunded. Empty: a full refund.'],
+  ] as const).map(([k, label, help]) =>
+    pr(k, { type: 'number', min: 0, max: 100, nullable: true, label, help, default: null, applies: 'now', consumers: ['apps/server/src/product-research/economics.ts#derived'], proof: `${PRASSUME}#the store's default assumptions read as Your assumption; null keeps today's; a product's own figure wins; a missing cost stays Unknown` }),
+  ),
 
   // Locked policies (decision 4): shown with a lock, never written by any scope, import or API call.
   { id: 'policy.approvals', section: 'automation', type: 'boolean', label: 'Spending, publishing and live-store edits', help: 'Always ask you first. The one exception is autopilot for ad budget changes and pausing campaigns, within each store\'s daily cap.', scopes: ['workspace'], locked: true, default: true, owner: 'packages/agents/src/tools.ts#requestApproval', applies: 'now', consumers: ['packages/agents/src/tools.ts#requestApproval'] },

@@ -1,9 +1,13 @@
 import type { Niche, PrStoreProfile, Store } from '@frontline/shared';
 import { ConfigError, logChanges } from '../config/write';
-import type { Db } from '../db';
+import { tx, type Db } from '../db';
+import { convertMinor } from './facts';
 
 /** A store's default ship-to (decision 5): its currency's main country, else none until the owner picks one. */
 const MAIN_COUNTRY: Record<string, string> = { USD: 'US', GBP: 'GB', CAD: 'CA', AUD: 'AU' };
+
+/** The ship-to a store gets from its currency when the owner hasn't picked one. */
+export const defaultShipTo = (currency: string): string | null => MAIN_COUNTRY[currency] ?? null;
 
 /** The destination every cost, delivery time and fulfillment status is for, in a store's scope. */
 export function shipTo(db: Db, store: Pick<Store, 'id' | 'currency'>): string | null {
@@ -69,16 +73,26 @@ export function inNiche(store: Pick<Store, 'niche' | 'nicheDetail'>, include: st
 
 const num = (v: unknown) => (v == null ? null : Number(v));
 
-/** A store's profile with decision 5's defaults: its currency, ship-to from its currency's main country, the rest unknown. */
+/**
+ * A store's profile with decision 5's defaults: its currency, ship-to from its currency's main country, the rest unknown.
+ * A band saved in another currency (the store's has changed since) is converted at the stored rate, or left out without
+ * one: never read as the store's currency (settings ST-28).
+ */
 export function getProfile(db: Db, store: Store): PrStoreProfile {
   const r = db.prepare('SELECT * FROM pr_store_profiles WHERE store_id = ?').get(store.id);
   const ship = r?.ship_to ? String(r.ship_to) : null;
+  const saved = { min: num(r?.price_min_minor), max: num(r?.price_max_minor), currency: String(r?.price_currency ?? store.currency) };
+  const other = saved.currency !== store.currency && (saved.min !== null || saved.max !== null);
+  const band = (v: number | null) => (v === null || !other ? v : (convertMinor(db, v, saved.currency, store.currency) ?? null));
+  const priceMin = band(saved.min);
+  const priceMax = band(saved.max);
   return {
     storeId: store.id,
     audience: r?.audience == null ? null : String(r.audience),
-    priceMin: num(r?.price_min_minor),
-    priceMax: num(r?.price_max_minor),
+    priceMin,
+    priceMax,
     priceCurrency: store.currency,
+    priceSaved: other ? { ...saved, converted: (saved.max === null || priceMax !== null) && (saved.min === null || priceMin !== null) } : null,
     shipTo: ship ?? MAIN_COUNTRY[store.currency] ?? null,
     shipToDefault: !ship,
     warehouses: json(r?.warehouses_json),
@@ -88,11 +102,15 @@ export function getProfile(db: Db, store: Store): PrStoreProfile {
     includeCategories: json(r?.include_categories_json),
     keywords: json(r?.keywords_json),
     updatedAt: r?.updated_at == null ? null : String(r.updated_at),
+    discountPct: num(r?.discount_pct),
+    returnRatePct: num(r?.return_rate_pct),
+    refundPct: num(r?.refund_pct),
     version: r ? Number(r.version) : 0,
   };
 }
 
 const LISTS = ['warehouses', 'avoidCategories', 'avoidTerms', 'includeCategories', 'keywords'] as const;
+const PERCENTS = ['discountPct', 'returnRatePct', 'refundPct'] as const;
 
 /** `field`: `pr.<key>`, the registry id where the key has one (settings decision 6). */
 type Bad = { error: string; field: `pr.${keyof PrStoreProfile}` };
@@ -100,7 +118,8 @@ type Bad = { error: string; field: `pr.${keyof PrStoreProfile}` };
 /**
  * Saves the fields present in `body` (the rest stay). The price band is in the store's currency. `version` (as read, 0
  * before the first save) is checked when given: a stale one throws ConfigError (409) and nothing is written (settings
- * decision 6). Each field that moved writes a change row.
+ * decision 6). Each field that moved writes a change row, in the same transaction. A band saved in another currency
+ * stays as saved until a save sends one.
  */
 export function saveProfile(db: Db, store: Store, body: Record<string, unknown>, now = new Date(), version?: number): PrStoreProfile | Bad {
   const p = getProfile(db, store);
@@ -138,23 +157,34 @@ export function saveProfile(db: Db, store: Store, body: Record<string, unknown>,
     if (k === 'warehouses' && out.some((c) => !/^[A-Z]{2}$/.test(c))) return { error: 'warehouses must be two-letter country codes', field: 'pr.warehouses' };
     next[k] = out;
   }
+  for (const k of PERCENTS) {
+    if (!has(k)) continue;
+    const v = body[k];
+    if (v !== null && !(typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 100)) return { error: `${k} must be a percentage from 0 to 100, or null`, field: `pr.${k}` };
+    next[k] = v as number | null;
+  }
   if (version !== undefined && version !== p.version)
     throw new ConfigError(409, { error: 'This profile was saved somewhere else while you were editing.', code: version === 0 ? 'exists' : 'stale', current: p });
-  db.prepare(
-    `INSERT INTO pr_store_profiles (store_id, audience, price_min_minor, price_max_minor, price_currency, ship_to, warehouses_json, max_delivery_days, avoid_categories_json, avoid_terms_json, include_categories_json, keywords_json, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-     ON CONFLICT (store_id) DO UPDATE SET audience = excluded.audience, price_min_minor = excluded.price_min_minor, price_max_minor = excluded.price_max_minor,
-       price_currency = excluded.price_currency, ship_to = excluded.ship_to, warehouses_json = excluded.warehouses_json, max_delivery_days = excluded.max_delivery_days,
-       avoid_categories_json = excluded.avoid_categories_json, avoid_terms_json = excluded.avoid_terms_json, include_categories_json = excluded.include_categories_json,
-       keywords_json = excluded.keywords_json, updated_at = excluded.updated_at, version = pr_store_profiles.version + 1`,
-  ).run(
-    store.id, next.audience, next.priceMin, next.priceMax, store.currency, next.shipTo, JSON.stringify(next.warehouses), next.maxDeliveryDays,
-    JSON.stringify(next.avoidCategories), JSON.stringify(next.avoidTerms), JSON.stringify(next.includeCategories), JSON.stringify(next.keywords), now.toISOString(),
-  );
-  const was = { ...p, shipTo: p.shipToDefault ? null : p.shipTo }; // the stored ship-to: null is the default
-  const moved = (['audience', 'priceMin', 'priceMax', 'shipTo', 'maxDeliveryDays', ...LISTS] as const)
-    .filter((k) => JSON.stringify(was[k]) !== JSON.stringify(next[k]))
-    .map((k) => [`pr.${k}`, was[k], next[k]] as [string, unknown, unknown]);
-  logChanges(db, { at: now.toISOString(), actor: 'owner', store: { id: store.id, name: store.name } }, moved);
+  const band = has('priceMin') || has('priceMax') || !p.priceSaved ? [next.priceMin, next.priceMax, store.currency] : [p.priceSaved.min, p.priceSaved.max, p.priceSaved.currency];
+  tx(db, () => {
+    db.prepare(
+      `INSERT INTO pr_store_profiles (store_id, audience, price_min_minor, price_max_minor, price_currency, ship_to, warehouses_json, max_delivery_days, avoid_categories_json, avoid_terms_json, include_categories_json, keywords_json, discount_pct, return_rate_pct, refund_pct, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT (store_id) DO UPDATE SET audience = excluded.audience, price_min_minor = excluded.price_min_minor, price_max_minor = excluded.price_max_minor,
+         price_currency = excluded.price_currency, ship_to = excluded.ship_to, warehouses_json = excluded.warehouses_json, max_delivery_days = excluded.max_delivery_days,
+         avoid_categories_json = excluded.avoid_categories_json, avoid_terms_json = excluded.avoid_terms_json, include_categories_json = excluded.include_categories_json,
+         keywords_json = excluded.keywords_json, discount_pct = excluded.discount_pct, return_rate_pct = excluded.return_rate_pct, refund_pct = excluded.refund_pct,
+         updated_at = excluded.updated_at, version = pr_store_profiles.version + 1`,
+    ).run(
+      store.id, next.audience, ...band, next.shipTo, JSON.stringify(next.warehouses), next.maxDeliveryDays, JSON.stringify(next.avoidCategories),
+      JSON.stringify(next.avoidTerms), JSON.stringify(next.includeCategories), JSON.stringify(next.keywords), next.discountPct ?? null, next.returnRatePct ?? null, next.refundPct ?? null,
+      now.toISOString(),
+    );
+    const was = { ...p, shipTo: p.shipToDefault ? null : p.shipTo }; // the stored ship-to: null is the default
+    const moved = (['audience', 'priceMin', 'priceMax', 'shipTo', 'maxDeliveryDays', ...LISTS, ...PERCENTS] as const)
+      .filter((k) => JSON.stringify(was[k]) !== JSON.stringify(next[k]))
+      .map((k) => [`pr.${k}`, was[k], next[k]] as [string, unknown, unknown]);
+    logChanges(db, { at: now.toISOString(), actor: 'owner', store: { id: store.id, name: store.name } }, moved);
+  });
   return getProfile(db, store);
 }

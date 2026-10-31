@@ -2,6 +2,8 @@
 import { DEFAULT_JOBS } from '@frontline/agents';
 import { AGENT_ROLES, INTEGRATION_KINDS, type ConfigImpact, type IntegrationKind, type StoreUpdate } from '@frontline/shared';
 import type { Db } from '../db';
+import { storeProducts } from '../product-research/evaluate';
+import { defaultShipTo } from '../product-research/profile';
 import { getStore, setBySync } from '../stores';
 
 const count = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
@@ -15,6 +17,8 @@ export function storeImpact(db: Db, storeId: string | undefined, u: StoreUpdate)
   if (!s) return [];
   const out: ConfigImpact[] = [];
   const say = (setting: string, text: string) => out.push({ setting, storeId, text });
+  const products = () => storeProducts(db, storeId).length;
+  const reevaluates = (setting: string) => products() && say(setting, `Re-evaluates Product Research fit for ${count(products(), 'product')} in the background`);
 
   // Fees are read when profit is computed, so every order's profit moves (analytics.ts `loadRows`).
   if ((u.feePercent !== undefined && u.feePercent !== (s.feePercent ?? 0)) || (u.feePerOrder !== undefined && u.feePerOrder !== (s.feePerOrder ?? 0)))
@@ -37,7 +41,13 @@ export function storeImpact(db: Db, storeId: string | undefined, u: StoreUpdate)
       );
       if (asked) say('store.currency', `Expires ${count(asked, 'waiting request')} priced in ${s.currency}`);
     }
+    // ST-28: the re-evaluation job (config/apply.ts), and the ship-to that follows the currency while it's the default.
+    const [from, to] = [defaultShipTo(s.currency), defaultShipTo(u.currency)];
+    if (from !== to && !db.prepare('SELECT ship_to FROM pr_store_profiles WHERE store_id = ?').get(storeId)?.ship_to)
+      say('store.currency', to ? `Product Research ships to ${to} instead of ${from ?? 'nowhere yet'}: ${u.currency}'s main country` : `Product Research has no ship-to for ${u.currency}: costs stay unknown until you pick one in the research profile`);
+    reevaluates('store.currency');
   }
+  if ((u.niche && u.niche !== s.niche) || ((u.niche ?? s.niche) === 'other' && u.nicheDetail !== undefined && u.nicheDetail !== s.nicheDetail)) reevaluates('store.niche');
 
   // A live store's orders are re-dated into the new zone's days (`setStoreTimezone`); a demo store's keep this computer's.
   if (u.timezone && u.timezone !== s.timezone && s.connected && !setBySync(db, storeId, 'timezone')) {

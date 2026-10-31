@@ -70,7 +70,8 @@ test('the fee impact counts every order, and each currency line matches what the
 
   // A demo store's campaigns and sample requests stay as they are (`setStoreCurrency` touches them only on a live store).
   expect(db.prepare("SELECT count(*) AS n FROM campaigns WHERE store_id = 'peak' AND daily_budget > 0").get()!.n).not.toBe(0);
-  expect(await impacts(app, 'peak', { currency: 'EUR' })).toEqual(["Totals across stores convert Peak Fit's figures from EUR"]);
+  const noShipTo = 'Product Research has no ship-to for EUR: costs stay unknown until you pick one in the research profile';
+  expect(await impacts(app, 'peak', { currency: 'EUR' })).toEqual(["Totals across stores convert Peak Fit's figures from EUR", noShipTo]);
 
   goLive(db, 'glow');
   connect(db, 'meta_ads', 'glow');
@@ -84,8 +85,10 @@ test('the fee impact counts every order, and each currency line matches what the
     'Meta Ads history is pulled again from the start on the next sync',
     `${budgets} campaign${budgets === 1 ? '' : 's'} show a daily budget of 0 until the next ad sync reads ${budgets === 1 ? 'it' : 'them'} again`,
     `Expires ${asked} waiting request${asked === 1 ? '' : 's'} priced in USD`,
+    noShipTo,
   ]);
   expect((await save(app, 'glow', { currency: 'EUR' })).status).toBe(200);
+  expect(((await send(app, 'GET', '/api/pr/profile?store=glow')).body as { shipTo: string | null }).shipTo).toBeNull(); // the default followed the currency
   expect(db.prepare("SELECT count(*) AS n FROM campaigns WHERE store_id = 'glow' AND daily_budget > 0").get()!.n).toBe(0);
   expect(db.prepare("SELECT count(*) AS n FROM orders WHERE store_id = 'glow' AND fx_rate IS NOT NULL").get()!.n).toBe(0);
   expect(db.prepare("SELECT count(*) AS n FROM approvals WHERE store_id = 'glow' AND status = 'denied'").get()!.n).toBe(asked);

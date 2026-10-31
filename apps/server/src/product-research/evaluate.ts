@@ -85,7 +85,7 @@ export function evaluate(db: Db, store: Store, productId: string, now = new Date
 }
 
 /** The catalog products a store may see (shared or its own; never sample rows or merged-away products). */
-const storeProducts = (db: Db, storeId: string) =>
+export const storeProducts = (db: Db, storeId: string) =>
   db
     .prepare(
       `SELECT DISTINCT l.product_id FROM pr_listings l JOIN pr_products p ON p.id = l.product_id

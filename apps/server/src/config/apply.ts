@@ -5,7 +5,9 @@ import { Hono } from 'hono';
 import type { ConfigChange } from '@frontline/shared';
 import { tx, type Db } from '../db';
 import { publish } from '../live';
+import { evaluateStore } from '../product-research/evaluate';
 import { rank } from '../product-research/facts';
+import { getStore } from '../stores';
 import { toChange } from './changes';
 
 /** The background job of each setting id that has one. ST-16 and ST-28 add theirs; a job must be safe to run twice. */
@@ -16,6 +18,20 @@ export const rankedProducts = (db: Db) => db.prepare('SELECT id FROM pr_products
 
 // The display currency moved (ST-16): All-stores facts are kept in it (facts.ts factKeys), so every product ranks again.
 JOBS.set('baseCurrency', (db) => tx(db, () => rankedProducts(db).forEach((id) => rank(db, id))));
+
+// A store's currency moved (ST-28): costs, the band and a default ship-to are in it, so its products rank and evaluate
+// again. Every change goes through `setStoreCurrency` (the owner's save and a sync's), which writes this row.
+JOBS.set('store.currency', (db, c) => {
+  const s = c.storeId ? getStore(db, c.storeId) : undefined;
+  if (s) evaluateStore(db, s, { rerank: true });
+});
+// Its niche moved (a custom one's words included): in or outside the niche is part of fit.
+const niche = (db: Db, c: ConfigChange) => {
+  const s = c.storeId ? getStore(db, c.storeId) : undefined;
+  if (s) evaluateStore(db, s);
+};
+JOBS.set('store.niche', niche);
+JOBS.set('store.nicheDetail', niche);
 
 /** Keyed by change row: one run at a time per row. */
 const running = new Set<string>();

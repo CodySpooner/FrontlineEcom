@@ -9,8 +9,9 @@ const unknown = (note: string | null = null): PrEconInput => ({ value: null, tag
 
 /**
  * The base inputs before the owner's figures (decision 13): the store's own price when it sells the product, the
- * cheapest Verified offer's cost and shipping to the store's ship-to, the store's fee settings, and assumptions that
- * change nothing (no discount, no returns). Everything else is unknown.
+ * cheapest Verified offer's cost and shipping to the store's ship-to, the store's fee settings, and the store's default
+ * assumptions from its research profile, else ones that change nothing (no discount, no returns). Everything else is
+ * unknown.
  */
 function derived(db: Db, store: Store, productId: string): { inputs: Record<PrEconField, PrEconInput>; rateDate: string | null } {
   const digits = minorDigits(store.currency) ?? 2;
@@ -28,17 +29,19 @@ function derived(db: Db, store: Store, productId: string): { inputs: Record<PrEc
   const converted = verified && offer.currency !== store.currency;
   const fees = store.feePercent !== undefined || store.feePerOrder !== undefined;
   const noOffer = to ? `No verified offer to ${to} yet` : 'Pick a ship-to country in the research profile';
+  const d = db.prepare('SELECT discount_pct, return_rate_pct, refund_pct FROM pr_store_profiles WHERE store_id = ?').get(store.id);
+  const assume = (v: unknown, none: number, note: string) => (v == null ? known(none, 'assumption', note) : known(Number(v), 'assumption', `Your assumption · ${store.name} default`));
   return {
     inputs: {
       price: own ? known(minor(Number(own.price)), 'owner', "Your store's price") : unknown('Needs a selling price'),
-      discountPct: known(0, 'assumption', 'No discount'),
+      discountPct: assume(d?.discount_pct, 0, 'No discount'),
       supplierCost: verified ? known(Number(f!.unit_minor), 'verified', quote) : unknown(noOffer),
       shipping: verified ? known(Number(f!.ship_minor), 'verified', quote) : unknown(noOffer),
       feePercent: fees ? known(store.feePercent ?? 0, 'owner', 'Store settings') : unknown('Store fees not set'),
       feePerOrder: fees ? known(minor(store.feePerOrder ?? 0), 'owner', 'Store settings') : unknown('Store fees not set'),
       duties: unknown('Unknown by default'),
-      returnRatePct: known(0, 'assumption', 'No returns'),
-      refundPct: known(100, 'assumption', 'Full refund on a return'),
+      returnRatePct: assume(d?.return_rate_pct, 0, 'No returns'),
+      refundPct: assume(d?.refund_pct, 100, 'Full refund on a return'),
       returnCost: unknown(),
       otherCosts: unknown(),
       adCost: unknown(),

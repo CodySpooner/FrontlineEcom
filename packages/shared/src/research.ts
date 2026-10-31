@@ -134,9 +134,13 @@ export const PR_FLAG_KIND_LABEL: Record<PrFlagKind, string> = {
 export interface PrStoreProfile {
   storeId: string;
   audience: string | null;
+  /** The price band in the store's currency (`priceCurrency`): converted at the stored rate when it was saved in another. */
   priceMin: number | null;
   priceMax: number | null;
   priceCurrency: string;
+  /** The band as saved, when that was in another currency than the store's now (settings ST-28). With no rate between
+   * them, priceMin and priceMax are null and fit leaves the band out. */
+  priceSaved?: { min: number | null; max: number | null; currency: string; converted: boolean } | null;
   /** ISO country every cost, delivery time and fulfillment status is for; null until the owner picks one. */
   shipTo: string | null;
   /** True while shipTo is the default from the store's currency. */
@@ -149,6 +153,11 @@ export interface PrStoreProfile {
   includeCategories: string[];
   keywords: string[];
   updatedAt: string | null;
+  /** The store's default assumptions for a product's economics, in percent (settings ST-28); null keeps the built-in
+   * ones (no discount, no returns, a full refund on a return). A product's own figure wins. */
+  discountPct?: number | null;
+  returnRatePct?: number | null;
+  refundPct?: number | null;
   /** The profile row's version (0 before the first save): PUT /api/pr/profile sends it back (409 stale, 428 without). */
   version?: number;
 }
