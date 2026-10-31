@@ -1,5 +1,14 @@
 `frontline-logo.png` is the owner's `docs/reference/frontline-logo.png`, with alpha values ≤ 8 cleared and the visible bounds cropped (x=21, y=467, 1222×285). The lettering and colors are unchanged. The office projects this local asset with crisp layered light and scanline sprites; it needs no external image service.
 
+## Field specialists (ECO-48 / ECO-49, 2026-10-31)
+
+All eight role costumes are original procedural pixel art in `src/ecosystem/fieldCharacters.ts`.
+They share the existing 48 × 64, ten-pose, four-direction atlas and portrait painter. No new image
+service, external download or copied character art is used. The owner's local third-party reference
+informed proportions, layered materials and value clusters only; its pixels and character identities
+are not bundled. Saved appearance variations remain compatible. Unknown roles retain the original
+archetype painter. The runtime atlas is generated locally and remains at most 3840 × 3840 for 30 seats.
+
 ## Night city backdrop (ECO-30)
 
 night-city.png is original art generated with the built-in image_gen tool on 2026-10-26, bundled locally for offline rendering. No third-party logos or text. Prompt:

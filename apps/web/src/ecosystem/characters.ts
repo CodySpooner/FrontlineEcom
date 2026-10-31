@@ -1,4 +1,4 @@
-import { paintFieldSpecialist } from './fieldCharacters';
+import { FIELD_ROLES, paintFieldSpecialist } from './fieldCharacters';
 import { appearanceFor, type OfficeAppearance } from '@frontline/shared';
 
 export { appearanceFor };
@@ -29,7 +29,7 @@ export function paintCharacters(looks: OfficeAppearance[], roles: (string | unde
     const p = frameAt(animation, frame * (animation === 'walk' ? 110 : 230), direction as Direction, worker);
     c.save(); c.translate(p.x, p.y);
     if (direction % 2) { c.translate(CELL.width, 0); c.scale(-1, 1); }
-    if (roles[worker] === 'product_hunter') paintFieldSpecialist(c, resolveAppearance(look, String(worker)), animation, frame, direction >= 2);
+    if (FIELD_ROLES.includes(roles[worker] ?? '')) paintFieldSpecialist(c, resolveAppearance(look, String(worker)), animation, frame, direction >= 2, roles[worker]);
     else paintPerson(c, look, animation, frame, direction >= 2);
     c.restore();
   }
@@ -37,7 +37,7 @@ export function paintCharacters(looks: OfficeAppearance[], roles: (string | unde
 }
 export function paintPortrait(look: OfficeAppearance, role?: string) {
   const canvas = document.createElement('canvas'); canvas.width = CELL.width; canvas.height = CELL.height;
-  if (role === 'product_hunter') paintFieldSpecialist(canvas.getContext('2d')!, resolveAppearance(look, role), 'idle', 0, false);
+  if (FIELD_ROLES.includes(role ?? '')) paintFieldSpecialist(canvas.getContext('2d')!, resolveAppearance(look, role ?? ''), 'idle', 0, false, role);
   else paintPerson(canvas.getContext('2d')!, look, 'idle', 0, false);
   return canvas;
 }

@@ -31,7 +31,7 @@ export function DeployWizard({ agents, seats, onClose }: { agents: Agent[]; seat
         <div className="eco-form-grid"><Field label="Office name (optional)"><input className={inputClass} value={name} onChange={(e) => setName(e.target.value)} maxLength={60} placeholder={AGENT_ROLES[agent.role].name} /></Field>
           <Field label="Department"><select className={inputClass} value={department} onChange={(e) => chooseDepartment(e.target.value as OfficeDepartment)}>{OFFICE_DEPARTMENTS.map((d) => <option key={d.id} value={d.id}>{d.name} · {free.filter((desk) => desk.department === d.id).length} free</option>)}</select></Field>
           <Field label="Workstation"><select className={inputClass} required value={deskId} onChange={(e) => setDeskId(e.target.value)}><option value="" disabled>No available workstation</option>{free.filter((d) => d.department === department).map((d) => <option key={d.id}>{d.id}</option>)}</select></Field></div>
-        <h3 className="eco-panel-heading">Character appearance</h3><AppearanceEditor value={appearance} onChange={setAppearance} />
+        <h3 className="eco-panel-heading">Character appearance</h3><AppearanceEditor role={agent.role} value={appearance} onChange={setAppearance} />
         <p className="eco-profile-copy">Your worker enters through reception and walks to this desk. Existing tasks and approval rules continue unchanged.</p>
       </>}
       {deploy.error && <ErrorState message={deploy.error.message} />}

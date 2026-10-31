@@ -75,7 +75,7 @@ export function OfficeScene({ office, onSelect, focus, display, seats, persist =
     <div ref={host} className="eco-canvas" data-frames={performance?.frames} data-elapsed-ms={performance?.elapsedMs} data-scale={performance?.scale} />
     <Minimap viewport={performance?.viewport} onFocus={(tile) => scene.current?.focus(tile)} />
     {inspected && <div className="eco-worker-preview" id="eco-worker-preview" role="tooltip" style={{ borderColor: inspectedDepartment?.color }}>
-      <WorkerPortrait appearance={inspected.seat.appearance} name={inspected.name} agentId={inspected.seat.agentId} />
+      <WorkerPortrait appearance={inspected.seat.appearance} name={inspected.name} agentId={inspected.seat.agentId} role={inspected.role} />
       <div><small>{inspectedDepartment?.name}</small><strong>{inspected.name}</strong><span>{inspected.status?.replaceAll('_', ' ') ?? 'idle'}</span></div>
     </div>}
     {performance && <small className="eco-fps">{Math.round(performance.scale * 100)}% · {Math.round(performance.fps)} FPS · {performance.mode}{performance.scale < .65 ? ' · Zoom in for worker labels' : ''}</small>}

@@ -12,7 +12,7 @@ export function ActivityFeed({ office, seats, onFocus, onPreview }: { office: Of
     {!office.events.length && <p>No task activity yet. Assign work to a deployed agent to get started.</p>}
     {office.events.map((e) => { const seat=seats.find((s)=>s.agentId===e.agentId); return <article key={e.id} className={`eco-event ${e.type.includes('failed') ? 'eco-event-error' : ''}`}>
       <header><strong>{LABELS[e.type]}</strong><time dateTime={e.at}>{ago(e.at)}</time></header>
-      <div className="eco-event-person">{seat && <WorkerPortrait appearance={seat.appearance} name={name(e.agentId)} agentId={e.agentId} />}<div>
+      <div className="eco-event-person">{seat && <WorkerPortrait appearance={seat.appearance} name={name(e.agentId)} agentId={e.agentId} role={office.agents.find((a) => a.id === e.agentId)?.role} />}<div>
         {seat && !seat.archived ? <button onClick={() => onFocus(e.agentId)} title="Focus worker">{name(e.agentId)}</button> : <OfficeLink onPreview={onPreview && (() => onPreview(e.agentId))} to={`/agents/${encodeURIComponent(e.agentId)}`}>{name(e.agentId)}</OfficeLink>}
         {e.toAgentId && <small> → {name(e.toAgentId)}</small>}
       </div></div><p>{e.summary}</p>

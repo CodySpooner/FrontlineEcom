@@ -88,6 +88,8 @@ Anything else in another lane → append to that lane's backlog **Inbox** (`- [ 
 ## Blocked
 
 ## Done
+- 2026-10-31 ECO-49: All eight roles now use original field-specialist costumes, instruments and layered materials, retaining deterministic saved cosmetics and distinct human/synthetic head treatments. Explicit agent roles drive matching scene/profile/feed/deploy/editor portraits; legacy unknown-role fallback retained. All-role pose bounds, legacy tests, browser cast/fit/close review (.agent/eco-49-*.png), web build and pnpm check pass (336 files, 2595 passed, 1 skipped).
+
 - 2026-10-31 ECO-48: Original procedural Product Hunter rebuilt with long survey coat, layered fabric/metal, smaller face, scanner, sample satchel and articulated limbs. Integrated all ten poses/four directions, shared atlas and portrait. Live selection/focus/approval and 30-worker demo inspected (.agent/eco-48-*.png); web build and pnpm check pass (336 files, 2591 passed, 1 skipped). An unrelated analytics timeout under concurrent checks passed with six workers.
 
 - 2026-10-31 ECO-47: Audited sprites, world, state, camera and lifecycle; inspected the supplied character reference. Original field-headquarters direction and eight role concepts in docs/features/ecosystem-art-direction.md. Orca live office inspected (.agent/eco-47-before.png / after.png); baseline pnpm check 334 files, 2586 passed, 1 skipped. No runtime changes.
@@ -277,7 +279,7 @@ Items (stages from brief §11):
   one design concept per role) to `docs/features/ecosystem-art-direction.md`.
 - [x] ECO-48 Stage 2 — Prove one character (e.g. Product Hunter) at target quality inside the real office: readable at
   fit zoom, rewarding close up, every state animated, matches the lighting. Before/after.
-- [ ] ECO-49 Stage 3 — Full cast: all eight roles get original, role-coherent characters (silhouette, gear, posture,
+- [x] ECO-49 Stage 3 — Full cast: all eight roles get original, role-coherent characters (silhouette, gear, posture,
   role tools) with per-agent variation; old saved appearances still load; portraits match.
 - [ ] ECO-50 Stage 3 — World concept and composition: clear focal point, readable regions, pathways, foreground/main/
   background depth; role spaces functional only where a real feature backs them.
