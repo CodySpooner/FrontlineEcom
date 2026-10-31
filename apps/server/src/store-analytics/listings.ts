@@ -2,7 +2,7 @@
 // sorted over the whole matching set and paged at 25 (decision 38). A row's state is current; its sales are the period's,
 // from the v1 functions narrowed to that product.
 import type { SQLInputValue } from 'node:sqlite';
-import { SA_LISTING_FILTERS, SA_LISTING_SORTS, SA_LISTING_STATUSES, type SaFilterScope, type SaFilters, type SaListingRow, type SaListings, type SaListingSort, type SaListingStatus, type SaStockState, type SaValue, type SaVariants } from '@frontline/shared';
+import { SA_LISTING_FILTERS, SA_LISTING_SORTS, SA_LISTING_STATUSES, type SaFilterScope, type SaMetricId, type SaFilters, type SaListingRow, type SaListings, type SaListingSort, type SaListingStatus, type SaStockState, type SaValue, type SaVariants } from '@frontline/shared';
 import { addDays } from '../dates';
 import type { Db } from '../db';
 import { hash, mulberry32 } from '../demo';
@@ -13,6 +13,12 @@ import type { StorePeriod } from './period';
 import { CANONICAL, salesMetrics, sliceSql, type RefundBasis, type Slice } from './sales';
 
 export const PAGE_SIZE = 25;
+/** The metrics a listing row carries; their definitions go with an export (SA-85) and a comparison (SA-86). */
+export const LISTING_METRICS: SaMetricId[] = ['units', 'net_sales', 'refunds', 'refund_rate', 'contribution_before_ads', 'cost_coverage'];
+
+/** Whether every one of `ids` (distinct) is a product of the store. */
+export const inStore = (db: Db, storeId: string, ids: string[]) =>
+  Number(db.prepare('SELECT count(*) AS n FROM products WHERE store_id = ? AND id IN (SELECT value FROM json_each(?))').get(storeId, JSON.stringify(ids))!.n) === ids.length;
 const METRIC_SORTS = new Set<SaListingSort>(['units', 'net_sales', 'refunds']);
 
 type Query = { status?: string; q?: string; sort?: string; page?: string } & { [K in keyof typeof SA_LISTING_FILTERS]?: string };

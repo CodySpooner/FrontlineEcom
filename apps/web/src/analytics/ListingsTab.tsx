@@ -2,15 +2,16 @@
 // and sorted over the whole matching set by the API (SA-66, SA-80). Status, search and the tab's own filters live in
 // the URL beside the page's; Channel and Collection are the page's filters. A row opens the product drawer through
 // `onOpen` (SA-88): without it rows aren't interactive (decision 33). A product with variants expands to them (SA-83);
-// Columns adds optional ones (SA-84). Export downloads the matching rows, or the checked ones (SA-85).
+// Columns adds optional ones (SA-84). Export downloads the matching rows, or the checked ones (SA-85); 2 to 4 checked
+// ones open side by side in Compare (SA-86).
 import { Fragment, useDeferredValue, useState, type ReactNode } from 'react';
 import { useSearchParams } from 'react-router';
 import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, Columns3, Download, Info, Plus, Search, TriangleAlert } from 'lucide-react';
 import { SA_LISTING_STATUSES, SA_REASONS, SA_STOCK_LABELS as STOCK, SA_LISTING_FILTERS, type SaListingRow, type SaListingStatus, type SaValue } from '@frontline/shared';
 import { hidePopover, Popover, rove } from '../agents/Popover';
-import { Button, buttonClass, cx, ErrorState, LoadingState, Segmented } from '../components/ui';
+import { Button, buttonClass, cx, Dialog, ErrorState, LoadingState, Segmented } from '../components/ui';
 import { ago, cents, money, pct } from '../lib/format';
-import { saUrl, useSaCollections, useSaContext, useSaListings, useSaVariants } from './api';
+import { saUrl, useSaCollections, useSaCompare, useSaContext, useSaListings, useSaVariants } from './api';
 import { FilterScope } from './FilterScope';
 import { channelsOf, Option, useFilters } from './Filters';
 import { range } from './Pickers';
@@ -152,12 +153,80 @@ function VariantRows({ s, id, currency, extra }: { s: AnalyticsPage & { store: s
   );
 }
 
+/** SA-86: the products side by side, each number its Listings row's: one period, currency and set of definitions. */
+function Compare({ s, ids, currency, onClose }: { s: AnalyticsPage & { store: string }; ids: string[]; currency?: string; onClose: () => void }) {
+  const q = useSaCompare(s.store, { ...periodParams(s), compare: 'none', products: ids.join(',') });
+  const d = q.data;
+  const money0 = (n: number) => money(n, currency);
+  const line = (label: string, cell: (r: SaListingRow) => ReactNode) => (
+    <tr>
+      <th scope="row" className="py-[7px] pr-3 text-left text-xs font-normal whitespace-nowrap text-muted">
+        {label}
+      </th>
+      {d!.rows.map((r) => (
+        <td key={r.id} className={R}>
+          {cell(r)}
+        </td>
+      ))}
+    </tr>
+  );
+  return (
+    <Dialog open onClose={onClose} title="Compare products" subtitle={d ? `${range(d.period.from, d.period.to)} · the Listings table's numbers, one definition each` : undefined} width={760}>
+      <div className="flex flex-col gap-3 overflow-x-auto px-5 py-4">
+        {q.isError ? (
+          <ErrorState message="Couldn't load the comparison." onRetry={() => q.refetch()} />
+        ) : !d ? (
+          <LoadingState rows={6} />
+        ) : (
+          <>
+            <table aria-label="Compared products" className="w-full border-collapse text-[12.5px] tabular-nums [&_td]:border-b [&_td]:border-[#1c1c21] [&_td]:py-[7px] [&_td]:pl-3 [&_th]:border-b [&_th]:border-[#1c1c21]">
+              <thead>
+                <tr>
+                  <th />
+                  {d.rows.map((r) => (
+                    <th key={r.id} scope="col" className="max-w-[160px] py-2 pl-3 text-right align-bottom text-xs font-semibold">
+                      <span className="block truncate" title={r.title}>
+                        {r.title}
+                      </span>
+                      <span className="block font-normal text-muted">{r.status.charAt(0).toUpperCase() + r.status.slice(1)}</span>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {line('Price', (r) => cents(r.price, currency))}
+                {line('Stock', (r) => {
+                  const [text, tone, title] = stock(r);
+                  return (
+                    <span className={tone} title={title}>
+                      {text}
+                    </span>
+                  );
+                })}
+                {line('Units', (r) => val(r.units, (n) => n.toLocaleString('en-US')))}
+                {line('Net sales', (r) => val(r.netSales, money0))}
+                {line('Refunds', (r) => val(r.refunds, money0))}
+                {line('Refund rate', (r) => val(r.refundRate, (n) => pct(n * 100)))}
+                {line('Contribution', (r) => val(r.contribution, money0))}
+                {line('Cost coverage', (r) => val(r.costCoverage, (n) => pct(n * 100)))}
+              </tbody>
+            </table>
+            <p className="text-[11.5px] text-muted">Definitions: {d.definitions.join(', ')}</p>
+            <FilterScope scope={d.scope} />
+          </>
+        )}
+      </div>
+    </Dialog>
+  );
+}
+
 export function ListingsTab({ s, onOpen }: { s: AnalyticsPage & { store: string }; onOpen?: (id: string) => void }) {
   const [params, setParams] = useSearchParams();
   const ctx = useSaContext(s.store).data;
   const collections = useSaCollections(s.store);
   const { toggle, has } = useFilters(s);
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
+  const [comparing, setComparing] = useState<string[]>();
   const flip = (id: string) => setExpanded((x) => (x.has(id) ? new Set([...x].filter((y) => y !== id)) : new Set([...x, id])));
   const get = (k: string) => params.get(k) ?? '';
   /** One of the tab's own keys (empty leaves the URL), back to page 1; typing in search replaces the history entry. */
@@ -470,6 +539,9 @@ export function ListingsTab({ s, onOpen }: { s: AnalyticsPage & { store: string 
             <Download aria-hidden className="size-3.5" />
             Export selected
           </a>
+          <Button size="sm" disabled={picked.size < 2 || picked.size > 4} title={picked.size < 2 || picked.size > 4 ? 'Check 2 to 4 listings to compare them' : undefined} onClick={() => setComparing([...picked])}>
+            Compare
+          </Button>
           <button type="button" onClick={() => setSel({ sig, ids: new Set() })} className={cx(buttonClass('ghost', 'sm'), 'ml-auto')}>
             Clear selection
           </button>
@@ -477,6 +549,7 @@ export function ListingsTab({ s, onOpen }: { s: AnalyticsPage & { store: string 
       )}
       {body}
       <FilterScope scope={d?.scope} />
+      {comparing && <Compare s={s} ids={comparing} currency={cur} onClose={() => setComparing(undefined)} />}
     </div>
   );
 }

@@ -22,12 +22,16 @@ const row = (i: number, more: Partial<SaListingRow> = {}): SaListingRow => ({
 });
 const ALL = Array.from({ length: 64 }, (_, i) => row(i + 1));
 
-/** A listings API over `rows`, 25 a page; `variants` answers a row's variants (SA-83). */
+/** A listings API over `rows`, 25 a page; `variants` answers a row's variants (SA-83); compare answers their rows (SA-86). */
 function render(rows: SaListingRow[], path = '/analytics?store=a&tab=listings', ui = <Analytics />, variants: () => unknown = () => ({ rows: [] })) {
   const fetch = stubApi((url) => {
     if (url === '/api/stores') return [{ id: 'a', name: 'Glow Haus' }];
     if (url.startsWith('/api/analytics/context')) return CTX;
     if (url.startsWith('/api/analytics/listings/')) return variants();
+    if (url.startsWith('/api/analytics/compare')) {
+      const ids = new URL(url, 'http://x').searchParams.get('products')!.split(',');
+      return { period: PERIOD, definitions: ['units@1', 'net_sales@1'], rows: ids.map((id) => rows.find((r) => r.id === id)), scope: { applied: ['product'], ignored: [] } };
+    }
     if (url.startsWith('/api/analytics/listings')) {
       const page = Number(new URL(url, 'http://x').searchParams.get('page'));
       const counts = { active: rows.length, draft: 0, archived: 0, all: rows.length };
@@ -239,5 +243,34 @@ describe('Listings export (SA-85)', () => {
     fireEvent.click(item('stock', 'menuitemradio', 'Out of stock'));
     await screen.findByText(/^1–25 of 64/);
     expect(bar()).toBeNull(); // another matching set: the checks are dropped
+  });
+});
+
+describe('Compare (SA-86)', () => {
+  it('2 to 4 checked listings open side by side, in the order checked', async () => {
+    const rows = ALL.map((r, i) => (i === 2 ? { ...r, netSales: V(250), refundRate: V(null, { status: 'unavailable', note: 'Refunds not synced' }) } : r));
+    const fetch = render(rows);
+    await screen.findByText(/^1–25 of 64/);
+    const compare = () => screen.getByRole('button', { name: 'Compare' }) as HTMLButtonElement;
+    const check = (n: string) => fireEvent.click(screen.getByRole('checkbox', { name: `Select Product ${n}` }));
+    check('03');
+    expect(compare().disabled).toBe(true);
+    check('01');
+    fireEvent.click(compare());
+    const dialog = await screen.findByRole('dialog', { name: 'Compare products' });
+    const table = await within(dialog).findByRole('table', { name: 'Compared products' });
+    expect(fetch.mock.calls.map((c) => String(c[0])).find((u) => u.startsWith('/api/analytics/compare?'))).toContain('products=p3%2Cp1');
+    expect(within(table).getAllByRole('columnheader').map((th) => th.textContent)).toEqual(['', 'Product 03Active', 'Product 01Active']);
+    const line = (name: string) => [...within(table).getByRole('rowheader', { name }).parentElement!.querySelectorAll('td')].map((td) => td.textContent);
+    expect([line('Price'), line('Stock'), line('Net sales'), line('Refund rate')]).toEqual([['$10.00', '$10.00'], ['100', '100'], ['$250', '$100'], ['–', '0.0%']]);
+    expect(within(table).getByRole('rowheader', { name: 'Refund rate' }).parentElement!.querySelector('td span')!.getAttribute('title')).toBe('Refunds not synced');
+    expect(within(dialog).getByText('Definitions: units@1, net_sales@1')).toBeTruthy();
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Close' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    for (const n of ['02', '04']) check(n);
+    expect(compare().disabled).toBe(false); // 4
+    check('05');
+    expect([compare().disabled, compare().title]).toEqual([true, 'Check 2 to 4 listings to compare them']);
   });
 });

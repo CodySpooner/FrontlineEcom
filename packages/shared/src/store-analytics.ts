@@ -932,6 +932,15 @@ export interface SaVariants {
   note?: string;
 }
 
+/** SA-86: `GET /api/analytics/compare`, 2 to 4 products side by side as their Listings rows, in the order asked. */
+export interface SaProductCompare {
+  period: SaPeriod;
+  /** The rows' metric definitions, id@version: one set for every product. */
+  definitions: string[];
+  rows: SaListingRow[];
+  scope: SaFilterScope;
+}
+
 /** GET /api/analytics/listings: one page (25) of the store's matching products, sorted over all of them. */
 export interface SaListings {
   period: SaPeriod;

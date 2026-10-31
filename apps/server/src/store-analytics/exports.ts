@@ -3,7 +3,7 @@
 // app; at most `EXPORT_CAP` rows, the cap stated.
 import { SA_DATASET_STATUSES, SA_DATASETS, SA_FILTERS, SA_METRICS, SA_SOURCES, SA_STOCK_LABELS, saDef, type SaFilters, type SaFilterScope, type SaMetricId, type SaValue } from '@frontline/shared';
 import type { Db } from '../db';
-import { listings } from './listings';
+import { inStore, LISTING_METRICS, listings } from './listings';
 import type { StorePeriod } from './period';
 import type { RefundBasis } from './sales';
 import { datasetFreshness } from './sources';
@@ -69,8 +69,7 @@ const TAB: Record<string, [label: string, words?: Record<string, string>]> = {
  */
 export function exportListings(db: Db, storeId: string, query: Record<string, string | undefined>, sp: StorePeriod, filters: SaFilters, basis: RefundBasis, now = new Date()): { csv: string; name: string } | { error: string; status: 400 | 404 } {
   const picked = query.products ? [...new Set(query.products.split(',').filter(Boolean))] : undefined;
-  if (picked && Number(db.prepare('SELECT count(*) AS n FROM products WHERE store_id = ? AND id IN (SELECT value FROM json_each(?))').get(storeId, JSON.stringify(picked))!.n) !== picked.length)
-    return { error: 'A selected product is not in this store', status: 404 };
+  if (picked && !inStore(db, storeId, picked)) return { error: 'A selected product is not in this store', status: 404 };
   const f = picked ? { ...filters, product: picked } : filters;
   const l = listings(db, storeId, { ...query, page: '1' }, sp, f, basis, EXPORT_CAP);
   if (typeof l === 'string') return { error: l, status: 400 };
@@ -83,6 +82,6 @@ export function exportListings(db: Db, storeId: string, query: Record<string, st
     r.price, r.compareAt, r.stock, SA_STOCK_LABELS[r.stockState], r.coverDays,
     val(r.units), val(r.netSales), ...(before ? [val(r.previousNetSales)] : []), val(r.refunds), val(r.refundRate), val(r.contribution), val(r.costCoverage), r.syncedAt,
   ]);
-  const head = headBlock(db, storeId, sp, { scope: l.scope, filters: f, also: [...also, ...(picked ? [`Selection: ${picked.length} products`] : [])], metrics: ['units', 'net_sales', 'refunds', 'refund_rate', 'contribution_before_ads', 'cost_coverage'], rows: rows.length, total: l.total, now });
+  const head = headBlock(db, storeId, sp, { scope: l.scope, filters: f, also: [...also, ...(picked ? [`Selection: ${picked.length} products`] : [])], metrics: LISTING_METRICS, rows: rows.length, total: l.total, now });
   return { csv: csv(head, columns, rows), name: `listings-${storeId.replace(/[^\w-]/g, '-')}-${sp.period.from}-${sp.period.to}.csv` };
 }

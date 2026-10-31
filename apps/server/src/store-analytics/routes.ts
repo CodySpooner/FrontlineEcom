@@ -2,6 +2,7 @@ import { SA_METRICS, SA_SOURCES, type SaCollection, type SaContext, type SaMetri
 import { Hono } from 'hono';
 import type { Db } from '../db';
 import { annotations } from './annotations';
+import { compareProducts } from './compare';
 import { contributions } from './contributions';
 import { exportListings } from './exports';
 import { insights } from './insights';
@@ -166,6 +167,19 @@ export function storeAnalyticsRoutes(db: Db) {
       if (basis !== 'refund_day' && basis !== 'order_day') return c.json({ error: 'refunds must be refund_day or order_day' }, 400);
       const out = listingVariants(db, s.storeId, c.req.param('id'), sp, filters, basis);
       return out ? c.json(out) : c.json({ error: 'No such product in this store' }, 404);
+    })
+    // SA-86: products side by side, each number its Listings row's.
+    .get('/api/analytics/compare', (c) => {
+      const s = scoped(c);
+      if ('error' in s) return c.json({ error: s.error }, s.status);
+      const sp = storePeriod(db, s.storeId, (k) => c.req.query(k));
+      if (typeof sp === 'string') return c.json({ error: sp }, 400);
+      const filters = parseFilters(c.req.query('filters'));
+      if (typeof filters === 'string') return c.json({ error: filters }, 400);
+      const basis = c.req.query('refunds') ?? 'refund_day';
+      if (basis !== 'refund_day' && basis !== 'order_day') return c.json({ error: 'refunds must be refund_day or order_day' }, 400);
+      const out = compareProducts(db, s.storeId, c.req.query('products'), sp, filters, basis);
+      return 'error' in out ? c.json({ error: out.error }, out.status) : c.json(out);
     })
     // SA-85 (decision 35): the Listings table as CSV, every matching row (to the cap) or the selected products.
     .get('/api/analytics/export/listings', (c) => {
