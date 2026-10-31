@@ -4,6 +4,7 @@ import { addDays } from '../dates';
 import type { Db } from '../db';
 import { adMetrics } from './ads';
 import { costMetrics } from './costs';
+import { withLinked } from './links';
 import type { StorePeriod } from './period';
 import type { Scope } from './routes';
 import { salesMetrics, type RefundBasis, type Slice } from './sales';
@@ -51,7 +52,8 @@ export function setup(db: Db, storeId: string, sp: StorePeriod, filters: SaFilte
     : undefined;
   const picked = filters.product?.length && !demo ? filters.product : undefined;
   const products = picked && inCollections ? picked.filter((p) => inCollections.includes(p)) : (picked ?? inCollections);
-  const slice: Slice = { ...(filters.channel?.length && !demo ? { channels: filters.channel } : {}), ...(products ? { products } : {}) };
+  // SA-91: with the channel products linked to them
+  const slice: Slice = { ...(filters.channel?.length && !demo ? { channels: filters.channel } : {}), ...(products ? { products: withLinked(db, storeId, products) } : {}) };
   const compare = sp.compare && 'from' in sp.compare ? sp.compare : undefined;
   // With today in the period, the comparison's last day stops at the same clock time (decision 6).
   const cut = sp.period.partial && sp.cut && sp.fraction != null ? { at: sp.cut, fraction: sp.fraction } : undefined;

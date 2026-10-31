@@ -31,6 +31,10 @@ const MORE = [
 /** The board's two-letter channel marks; a site channel takes its platform's. */
 const SHORT: Record<string, string> = { shopify: 'SH', woocommerce: 'WC', tiktok_shop: 'TK', amazon: 'AZ', etsy: 'ET', walmart: 'WM' };
 const TINT: Record<string, string> = { shopify: 'border-good/35 text-[#b9f0c9]', tiktok_shop: 'border-[#9db4d6]/45 text-[#cbd9ef]' };
+/** SA-91: the one channel a product is listed on when that isn't the store's own (`own`): no store product is linked. */
+export const lone = (channels: { channel: string }[], own?: string) =>
+  channels[0] && channels.every((c) => c.channel === channels[0]!.channel) && channels[0].channel !== own ? channels[0].channel : undefined;
+
 /** The board's channel mark, two letters tinted by channel. */
 export function ChannelMark({ channel, platform, title }: { channel: string; platform?: string; title?: string }) {
   const kind = channel === 'site' ? (platform ?? '') : channel;
@@ -327,7 +331,8 @@ export function ListingsTab({ s, onOpen }: { s: AnalyticsPage & { store: string 
                 const none = r.units.value === 0 && r.netSales.value === 0;
                 const [text, tone, title] = stock(r);
                 const failed = r.channels.filter((c) => c.status === 'failed');
-                const sub = [r.sku, plural(r.variants, 'variant'), r.variants > 1 && r.variantsOut > 0 && `${r.variantsOut} out of stock`].filter(Boolean).join(' · ');
+                const only = lone(r.channels, channels[0]?.id);
+                const sub = [only && `${name(only)} only`, r.sku, plural(r.variants, 'variant'), r.variants > 1 && r.variantsOut > 0 && `${r.variantsOut} out of stock`].filter(Boolean).join(' · ');
                 const open = expanded.has(r.id);
                 return (
                   <Fragment key={r.id}>

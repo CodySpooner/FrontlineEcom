@@ -946,6 +946,16 @@ export interface SaProductChannel {
   refunds: SaValue;
 }
 
+/** SA-91 (decision 22): a channel's product rolled into a store product, and how the link was made. */
+export interface SaProductLink {
+  channel: string;
+  channelProductId: string;
+  title: string | null;
+  /** `platform_id`: the channel's documented id for the store's product; `owner`: the owner's mapping. */
+  method: 'platform_id' | 'owner';
+  createdAt: string;
+}
+
 /** SA-87: `GET /api/analytics/products/:id`, the product drawer's data for the period. */
 export interface SaProductDetail {
   period: SaPeriod;
@@ -965,6 +975,8 @@ export interface SaProductDetail {
   insights: SaInsight[];
   /** SA-89: the rules behind `insights` (the Rule card's "Flags when"). */
   rules: SaRule[];
+  /** SA-91: the channel products rolled into this one. */
+  links: SaProductLink[];
   scope: SaFilterScope;
 }
 

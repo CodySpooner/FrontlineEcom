@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { changeOf, SA_METRICS, saDef, type SaListingRow, type SaMetricId, type SaMetricResult, type SaProductDetail, type SaValue, type SaVariantRow } from '@frontline/shared';
 import { Analytics } from '../pages/Analytics';
@@ -31,12 +31,15 @@ const detail = (r: SaListingRow, more: Partial<SaProductDetail> = {}): SaProduct
   variants: { rows: [] },
   insights: [{ rule: 'stock_cover@1', kind: 'business', tone: 'warn', title: `${r.title}: ~5 days of stock`, detail: '38 left · 7.4 sold a day over the last 14 days', evidence: {}, target: { kind: 'product', id: r.id } }],
   rules: [{ id: 'stock_cover@1', name: 'Low stock cover', when: 'Stock lasts under 10 days', minSample: '5 units', datasets: ['orders', 'inventory'], metrics: [] }],
+  links: [],
   scope: { applied: [], ignored: [{ key: 'collection', reason: 'The drawer shows the one product' }] },
   ...more,
 });
 
-function render(path: string, more: Partial<SaProductDetail> = {}) {
-  const fetch = stubApi((url) => {
+function render(path: string, more: Partial<SaProductDetail> = {}, on?: (url: string, init?: RequestInit) => unknown) {
+  const fetch = stubApi((url, init) => {
+    const r = on?.(url, init);
+    if (r !== undefined) return r;
     if (url === '/api/stores') return [{ id: 'a', name: 'Glow Haus' }];
     if (url.startsWith('/api/analytics/context')) return CTX;
     if (url.startsWith('/api/analytics/products/')) return detail(ROWS.find((r) => url.startsWith(`/api/analytics/products/${r.id}?`))!, more);
@@ -179,3 +182,44 @@ describe('Variants and Channels tabs (SA-90)', () => {
   });
 });
 
+describe('Product links (SA-91)', () => {
+  const channels = async () => {
+    const d = await screen.findByRole('dialog', { name: 'Product 1' });
+    fireEvent.click(await within(d).findByRole('tab', { name: /^Channels/ }));
+    return within(within(d).getByRole('tabpanel', { name: 'Channels' }));
+  };
+  const linkCall = (fetch: ReturnType<typeof render>) => fetch.mock.calls.find(([u]) => u === '/api/analytics/product-links')?.[1];
+
+  it("the channel products rolled into it and how each link was made; the owner's unlinks and the views reload", async () => {
+    const fetch = render('/analytics?store=a&tab=listings&product=p1', {
+      links: [
+        { channel: 'tiktok_shop', channelProductId: 'tt-9001', title: 'Silk Sleep Scrunchie Set', method: 'owner', createdAt: '2026-10-01T12:00:00.000Z' },
+        { channel: 'tiktok_shop', channelProductId: 'tt-9003', title: null, method: 'platform_id', createdAt: '2026-09-01T12:00:00.000Z' },
+      ],
+    });
+    const t = await channels();
+    expect(t.getByText('Silk Sleep Scrunchie Set').parentElement!.textContent).toBe('TKSilk Sleep Scrunchie Set· TikTok Shop product tt-9001, linked by you on Oct 1Unlink');
+    expect(t.getByText('tt-9003').parentElement!.textContent).toBe("TKtt-9003· TikTok Shop product tt-9003, linked by TikTok Shop's own product id");
+    expect(t.queryByRole('searchbox')).toBeNull(); // a store product: nothing to link
+    const loads = () => fetch.mock.calls.filter(([u]) => String(u).startsWith('/api/analytics/products/p1?')).length;
+    const before = loads();
+    fireEvent.click(t.getByRole('button', { name: 'Unlink' }));
+    await waitFor(() => expect(loads()).toBeGreaterThan(before));
+    expect([linkCall(fetch)!.method, JSON.parse(String(linkCall(fetch)!.body))]).toEqual(['DELETE', { store: 'a', channelProductId: 'tt-9001' }]);
+  });
+
+  it('a product listed on another channel only finds a store product and links to it; a refusal shows', async () => {
+    const fetch = render('/analytics?store=a&tab=listings&product=p1', { row: row(1, { channels: [{ channel: 'tiktok_shop', status: 'active', error: null }] }) }, (url) =>
+      url === '/api/analytics/product-links' ? new Response(JSON.stringify({ error: 'Other products are linked to that one' }), { status: 400 }) : undefined,
+    );
+    const t = await channels();
+    expect(t.getByText(/^Listed on TikTok Shop only/)).toBeTruthy();
+    fireEvent.change(t.getByRole('searchbox', { name: 'Find the store product' }), { target: { value: 'Product' } });
+    const link = await t.findByRole('button', { name: 'Link' });
+    expect(link.parentElement!.textContent).toBe('Product 2p2Link'); // never itself
+    expect(fetch.mock.calls.some(([u]) => String(u).startsWith('/api/analytics/listings?') && String(u).includes('q=Product') && String(u).includes('status=all'))).toBe(true);
+    fireEvent.click(link);
+    expect(await t.findByText('Other products are linked to that one')).toBeTruthy();
+    expect([linkCall(fetch)!.method, JSON.parse(String(linkCall(fetch)!.body))]).toEqual(['PUT', { store: 'a', channelProductId: 'p1', productId: 'p2' }]);
+  });
+});

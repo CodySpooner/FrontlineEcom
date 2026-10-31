@@ -85,7 +85,7 @@ describe('Listings table (SA-82)', () => {
       ['HydraSKU-1 · 1 variant', 'SH', 'Active', '$10.00', '38 · ~5 d', '5', '$100', '$00.0%', '$40', '–'],
       ['ClaySKU-2 · 1 variant', 'SH', 'Active', '$10.00', '0 · out', '0', 'No sales', '–', '–', '–'],
       ['Jade2 variants · 1 out of stock', 'SH', 'Active', '$10.00', '57 · 1 out', '5', '$100', '$00.0%', '$40', '–'],
-      ['ScrunchieSKU-4 · 1 variant', 'TK', 'Active', '$10.00', 'Not tracked', '5', '$100', '$00.0%', '$40', 'Failed'],
+      ['ScrunchieTikTok Shop only · SKU-4 · 1 variant', 'TK', 'Active', '$10.00', 'Not tracked', '5', '$100', '$00.0%', '$40', 'Failed'],
       ['AmazonSKU-5 · 1 variant', 'SH', 'Active', '$10.00', '120 · FBA', '5', '$100', '$00.0%', '$40', '–'],
       ['DropshipSKU-6 · 1 variant', 'SH', 'Draft', '$10.00', 'Supplier-managed', '5', '$100', '$00.0%', '$40', '–'],
       ['RetinolSKU-7 · 1 variant', 'SH', 'Active', '$39.00', '100', '5', '$100', '$782.1%', 'No unit cost', '6 min'],

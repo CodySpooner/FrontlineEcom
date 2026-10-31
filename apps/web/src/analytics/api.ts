@@ -2,9 +2,9 @@
 // api(), so a store switch cancels the old store's requests; nothing runs without a store; the previous data stays on
 // screen only while the store is the same, so a switch shows loading, never the last store's numbers.
 // ponytail: no definitions hook; the page reads the shared registry (SA_METRICS, SA_SOURCES) it is built from.
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { SaAnnotation, SaCollection, SaContext, SaListings, SaMetricId, SaMetricSet, SaInsights, SaMoved, SaOverview, SaProductCompare, SaProductDetail, SaReconcile, SaSeries, SaSourceRow, SaVariants } from '@frontline/shared';
-import { api } from '../api/client';
+import { api, json } from '../api/client';
 import { periodParams, type AnalyticsState } from './state';
 
 type Params = Record<string, string | undefined>;
@@ -31,6 +31,15 @@ export const useSaListings = (store: string | undefined, params: Params) => useS
 export const useSaVariants = (store: string, product: string, params: Params) => useSa<SaVariants>(store, `listings/${encodeURIComponent(product)}/variants`, params);
 /** SA-87: the product drawer's data. */
 export const useSaProduct = (store: string, id: string, params: Params) => useSa<SaProductDetail>(store, `products/${encodeURIComponent(id)}`, params);
+/** SA-91: links a channel's product to a store product (with `productId`) or unlinks it; the store's views reload. */
+export function useSaLink(store: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ channelProductId, productId }: { channelProductId: string; productId?: string }) =>
+      api('/api/analytics/product-links', json(productId ? 'PUT' : 'DELETE', { store, channelProductId, productId })),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['sa', store] }),
+  });
+}
 /** SA-86: 2 to 4 products side by side (`products=` the ids). */
 export const useSaCompare = (store: string, params: Params) => useSa<SaProductCompare>(store, 'compare', params);
 export const useSaMetrics = (s: AnalyticsState, metrics?: SaMetricId[]) => useSa<SaMetricSet>(s.store, 'metrics', { ...periodParams(s), metrics: metrics?.join(',') });

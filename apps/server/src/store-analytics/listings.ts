@@ -8,6 +8,7 @@ import type { Db } from '../db';
 import { hash, mulberry32 } from '../demo';
 import { costMetrics } from './costs';
 import { storeConverter } from './fx';
+import { linkMap, ROLLED, withLinked } from './links';
 import { setup } from './metric-set';
 import type { StorePeriod } from './period';
 import { CANONICAL, salesMetrics, sliceSql, type RefundBasis, type Slice } from './sales';
@@ -55,6 +56,8 @@ function stockState(p: Record<string, unknown>, sold: number): SaStockState {
 }
 
 /** A product with no unit cost for itself, and none for one of its variants (or it has no variant rows). */
+/** SQL: a channel listing `c` of product `p` or of a channel product linked to it (SA-91). */
+const LISTED = 'c.product_id = p.id OR c.product_id IN (SELECT channel_product_id FROM product_links k WHERE k.store_id = p.store_id AND k.product_id = p.id)';
 const MISSING_COST = `NOT EXISTS (SELECT 1 FROM unit_costs u WHERE u.store_id = p.store_id AND u.product_id = p.id AND u.variant_id IS NULL)
   AND (NOT EXISTS (SELECT 1 FROM product_variants v WHERE v.store_id = p.store_id AND v.product_id = p.id)
     OR EXISTS (SELECT 1 FROM product_variants v WHERE v.store_id = p.store_id AND v.product_id = p.id
@@ -69,7 +72,11 @@ const MISSING_COST = `NOT EXISTS (SELECT 1 FROM unit_costs u WHERE u.store_id = 
 export function totals(db: Db, storeId: string, from: string, to: string, basis: RefundBasis, slice: Slice = {}) {
   const { fx } = storeConverter(db, String(db.prepare('SELECT currency FROM stores WHERE id = ?').get(storeId)!.currency));
   const t = new Map<string, Record<'units' | 'net_sales' | 'refunds', number>>();
-  const of = (p: unknown) => t.get(String(p)) ?? t.set(String(p), { units: 0, net_sales: 0, refunds: 0 }).get(String(p))!;
+  const owner = linkMap(db, storeId); // SA-91: a linked channel product's sales are its store product's
+  const of = (p: unknown) => {
+    const id = owner.get(String(p)) ?? String(p);
+    return t.get(id) ?? t.set(id, { units: 0, net_sales: 0, refunds: 0 }).get(id)!;
+  };
   const w = sliceSql(db, storeId, slice, to);
   for (const r of db
     .prepare(
@@ -197,8 +204,8 @@ export function listings(db: Db, storeId: string, query: Query, sp: StorePeriod,
   const demo = !!db.prepare('SELECT demo FROM stores WHERE id = ?').get(storeId)?.demo;
   const scope: SaFilterScope = { applied: [], ignored: [] };
   // The product and collection filters pick the rows; the channel filter narrows their sales.
-  const where = ['p.store_id = ?'];
-  const params: SQLInputValue[] = [storeId];
+  const where = ['p.store_id = ?', `p.id NOT IN (${ROLLED})`]; // a linked channel product is its store product's row (SA-91)
+  const params: SQLInputValue[] = [storeId, storeId];
   if (query.q?.trim()) {
     const like = `%${query.q.trim().replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
     where.push(`(p.title LIKE ? ESCAPE '\\' OR p.id LIKE ? ESCAPE '\\' OR EXISTS (SELECT 1 FROM product_variants v WHERE v.store_id = p.store_id AND v.product_id = p.id AND v.sku LIKE ? ESCAPE '\\'))`);
@@ -235,7 +242,7 @@ export function listings(db: Db, storeId: string, query: Query, sp: StorePeriod,
          EXISTS (SELECT 1 FROM product_variants v WHERE v.store_id = p.store_id AND v.product_id = p.id AND v.inventory_policy = 'fba') AS fba,
          (SELECT count(*) FROM product_variants v WHERE v.store_id = p.store_id AND v.product_id = p.id) AS nv,
          (SELECT count(*) FROM product_variants v WHERE v.store_id = p.store_id AND v.product_id = p.id AND v.inventory_tracked AND v.inventory <= 0) AS vout,
-         (SELECT count(*) FROM channel_listings c WHERE c.store_id = p.store_id AND c.product_id = p.id) AS nc,
+         (SELECT count(*) FROM channel_listings c WHERE c.store_id = p.store_id AND (${LISTED})) AS nc,
          NOT p.inventory_tracked AND (${SUPPLIED('order_lines')} OR ${SUPPLIED('order_items')}) AS supplier
        FROM products p WHERE ${where.join(' AND ')}`,
     )
@@ -276,11 +283,13 @@ export function listings(db: Db, storeId: string, query: Query, sp: StorePeriod,
        coalesce(p.synced_at, (SELECT max(c.synced_at) FROM channel_listings c WHERE c.store_id = p.store_id AND c.product_id = p.id)) AS synced
      FROM products p WHERE p.store_id = ? AND p.id = ?`,
   );
-  const listed = db.prepare('SELECT channel, status, error FROM channel_listings WHERE store_id = ? AND product_id = ? ORDER BY channel, id');
+  const listed = db.prepare(
+    'SELECT channel, status, error FROM channel_listings WHERE store_id = ?1 AND (product_id = ?2 OR product_id IN (SELECT channel_product_id FROM product_links WHERE store_id = ?1 AND product_id = ?2)) ORDER BY channel, id',
+  );
   const member = db.prepare('SELECT DISTINCT coalesce(title, collection_id) AS t FROM product_collections WHERE store_id = ? AND product_id = ? ORDER BY 1 COLLATE NOCASE');
   const rows = ids.map((id): SaListingRow => {
     const p = product.get(storeId, id)!;
-    const slice = { ...(channels && { channels }), products: [id] };
+    const slice = { ...(channels && { channels }), products: withLinked(db, storeId, [id]) };
     const sales = demoSales ? undefined : salesMetrics(db, storeId, sp.period.from, sp.period.to, basis, slice);
     const costs = demoSales ? undefined : costMetrics(db, storeId, sp.period.from, sp.period.to, basis, slice);
     const d = demoSales?.(id) ?? { ...sales!, contribution: costs!.contribution_before_ads, cost_coverage: costs!.cost_coverage, fees: costs!.fees };

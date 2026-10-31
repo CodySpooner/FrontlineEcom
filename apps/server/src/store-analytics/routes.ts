@@ -6,6 +6,7 @@ import { compareProducts } from './compare';
 import { contributions } from './contributions';
 import { exportListings } from './exports';
 import { insights } from './insights';
+import { deleteLink, setLink } from './links';
 import { computeMetricSet, computeSeries, parseFilters } from './metric-set';
 import { listings, listingVariants } from './listings';
 import { overview } from './overview';
@@ -227,6 +228,23 @@ export function storeAnalyticsRoutes(db: Db) {
       const s = readScope(db, (k) => (typeof body[k] === 'string' ? (body[k] as string) : undefined));
       if ('error' in s) return c.json({ error: s.error }, s.status);
       const r = markVerified(db, s.storeId, body.integration, body.dataset, body.note);
+      return 'refused' in r ? c.json({ error: r.refused }, r.status) : c.json(r);
+    })
+    // SA-91: the owner's product links (decision 22), the app's own data: nothing is written to a platform.
+    .put('/api/analytics/product-links', async (c) => {
+      const body = (await c.req.json().catch(() => null)) as Record<string, unknown> | null;
+      if (!body || typeof body !== 'object') return c.json({ error: 'a JSON body is required' }, 400);
+      const s = readScope(db, (k) => (typeof body[k] === 'string' ? (body[k] as string) : undefined));
+      if ('error' in s) return c.json({ error: s.error }, s.status);
+      const r = setLink(db, s.storeId, body.channelProductId, body.productId);
+      return 'refused' in r ? c.json({ error: r.refused }, r.status) : c.json(r);
+    })
+    .delete('/api/analytics/product-links', async (c) => {
+      const body = (await c.req.json().catch(() => null)) as Record<string, unknown> | null;
+      if (!body || typeof body !== 'object') return c.json({ error: 'a JSON body is required' }, 400);
+      const s = readScope(db, (k) => (typeof body[k] === 'string' ? (body[k] as string) : undefined));
+      if ('error' in s) return c.json({ error: s.error }, s.status);
+      const r = deleteLink(db, s.storeId, body.channelProductId);
       return 'refused' in r ? c.json({ error: r.refused }, r.status) : c.json(r);
     });
 }

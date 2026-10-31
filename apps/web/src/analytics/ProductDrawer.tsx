@@ -1,18 +1,19 @@
 // SA-88 (the Listings board): the product drawer, opened by `product=` in the URL from a Listings row or a Needs
 // attention flag. Its header facts and pills come from the product endpoint (SA-87); its tabs render as their content
-// ships (decision 33): Performance (SA-89), Variants and Channels (SA-90). Closed, it hands focus back to what opened it.
+// ships (decision 33): Performance (SA-89), Variants and Channels (SA-90) with its product links (SA-91). Closed, it
+// hands focus back to what opened it.
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Info } from 'lucide-react';
 import { SA_METRICS, type Platform, type SaListingRow, type SaMetricId, type SaMetricResult, type SaProductDetail } from '@frontline/shared';
 import { PLATFORM_NAME } from '../components/StoreForm';
 import { Button, cx, Dialog, ErrorState, LoadingState, Tabs } from '../components/ui';
 import { ago, cents, fmtDay, money, pct } from '../lib/format';
-import { useSaContext, useSaProduct } from './api';
+import { useSaContext, useSaLink, useSaListings, useSaProduct } from './api';
 import { BarChart } from './BarChart';
 import { FilterScope } from './FilterScope';
 import { channelsOf } from './Filters';
 import { Change, fmtValue } from './KpiStrip';
-import { ChannelMark, dash, stock, val } from './ListingsTab';
+import { ChannelMark, dash, lone, stock, val } from './ListingsTab';
 import { periodParams, type AnalyticsPage } from './state';
 import { Unavailable } from './Unavailable';
 
@@ -208,8 +209,64 @@ function Variants({ d, currency }: { d: SaProductDetail; currency?: string }) {
   );
 }
 
+/**
+ * SA-91 (decision 22): the channel products rolled into this one and how each link was made, the owner's to unlink; a
+ * product listed only on another channel can be linked to a store product found by search.
+ */
+function Links({ s, d, own, platform, channel }: { s: AnalyticsPage & { store: string }; d: SaProductDetail; own?: string; platform?: string; channel: (id: string) => string }) {
+  const m = useSaLink(s.store);
+  const [q, setQ] = useState('');
+  const solo = lone(d.row.channels, own);
+  const found = useSaListings(solo && q.trim() ? s.store : undefined, { ...periodParams(s), q: q.trim(), status: 'all' }).data;
+  const hits = found?.rows.filter((r) => r.id !== d.row.id && !lone(r.channels, own)).slice(0, 5);
+  if (!d.links.length && !solo) return null;
+  return (
+    <div className="mt-3.5 flex flex-col gap-1.5 text-[12px]">
+      {d.links.map((k) => (
+        <div key={k.channelProductId} className="flex items-center gap-1.5">
+          <ChannelMark channel={k.channel} platform={platform} />
+          <span>{k.title ?? k.channelProductId}</span>
+          <span className="text-muted">
+            · {channel(k.channel)} product {k.channelProductId},{' '}
+            {k.method === 'owner' ? `linked by you on ${fmtDay(k.createdAt.slice(0, 10))}` : `linked by ${channel(k.channel)}'s own product id`}
+          </span>
+          {k.method === 'owner' && (
+            <Button size="sm" variant="ghost" className="ml-auto" disabled={m.isPending} onClick={() => m.mutate({ channelProductId: k.channelProductId })}>
+              Unlink
+            </Button>
+          )}
+        </div>
+      ))}
+      {solo && (
+        <>
+          <p className="text-muted">Listed on {channel(solo)} only. If it's the same item as a store product, link it: its listings and sales then count there.</p>
+          <input
+            type="search"
+            aria-label="Find the store product"
+            placeholder="Find the store product by title, ID or SKU"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            className="h-8 rounded-lg border border-line-2 bg-bg-2 px-2.5 text-[12px] outline-none placeholder:text-muted focus:border-red/60"
+          />
+          {hits?.map((r) => (
+            <div key={r.id} className="flex items-center gap-2">
+              <span>{r.title}</span>
+              <span className="text-muted">{r.id}</span>
+              <Button size="sm" variant="ghost" className="ml-auto" disabled={m.isPending} onClick={() => m.mutate({ channelProductId: d.row.id, productId: r.id })}>
+                Link
+              </Button>
+            </div>
+          ))}
+          {hits && !hits.length && <p className="text-muted">No store product matches.</p>}
+        </>
+      )}
+      {m.error && <p className="text-red">{m.error.message}</p>}
+    </div>
+  );
+}
+
 /** SA-90: each channel's listing status, its error, publish and sync times, and its period sales. */
-function Channels({ d, currency, platform, channel }: { d: SaProductDetail; currency?: string; platform?: string; channel: (id: string) => string }) {
+function Channels({ d, currency, platform, channel, children }: { d: SaProductDetail; currency?: string; platform?: string; channel: (id: string) => string; children?: ReactNode }) {
   return (
     <div>
       <table aria-label="Channel listings" className={GRID}>
@@ -247,6 +304,7 @@ function Channels({ d, currency, platform, channel }: { d: SaProductDetail; curr
         </tbody>
       </table>
       {d.channelsNote && <p className="mt-1.5 text-[11px] text-muted">{d.channelsNote}.</p>}
+      {children}
     </div>
   );
 }
@@ -301,7 +359,11 @@ export function ProductDrawer({ s, id }: { s: AnalyticsPage & { store: string };
           <div role="tabpanel" aria-label={tabs!.find((t) => t.value === tab)!.label}>
             {tab === 'performance' && <Performance d={d} currency={ctx?.currency} platform={ctx?.platform} channel={channel} />}
             {tab === 'variants' && <Variants d={d} currency={ctx?.currency} />}
-            {tab === 'channels' && <Channels d={d} currency={ctx?.currency} platform={ctx?.platform} channel={channel} />}
+            {tab === 'channels' && (
+              <Channels d={d} currency={ctx?.currency} platform={ctx?.platform} channel={channel}>
+                <Links s={s} d={d} own={ctx && channelsOf(ctx)[0]?.id} platform={ctx?.platform} channel={channel} />
+              </Channels>
+            )}
           </div>
           <FilterScope scope={d.scope} />
         </div>

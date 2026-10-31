@@ -1,10 +1,12 @@
 // SA-87 (spec §7 Product detail view): the product drawer's data in one call. Its row is its Listings row and its
 // numbers come from the same functions (a demo store's by its fixed share), so the drawer and the table agree
-// (consistency row). Refund lines come with the Refunds tab (SA-92).
+// (consistency row). Refund lines come with the Refunds tab (SA-92). A linked channel product (SA-91) opens its store
+// product, whose numbers and channels include it.
 import { changeOf, SA_METRICS, saDef, type SaFilters, type SaFilterScope, type SaListings, type SaMetricId, type SaMetricResult, type SaProductChannel, type SaProductDetail, type SaValue } from '@frontline/shared';
 import type { Db } from '../db';
 import { costMetrics } from './costs';
 import { insights } from './insights';
+import { linkMap, productLinks, withLinked } from './links';
 import { demoShares, demoSplit, inStore, listings, listingVariants, type Sales } from './listings';
 import { computeSeries, setup } from './metric-set';
 import type { StorePeriod } from './period';
@@ -22,6 +24,8 @@ const METRICS: [SaMetricId, keyof Sales][] = [
 /** Undefined: no such product in the store. The page's collection and product filters don't narrow one product. */
 export function productDetail(db: Db, storeId: string, id: string, sp: StorePeriod, filters: SaFilters = {}, basis: RefundBasis = 'refund_day', now = Date.now()): SaProductDetail | undefined {
   if (!inStore(db, storeId, [id])) return undefined;
+  id = linkMap(db, storeId).get(id) ?? id;
+  const ids = withLinked(db, storeId, [id]);
   const store = db.prepare('SELECT platform, demo, fee_percent AS pct, fee_per_order AS per FROM stores WHERE id = ?').get(storeId)!;
   const demo = !!store.demo;
   const { collection, product, ...rest } = filters;
@@ -37,7 +41,7 @@ export function productDetail(db: Db, storeId: string, id: string, sp: StorePeri
   const channels = rest.channel?.length && !demo ? rest.channel : undefined;
   const numbers = (from: string, to: string, c?: Slice['cut'], only = channels): Sales => {
     if (demo) return demoSplit(db, storeId, from, to, basis, c && { cut: c })(id);
-    const slice: Slice = { ...(only && { channels: only }), products: [id], ...(c && { cut: c }) };
+    const slice: Slice = { ...(only && { channels: only }), products: ids, ...(c && { cut: c }) };
     const k = costMetrics(db, storeId, from, to, basis, slice);
     return { ...salesMetrics(db, storeId, from, to, basis, slice), contribution: k.contribution_before_ads, cost_coverage: k.cost_coverage, fees: k.fees };
   };
@@ -54,11 +58,11 @@ export function productDetail(db: Db, storeId: string, id: string, sp: StorePeri
   const own = store.platform === 'shopify' || store.platform === 'woocommerce' ? 'site' : String(store.platform);
   const listed = new Map(
     db
-      .prepare("SELECT channel, iif(max(status = 'failed'), 'failed', min(status)) AS status, max(error) AS error, max(synced_at) AS synced, min(published_at) AS published FROM channel_listings WHERE store_id = ? AND product_id = ? GROUP BY channel")
-      .all(storeId, id)
+      .prepare("SELECT channel, iif(max(status = 'failed'), 'failed', min(status)) AS status, max(error) AS error, max(synced_at) AS synced, min(published_at) AS published FROM channel_listings WHERE store_id = ? AND product_id IN (SELECT value FROM json_each(?)) GROUP BY channel")
+      .all(storeId, JSON.stringify(ids))
       .map((r) => [String(r.channel), r]),
   );
-  const w = sliceSql(db, storeId, { products: [id] }, sp.period.to);
+  const w = sliceSql(db, storeId, { products: ids }, sp.period.to);
   const sold = demo
     ? []
     : db
@@ -89,7 +93,7 @@ export function productDetail(db: Db, storeId: string, id: string, sp: StorePeri
     : db.prepare('SELECT cost AS value, source, effective_from AS since FROM unit_costs WHERE store_id = ? AND product_id = ? AND variant_id IS NULL AND effective_from <= ? ORDER BY effective_from DESC, recorded_at DESC LIMIT 1').get(storeId, id, sp.today);
   const failedOn = new Set(row.channels.filter((c) => c.status === 'failed').map((c) => c.channel));
   const flags = insights(db, storeId, sp, now);
-  const mine = flags.insights.filter(({ target: t }) => (t.kind === 'product' && t.id === id) || (t.kind === 'products' && t.ids.includes(id)) || (t.kind === 'listings' && failedOn.has(t.channel)));
+  const mine = flags.insights.filter(({ target: t }) => (t.kind === 'product' && ids.includes(t.id)) || (t.kind === 'products' && t.ids.some((x) => ids.includes(x))) || (t.kind === 'listings' && failedOn.has(t.channel)));
   return {
     period: sp.period,
     compare: sp.compare ?? null,
@@ -106,6 +110,7 @@ export function productDetail(db: Db, storeId: string, id: string, sp: StorePeri
     variants: listingVariants(db, storeId, id, sp, rest, basis)!,
     insights: mine,
     rules: flags.rules.filter((r) => mine.some((i) => i.rule === r.id)),
+    links: productLinks(db, storeId, id),
     scope,
   };
 }

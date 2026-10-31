@@ -47,6 +47,9 @@ const ROUTES: Row[] = [
   { method: 'GET', path: '/api/analytics/annotations' },
   { method: 'GET', path: '/api/analytics/contributions' },
   { method: 'GET', path: '/api/analytics/insights' },
+  // SA-91: pawsome's demo products (asked with glow: not in the store, no link)
+  { method: 'PUT', path: '/api/analytics/product-links', record: () => 'pawsome-p1', body: (id) => ({ channelProductId: id, productId: 'pawsome-p2' }) },
+  { method: 'DELETE', path: '/api/analytics/product-links', record: () => 'pawsome-p1', body: (id) => ({ channelProductId: id }) },
   { method: 'PUT', path: '/api/analytics/sources/verified', record: pawsomeShopify, body: (id) => ({ integration: id, dataset: 'orders', note: 'Matched the platform report' }) },
 ];
 
