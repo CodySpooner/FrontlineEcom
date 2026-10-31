@@ -125,6 +125,7 @@ export const IMPACTS: Record<string, ImpactOf[]> = {
   'caps.agentCostPerDay': [capMoved, runsStopping, workspaceDefault],
   'caps.adSpendChangePerDay': [workspaceDefault],
   'caps.higgsfieldCreditsPerDay': [workspaceDefault],
+  'knowledge.autoSave': [workspaceDefault],
   ...Object.fromEntries(['runtime', 'model', 'effort', 'stopAfterMin', 'knowledge'].map((k) => [`agentDefaults.${k}`, [agentDefault]])),
   'runs.atOnce': [atOnce],
   'runs.perStore': [atOnce],

@@ -1,13 +1,15 @@
 // Knowledge (ST-25, decision 13): the knowledge base's research controls (`kb_controls`) for General or one store, moved
 // from the Research Center, and a store's research on a schedule. One explicit save through PUT /api/kb/controls. The
 // server enforces each one (apps/server kb/autonomy.ts, kb/maintenance.ts and the research runner); this only sets them.
+// Automatic saving (ST-26) isn't a KB control: it inherits, the workspace's or a store's own, through PATCH /api/config.
 import { useState, type ReactNode } from 'react';
+import { Link } from 'react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { AGENT_ROLES, KB_RESEARCH_DEPTHS, KB_TRIGGERS, SETTINGS, type AgentRole, type KbControls, type KbControlsState, type KbResearchDepth, type KbTrigger } from '@frontline/shared';
-import { api, json, useAutomationActions, useAutomations, useClaudeAccount, useKbCategories, useKbControls, type ApiError } from '../../api/client';
+import { AGENT_ROLES, KB_RESEARCH_DEPTHS, KB_TRIGGERS, SETTINGS, settingsUrl, type AgentRole, type ConfigImpact, type ConfigView, type KbControls, type KbControlsState, type KbResearchDepth, type KbTrigger } from '@frontline/shared';
+import { api, json, useAutomationActions, useAutomations, useClaudeAccount, useConfig, useKbCategories, useKbControls, type ApiError } from '../../api/client';
 import { cx, Dialog, ErrorState, flatButtonClass, inputClass, LoadingState, Switch } from '../../components/ui';
 import { useSettingsForm } from '../form';
-import { SaveBar, SettingRow, SettingsSection, useScope } from '../kit';
+import { SaveBar, SettingRow, SettingsSection, useScope, type Origin } from '../kit';
 
 const EVERY: Record<string, string> = { '0 9 * * *': 'Every day at 9:00', '0 9 * * 1': 'Every Monday at 9:00', '0 9 1 * *': 'On the 1st of each month at 9:00' };
 const AGES = [14, 30, 60, 90, 180, 365];
@@ -18,14 +20,27 @@ const field = cx(inputClass, 'py-1.5 text-[13px]');
 const lines = (s: string) => s.split('\n').map((x) => x.trim()).filter(Boolean);
 const count = (n: number, one: string) => `${n} ${one}${n === 1 ? '' : 's'}`;
 
-/** The controls as edited: the site lists as typed (one per line), with the version read. */
-type Form = Omit<KbControls, 'trustedDomains' | 'blockedDomains'> & { trustedDomains: string; blockedDomains: string; version: number };
-const toForm = ({ reservedUsd: _, version, trustedDomains, blockedDomains, ...c }: KbControlsState): Form => ({ ...c, trustedDomains: trustedDomains.join('\n'), blockedDomains: blockedDomains.join('\n'), version: version ?? 0 });
+/** The controls as edited: the site lists as typed (one per line), with the version read; and Automatic saving. */
+type Form = Omit<KbControls, 'trustedDomains' | 'blockedDomains'> & { trustedDomains: string; blockedDomains: string; version: number } & Auto;
+const toForm = ({ reservedUsd: _, version, trustedDomains, blockedDomains, ...c }: KbControlsState): Omit<Form, keyof Auto> => ({ ...c, trustedDomains: trustedDomains.join('\n'), blockedDomains: blockedDomains.join('\n'), version: version ?? 0 });
 /** What changed, as PUT /api/kb/controls takes it: the site lists split into domains. */
 const toBody = ({ trustedDomains, blockedDomains, ...c }: Partial<Form>) => ({ ...c, ...(trustedDomains !== undefined ? { trustedDomains: lines(trustedDomains) } : {}), ...(blockedDomains !== undefined ? { blockedDomains: lines(blockedDomains) } : {}) });
 const KB = SETTINGS.filter((s) => s.id.startsWith('kb.'));
 const def = (k: keyof KbControls) => KB.find((s) => s.id === `kb.${k}`)!;
 type Trim = { pages: number; logs: number; outputs: number; transcripts: number };
+
+const AUTO = 'knowledge.autoSave';
+const autoDef = SETTINGS.find((s) => s.id === AUTO)!;
+/** Automatic saving as set at this scope (absent: it inherits), with that config document's version. */
+type Auto = { autoSave?: boolean; configVersion: number };
+const autoOf = (v: ConfigView, store?: string): Auto => ({
+  configVersion: (store ? v.versions[`store_caps:${store}`] : v.versions.workspace) ?? 0,
+  ...(v.origins[AUTO] === (store ? 'store' : 'workspace') ? { autoSave: v.values[AUTO] as boolean } : {}),
+});
+/** Its write: the workspace row, or the store's override; `undefined` goes back to the workspace's. */
+const autoDoc = (on: boolean | undefined, version: number, store?: string) => ({
+  doc: store ? 'store_caps' : 'workspace', ...(store ? { storeId: store } : {}), version, ...(on === undefined ? { unset: [AUTO] } : { set: { [AUTO]: on } }),
+});
 
 export function Knowledge() {
   const scope = useScope();
@@ -33,23 +48,39 @@ export function Knowledge() {
   const ws = store?.id ?? 'general';
   const qc = useQueryClient();
   const q = useKbControls(scope.ready ? ws : undefined);
+  const cfg = useConfig(store?.id);
+  const workspace = useConfig();
   const top = (useKbCategories(ws).data ?? []).filter((k) => k.parentId === null && k.storeId === (store?.id ?? null));
   // The agents on the demo engine (FRONTLINE_AGENT_ENGINE): self-directed research needs Claude, so it can't turn on.
   const forced = useClaudeAccount().q.data?.forced;
   const f = useSettingsForm<Form>({
     key: `knowledge:${ws}`,
-    saved: q.data && toForm(q.data),
-    labels: Object.fromEntries(KB.map((s) => [s.id.slice(3), s.label])),
-    save: (changes, version) =>
-      api<KbControlsState>(`/api/kb/controls?ws=${encodeURIComponent(ws)}`, json('PUT', { version, ...toBody(changes) })).then(
-        (c) => (qc.setQueryData(['kb', 'controls', ws], c), toForm(c)),
-        (e: ApiError) => {
-          e.field = e.field?.replace(/^kb\./, ''); // the row's own key
-          if (e.current) e.current = toForm(e.current as KbControlsState);
+    saved: q.data && cfg.data && { ...toForm(q.data), ...autoOf(cfg.data, store?.id) },
+    labels: { ...Object.fromEntries(KB.map((s) => [s.id.slice(3), s.label])), autoSave: autoDef.label },
+    // Two documents, two writes: Automatic saving first, then the controls. Each one saved leaves the draft at once.
+    // ponytail: a controls 409 after Automatic saving saved lists it in the conflict too; one write when it matters.
+    save: async (all, version, base) => {
+      const { autoSave, ...changes } = all;
+      let done = base;
+      if ('autoSave' in all) {
+        const v = await api<ConfigView>('/api/config', json('PATCH', { documents: [autoDoc(autoSave, base.configVersion, store?.id)] })).catch((e: ApiError) => {
+          if (e.field === AUTO) e.field = 'autoSave';
+          if (e.current) e.current = { ...base, ...autoOf(e.current as ConfigView, store?.id) };
           throw e;
-        },
-      ),
-    onSaved: () => void qc.invalidateQueries({ queryKey: ['kb'] }),
+        });
+        qc.setQueryData(['config', 'view', store?.id ?? null], v);
+        done = { ...done, ...autoOf(v, store?.id) };
+      }
+      if (!Object.keys(changes).length) return done;
+      const c = await api<KbControlsState>(`/api/kb/controls?ws=${encodeURIComponent(ws)}`, json('PUT', { version, ...toBody(changes) })).catch((e: ApiError) => {
+        e.field = e.field?.replace(/^kb\./, ''); // the row's own key
+        if (e.current) e.current = { ...done, ...toForm(e.current as KbControlsState) };
+        throw e;
+      });
+      qc.setQueryData(['kb', 'controls', ws], c);
+      return { ...done, ...toForm(c) };
+    },
+    onSaved: () => void (qc.invalidateQueries({ queryKey: ['kb'] }), qc.invalidateQueries({ queryKey: ['config'] })),
   });
   // Lowering retention: what the next pass would trim, then a confirm (decision 13).
   const was = q.data?.retentionDays ?? null;
@@ -57,11 +88,22 @@ export function Knowledge() {
   const lowers = f.dirty.includes('retentionDays') && keep !== null && (was === null || keep < was);
   const trim = useQuery({ queryKey: ['kb', 'trim', ws, keep], queryFn: () => api<Trim>(`/api/kb/controls/trim?ws=${encodeURIComponent(ws)}&days=${keep}`), enabled: lowers });
   const [confirm, setConfirm] = useState(false);
+  // The workspace's Automatic saving: how many stores follow it (decision 4).
+  const documents = !store && f.draft && f.dirty.includes('autoSave') ? [autoDoc(f.draft.autoSave, f.draft.configVersion)] : [];
+  const impact = useQuery({
+    queryKey: ['config', 'impact', documents],
+    queryFn: () => api<{ impacts: ConfigImpact[] }>('/api/config/impact', json('POST', { documents })),
+    enabled: documents.length > 0,
+  });
   const title = store ? "Agents' own research" : 'Research findings and sources';
-  if (!scope.ready || q.isPending) return <SettingsSection title={title}><LoadingState rows={4} className="px-[18px] pb-4" /></SettingsSection>;
-  if (q.isError) return <SettingsSection title={title}><ErrorState message="Couldn't load the research controls." onRetry={() => q.refetch()} /></SettingsSection>;
+  if (!scope.ready || q.isPending || cfg.isPending || workspace.isPending) return <SettingsSection title={title}><LoadingState rows={4} className="px-[18px] pb-4" /></SettingsSection>;
+  if (q.isError || cfg.isError || workspace.isError) return <SettingsSection title={title}><ErrorState message="Couldn't load the research controls." onRetry={() => (q.refetch(), cfg.refetch(), workspace.refetch())} /></SettingsSection>;
 
   const d = f.draft!;
+  // A store's own Automatic saving, or the workspace's it follows (Use workspace default goes back to it).
+  const inherited = workspace.data.values[AUTO] !== false;
+  const autoOrigin: Origin | undefined = !store ? undefined : d.autoSave === undefined ? { kind: 'workspace' } : { kind: 'store', workspace: inherited ? 'on' : 'off', same: d.autoSave === inherited, onUse: () => f.set('autoSave', undefined) };
+  const saves = documents.length ? impact.data?.impacts.map((i) => `${autoDef.label}: ${i.text}`) : undefined;
   const row = (k: keyof KbControls) => ({ setting: `kb.${k}`, label: def(k).label, help: def(k).help, error: f.error(k), changed: f.dirty.includes(k) });
   const t = trim.data;
   const trims = lowers && t ? `The next hourly pass trims the text of ${count(t.pages, 'fetched page')}, ${count(t.logs, 'research log')}, ${count(t.outputs, 'step output')} and ${count(t.transcripts, 'run transcript')} older than ${keep} days. Sources, tasks and reports stay.` : undefined;
@@ -170,12 +212,31 @@ export function Knowledge() {
           </select>
         </SettingRow>
       </SettingsSection>
+      <SettingsSection title={store ? 'Automatic saving' : 'Automatic saving · default for all stores'} help={store ? undefined : 'For every store that uses the workspace default.'}>
+        <SettingRow setting={AUTO} label={autoDef.label} help={autoDef.help} origin={autoOrigin} error={f.error('autoSave')} changed={f.dirty.includes('autoSave')}>
+          <label data-setting={AUTO} className="flex cursor-pointer items-center">
+            <Switch aria-label={autoDef.label} checked={d.autoSave ?? inherited} onChange={(e) => f.set('autoSave', e.target.checked)} />
+          </label>
+        </SettingRow>
+        <p className="border-t border-line px-[18px] py-3 text-xs text-muted">
+          Which knowledge new conversations read is set on{' '}
+          <Link to={settingsUrl('agents', { store: store?.id, setting: 'agentDefaults.knowledge' })} className="text-[13px] text-[#ff6b76] hover:underline">
+            Agents & Providers
+          </Link>
+          .
+        </p>
+      </SettingsSection>
       {store && (
         <SettingsSection title="Research on a schedule" help={`Each runs as Knowledge research on ${store.name}. KB controls decide approval: with "${def('approval').label}" on, each one waits for you.`}>
           <Schedules ws={store.id} />
         </SettingsSection>
       )}
-      <SaveBar {...f.bar} onSave={() => (lowers ? setConfirm(true) : f.bar.onSave())} scope={store?.name ?? 'General knowledge'} impact={trims && <span className="mt-0.5 block text-xs">{trims}</span>} />
+      <SaveBar
+        {...f.bar}
+        onSave={() => (lowers ? setConfirm(true) : f.bar.onSave())}
+        scope={store?.name ?? (f.dirty.every((k) => k === 'autoSave') ? 'Workspace defaults' : 'General knowledge')}
+        impact={trims || saves?.length ? [...(saves ?? []), ...(trims ? [trims] : [])].map((x) => <span key={x} className="mt-0.5 block text-xs">{x}</span>) : undefined}
+      />
       <Dialog open={confirm} onClose={() => setConfirm(false)} title="Keep less research data?">
         <p className="text-sm text-text-2">{trims ?? 'Counting what the next pass trims…'}</p>
         <div className="mt-4 flex justify-end gap-2">

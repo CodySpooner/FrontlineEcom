@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { captureFinding } from '@frontline/agents';
+import { autoSave, captureFinding } from '@frontline/agents';
 import { PR_RECOMMENDATION_LABEL, type PrReport, type PrReportBody } from '@frontline/shared';
 import type { Db } from '../db';
 
@@ -37,7 +37,7 @@ export function saveReport(db: Db, taskId: string, body: PrReportBody, run: { ru
   db.prepare(
     `INSERT INTO pr_reports (id, store_id, task_id, product_id, run_id, runtime, engine, recommendation, report_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(randomUUID(), run.storeId, taskId, String(t.product_id), run.runId, runtime as string | null, run.scripted ? 'scripted' : 'model', body.recommendation, JSON.stringify(body), now.toISOString());
-  if (!run.scripted && runtime !== 'demo') captureFindings(db, run.storeId, body, { agentId: String(r?.agent_id ?? `${run.storeId}:product_hunter`), runId: run.runId }, now);
+  if (!run.scripted && runtime !== 'demo' && autoSave(db, run.storeId)) captureFindings(db, run.storeId, body, { agentId: String(r?.agent_id ?? `${run.storeId}:product_hunter`), runId: run.runId }, now);
   return run.scripted
     ? 'Report saved as a demo: Product Research shows it as a scripted example, not research.'
     : `Report saved (${PR_RECOMMENDATION_LABEL[body.recommendation]}); the owner sees it on the product's Research tab.`;

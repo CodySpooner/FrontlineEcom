@@ -48,7 +48,7 @@ describe('every control on a settings page is real', () => {
   it.each([...SECTIONS.map((s) => s.slug), 'stores/peak', 'knowledge?store=peak'].map((s) => [s]))('/settings/%s', async (slug) => {
     stubApi((url) => {
       if (url === '/api/settings') return settings;
-      if (url === '/api/config') return { values: {}, origins: {}, versions: { app: 1 } };
+      if (url === '/api/config' || url.startsWith('/api/config?')) return { values: {}, origins: {}, versions: { app: 1 } };
       if (url === '/api/stores') return [peak];
       if (url === '/api/stores/peak/impact') return { removes: [], keeps: [] };
       if (url.startsWith('/api/caps')) return [caps]; // GET /api/caps answers a list

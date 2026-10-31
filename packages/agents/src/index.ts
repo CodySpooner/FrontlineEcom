@@ -25,7 +25,7 @@ export {
 } from './memory';
 export { AD_LIMITS, APP_TOOLS, OUTLIVE_RUN, PRICE_STEP, RESEARCH_TOOLS, allows, autopilotUsedToday, budgetAddedToday, cash, defaultTools, toolsFor, runTools, callTool, requestApproval, smsSegments, type AppTool, type ExternalMcp, type ToolEnv, type ToolContext } from './tools';
 export { nicheSlug, customNichePack, saveNichePack, draftNichePackTask } from './niche';
-export { agentDefaults, agentTypes, runLimits, archiveCustomRole, createCustomRole, customRole, getConfig, getCustomRole, listPresets, resolveType, saveConfig, savePreset, seatDefault, toolGroups, validateConfig, validateCustomRole, type AgentDefaults, type AgentType, type ConfigDraft } from './configs';
+export { agentDefaults, agentTypes, autoSave, runLimits, archiveCustomRole, createCustomRole, customRole, getConfig, getCustomRole, listPresets, resolveType, saveConfig, savePreset, seatDefault, toolGroups, validateConfig, validateCustomRole, type AgentDefaults, type AgentType, type ConfigDraft } from './configs';
 export { conversationCounts, conversationFindings, conversationKnowledge, conversationPreface, conversationQuery, conversationThread, runDeliverables, setConversationConfig, createConversation, discardConversation, getConversation, indexConversation, listConversations, recap, stateOf, touchConversation, updateConversation, type ConversationQuery } from './conversations';
 export { createRunManager, getRun, hasEffects, listRuns, replyBlocks, runGist, teamCost, type RunManager, type RunManagerOptions, type StartOptions } from './runs';
 export { addNote, addParticipant, createTeam, getTeam, parseContribution, parsePlan, resumeStep, TEAM_PLAN, TEAM_SYNTHESIS, TEAM_TASK, validateTeam } from './teams';

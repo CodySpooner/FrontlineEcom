@@ -29,8 +29,8 @@ const GROUPS: Record<string, object[]> = {
   ],
 };
 
-/** `codex`: Codex's row as the server reports it ('' signed in, else its reason); null leaves it out. */
-function api({ autonomy = 'ask', posts = [] as { url: string; body: unknown }[], refuse = 0, codex = null as string | null } = {}) {
+/** `codex`: Codex's row as the server reports it ('' signed in, else its reason); null leaves it out. `config`: the store's settings. */
+function api({ autonomy = 'ask', posts = [] as { url: string; body: unknown }[], refuse = 0, codex = null as string | null, config = undefined as object | undefined } = {}) {
   let refusals = refuse;
   stubApi((url, init) => {
     const u = new URL(url, 'http://x');
@@ -81,6 +81,7 @@ function api({ autonomy = 'ask', posts = [] as { url: string; body: unknown }[],
     if (u.pathname === '/api/conversations') return { items: [], total: 0, byType: { copywriter: 1 } };
     if (u.pathname === '/api/conversations/c1') return { id: 'c1', storeId: 'glow', configId: 'cfg', agentId: 'glow:copywriter', type: 'copywriter', title: 'Spring hero line', pinned: false, createdAt: '', updatedAt: '', lastActivityAt: '', state: 'completed', config: { id: 'cfg', runtime: 'demo', tools: [], knowledge: ['store', 'general'], permissions: { saveFindings: 'off' } } };
     if (u.pathname === '/api/conversations/c1/thread') return { items: [], total: 0 };
+    if (u.pathname === '/api/config') return config;
     return undefined;
   });
 }
@@ -305,4 +306,23 @@ test('configure-only (product-research T1): store locked, only the offered types
   });
   expect(posts).toEqual([]); // nothing created
   expect(screen.getByTestId('where').textContent).toBe('/research?store=glow'); // no navigation
+});
+
+test('Automatically, with Automatic saving off for the store, says saves will ask and where that is set; the knowledge field says where its default came from', async () => {
+  api({ config: { values: { 'knowledge.autoSave': false, 'agentDefaults.knowledge': 'store' }, origins: { 'knowledge.autoSave': 'store', 'agentDefaults.knowledge': 'workspace' }, versions: {} } });
+  renderDeploy();
+  fireEvent.click(await screen.findByRole('button', { name: /^Tools and knowledge/ }));
+  const knowledge = within(dialog()).getByRole('group', { name: "Knowledge (never another store's)" });
+  await waitFor(() => expect(within(knowledge).getByRole('link', { name: 'Workspace default' }).getAttribute('href')).toBe('/settings/agents#agentDefaults.knowledge'));
+  expect((within(knowledge).getByLabelText('General knowledge') as HTMLInputElement).checked).toBe(false); // the default: the store's only
+  fireEvent.click(within(knowledge).getByLabelText('General knowledge'));
+  expect(within(knowledge).queryByRole('link')).toBeNull(); // the owner's own choice now
+
+  expect(screen.queryByText(/Automatic saving is off/)).toBeNull();
+  fireEvent.click(radio('Save findings to knowledge', 'Automatically (unreviewed)'));
+  const note = screen.getByText(/Automatic saving is off for Glow Botanics/);
+  expect(note.textContent).toBe("Automatic saving is off for Glow Botanics (Settings): saves will ask you · this store's own setting");
+  expect(within(note).getByRole('link', { name: 'Settings' }).getAttribute('href')).toBe('/settings/knowledge?store=glow#knowledge.autoSave');
+  fireEvent.click(radio('Save findings to knowledge', 'Ask me'));
+  expect(screen.queryByText(/Automatic saving is off/)).toBeNull();
 });

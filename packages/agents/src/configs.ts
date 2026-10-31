@@ -182,6 +182,12 @@ export function agentDefaults(db: DatabaseSync, storeId: string): AgentDefaults 
   return { ...d, ...(d.knowledge && { knowledge: d.knowledge === 'store' ? ['store'] : ['store', 'general'] }) } as AgentDefaults;
 }
 
+/** Automatic saving (decision 13; Settings → Knowledge): the store's own, else the workspace's, else on. Read at each save. */
+export function autoSave(db: DatabaseSync, storeId: string) {
+  const at = (r: Record<string, unknown> | undefined) => (r ? (JSON.parse(String(r.value_json)) as Record<string, unknown>)['knowledge.autoSave'] : undefined);
+  return (at(db.prepare('SELECT value_json FROM store_caps WHERE store_id = ?').get(storeId)) ?? at(db.prepare("SELECT value_json FROM settings WHERE key = 'workspace'").get())) !== false;
+}
+
 /**
  * Run limits (decision 9; Agents & Providers → Advanced, workspace only): retries for a busy or failing service, and runs
  * at once in all and per store, never above the total. Read at each failure and each pump, so a change applies at once;

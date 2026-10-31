@@ -18,6 +18,7 @@ import { KB_UNTRUSTED } from './prompt';
 import { ROLES, type ExternalMcpKind, type ToolName } from './roles';
 import { runGist } from './runs';
 import { workspaceZone } from './squads';
+import { autoSave } from './configs';
 
 export interface Theme {
   id: string;
@@ -1332,7 +1333,9 @@ export const APP_TOOLS: AppTool[] = [
     run: async (f, ctx) => {
       const runId = ctx.runId;
       const permissions = runId && ctx.db.prepare('SELECT f.permissions_json FROM agent_runs r JOIN agent_configs f ON f.id = r.config_id WHERE r.id = ?').get(runId)?.permissions_json;
-      const mode = permissions ? (JSON.parse(String(permissions)) as AgentConfig['permissions']).saveFindings : 'off';
+      const chosen = permissions ? (JSON.parse(String(permissions)) as AgentConfig['permissions']).saveFindings : 'off';
+      // Automatic saving off for the store (Settings → Knowledge): Automatically asks instead, from the next save on.
+      const mode = chosen === 'auto' && !autoSave(ctx.db, ctx.store.id) ? 'ask' : chosen;
       if (!runId || mode === 'off') return 'Not saved: saving findings is off for this conversation.';
       // Each call commits as it goes, so what's saved stays if the run is cut short. Asked or saved, 5 a run.
       const used =

@@ -84,6 +84,10 @@ const defaultsOf = (v?: ConfigView) => {
     stopAfterMin: at('stopAfterMin') as number | undefined,
     knowledge: (at('knowledge') === 'store' ? ['store'] : ['store', 'general']) as KnowledgeScope[],
     from: v?.origins?.['agentDefaults.model'],
+    knowledgeFrom: v?.origins?.['agentDefaults.knowledge'],
+    /** Settings → Knowledge's Automatic saving (decision 13): off, Automatically asks instead. */
+    autoSave: v?.values?.['knowledge.autoSave'] !== false,
+    autoSaveFrom: v?.origins?.['knowledge.autoSave'],
   };
 };
 
@@ -466,6 +470,11 @@ export function Deploy({ store: initial, type: preselected, onClose, lockStore, 
                 {k === 'store' ? `${store.name}'s knowledge` : 'General knowledge'}
               </label>
             ))}
+            {!knowledgeSet && (defaults.knowledgeFrom === 'store' || defaults.knowledgeFrom === 'workspace') && (
+              <Link to={settingsUrl('agents', { ...(defaults.knowledgeFrom === 'store' ? { store: store.id } : {}), setting: 'agentDefaults.knowledge' })} className="text-[11.5px] text-muted hover:text-white hover:underline">
+                {defaults.knowledgeFrom === 'store' ? `From ${store.name} settings` : 'Workspace default'}
+              </Link>
+            )}
           </fieldset>
           {comparable && (
             <label className="mt-2.5 flex items-center gap-2.5 text-[12.5px] text-text-2">
@@ -558,6 +567,15 @@ export function Deploy({ store: initial, type: preselected, onClose, lockStore, 
               />
             </span>
           </div>
+          {saveFindings === 'auto' && !defaults.autoSave && (
+            <p className="mt-1 text-xs text-muted">
+              Automatic saving is off for {store.name} (
+              <Link to={settingsUrl('knowledge', { ...(defaults.autoSaveFrom === 'store' ? { store: store.id } : {}), setting: 'knowledge.autoSave' })} className="text-[#ff6b76] hover:underline">
+                Settings
+              </Link>
+              ): saves will ask you · {defaults.autoSaveFrom === 'store' ? "this store's own setting" : 'workspace default'}
+            </p>
+          )}
           {saveFindings !== 'off' && !store.connected && <p className="mt-1 text-xs text-muted">Findings from demo data are removed when the store goes live.</p>}
           {said('permissions.budgetUsd')}
           {said('permissions.stopAfterMin')}

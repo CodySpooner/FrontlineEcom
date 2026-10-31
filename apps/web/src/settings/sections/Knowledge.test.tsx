@@ -21,12 +21,22 @@ const CATS = [
 const WEEKLY = { id: 'r1', storeId: 'pawsome', name: "What's new in pet travel?", enabled: true, trigger: { type: 'schedule', cron: '0 9 * * 1' }, action: { type: 'kb_research', agentId: 'pawsome:market_analyst', task: "What's new in pet travel?" } } as AutomationRule;
 const OTHER = { ...WEEKLY, id: 'r2', action: { type: 'agent_task', agentId: 'pawsome:ad_strategist', task: 'Review ads' } } as AutomationRule;
 
-function render(ws = 'pawsome', { controls = OFF, put = (b: unknown): unknown => ({ ...OFF, ...(b as object), version: 1 }), forced = false, trim = { pages: 0, logs: 0, outputs: 0, transcripts: 0 } } = {}) {
+const view = (values: Record<string, unknown> = {}, origins: Record<string, string> = {}, versions: Record<string, number> = {}) => ({ values, origins, versions });
+type Patch = { documents: { storeId?: string }[] };
+
+/** `views`: GET /api/config's answers by URL; a PATCH's answer (`patch`) is what the next read of its document returns. */
+function render(ws = 'pawsome', { controls = OFF, put = (b: unknown): unknown => ({ ...OFF, ...(b as object), version: 1 }), forced = false, trim = { pages: 0, logs: 0, outputs: 0, transcripts: 0 }, views = {} as Record<string, unknown>, patch = (_: Patch): unknown => view() } = {}) {
   const sent: [string, string, unknown][] = [];
   stubApi((url, init) => {
     if (init?.method && init.method !== 'GET') sent.push([init.method, url, init.body ? JSON.parse(String(init.body)) : undefined]);
     if (url === '/api/stores') return STORES;
-    if (url === '/api/config') return { values: {}, origins: {}, versions: {} };
+    if (url === '/api/config/impact') return { impacts: [{ setting: 'knowledge.autoSave', text: 'Applies to 1 store that uses the workspace default; 0 stores have their own value' }] };
+    if (url === '/api/config' && init?.method === 'PATCH') {
+      const b = JSON.parse(String(init.body)) as Patch;
+      const id = b.documents[0]!.storeId;
+      return (views[id ? `/api/config?store=${id}` : '/api/config'] = patch(b));
+    }
+    if (url === '/api/config' || url.startsWith('/api/config?')) return views[url] ?? view();
     if (url === '/api/claude-account') return forced ? { signedIn: false, forced: true, checkedAt: '' } : { signedIn: true, checkedAt: '' };
     if (url.startsWith('/api/kb/controls/trim')) return (sent.push(['GET', url, undefined]), trim);
     if (url.startsWith('/api/kb/controls')) return init?.method === 'PUT' ? put(JSON.parse(String(init.body))) : controls;
@@ -157,4 +167,47 @@ it('on the demo engine self-directed research stays off, and says why', async ()
   const on = (await screen.findByRole('switch', { name: 'Self-directed research' })) as HTMLInputElement;
   await waitFor(() => expect(on.disabled).toBe(true));
   expect(within(document.getElementById('kb.autonomous')!).getByText('Set by the environment · the agents are on the demo engine here, and self-directed research needs Claude')).toBeTruthy();
+});
+
+const AUTO = 'knowledge.autoSave';
+const patches = (sent: ReturnType<typeof render>) => sent.filter(([m]) => m === 'PATCH');
+
+it('Automatic saving · default for all stores: General edits the workspace row, saying how many stores follow it', async () => {
+  const sent = render('general', { views: { '/api/config': view({ [AUTO]: true }, { [AUTO]: 'default' }, { workspace: 4 }) }, patch: () => view({ [AUTO]: false }, { [AUTO]: 'workspace' }, { workspace: 5 }) });
+  const card = await screen.findByRole('region', { name: 'Automatic saving · default for all stores' });
+  const on = within(card).getByRole('switch', { name: 'Save findings automatically' }) as HTMLInputElement;
+  expect(on.checked).toBe(true);
+  expect(within(card).getByRole('link', { name: 'Agents & Providers' }).getAttribute('href')).toBe('/settings/agents#agentDefaults.knowledge');
+  fireEvent.click(on);
+  await screen.findByText('Save findings automatically: Applies to 1 store that uses the workspace default; 0 stores have their own value');
+  expect(screen.getByText(/Workspace defaults/, { selector: '[role="status"] *' })).toBeTruthy();
+  save();
+  await waitFor(() => expect(patches(sent)).toEqual([['PATCH', '/api/config', { documents: [{ doc: 'workspace', version: 4, set: { [AUTO]: false } }] }]]));
+  await waitFor(() => expect(screen.queryByRole('button', { name: 'Save changes' })).toBeNull());
+  expect(puts(sent)).toEqual([]); // the research controls weren't touched
+  expect((within(card).getByRole('switch', { name: 'Save findings automatically' }) as HTMLInputElement).checked).toBe(false);
+});
+
+it("a store's Automatic saving follows the workspace's until set: then its own, with Use workspace default", async () => {
+  const workspace = view({ [AUTO]: false }, { [AUTO]: 'workspace' }, { workspace: 4 });
+  const sent = render('pawsome', {
+    views: { '/api/config': workspace, '/api/config?store=pawsome': view({ [AUTO]: false }, { [AUTO]: 'workspace' }, { workspace: 4, 'store_caps:pawsome': 2 }) },
+    patch: (b) => ('unset' in b.documents[0]! ? view({ [AUTO]: false }, { [AUTO]: 'workspace' }, { workspace: 4, 'store_caps:pawsome': 4 }) : view({ [AUTO]: true }, { [AUTO]: 'store' }, { workspace: 4, 'store_caps:pawsome': 3 })),
+  });
+  const card = await screen.findByRole('region', { name: 'Automatic saving' });
+  const row = () => card.querySelector(`[id="${AUTO}"]`) as HTMLElement;
+  expect((within(row()).getByRole('switch') as HTMLInputElement).checked).toBe(false);
+  expect(within(row()).getByText('Using workspace default')).toBeTruthy();
+  expect(within(card).getByRole('link', { name: 'Agents & Providers' }).getAttribute('href')).toBe('/settings/agents?store=pawsome#agentDefaults.knowledge');
+  fireEvent.click(within(row()).getByRole('switch'));
+  expect(within(row()).getByText('Customized for this store · workspace default off')).toBeTruthy();
+  expect(screen.getByText(/Pawsome Gear/, { selector: '[role="status"] *' })).toBeTruthy();
+  save();
+  await waitFor(() => expect(patches(sent)).toEqual([['PATCH', '/api/config', { documents: [{ doc: 'store_caps', storeId: 'pawsome', version: 2, set: { [AUTO]: true } }] }]]));
+  fireEvent.click(await within(row()).findByRole('button', { name: 'Use workspace default' }));
+  expect((within(row()).getByRole('switch') as HTMLInputElement).checked).toBe(false);
+  save();
+  await waitFor(() => expect(patches(sent)[1]).toEqual(['PATCH', '/api/config', { documents: [{ doc: 'store_caps', storeId: 'pawsome', version: 3, unset: [AUTO] }] }]));
+  await within(row()).findByText('Using workspace default');
+  expect(puts(sent)).toEqual([]);
 });
