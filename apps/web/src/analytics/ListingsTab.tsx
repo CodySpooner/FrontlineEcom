@@ -75,7 +75,7 @@ export const dash = (v?: SaValue) => (
 export const val = (v: SaValue, f: (n: number) => string) => (v.value == null ? dash(v) : <span title={v.note}>{f(v.value)}</span>);
 
 /** Stock now: a count only where one is kept; FBA and supplier stock are never judged (decision 27). */
-function stock(r: Pick<SaListingRow, 'stock' | 'stockState' | 'coverDays'> & Partial<Pick<SaListingRow, 'variants' | 'variantsOut'>>): [text: string, tone?: string, title?: string] {
+export function stock(r: Pick<SaListingRow, 'stock' | 'stockState' | 'coverDays'> & Partial<Pick<SaListingRow, 'variants' | 'variantsOut'>>): [text: string, tone?: string, title?: string] {
   const n = (r.stock ?? 0).toLocaleString('en-US');
   switch (r.stockState) {
     case 'out':

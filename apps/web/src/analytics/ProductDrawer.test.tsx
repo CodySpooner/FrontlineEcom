@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { changeOf, SA_METRICS, saDef, type SaListingRow, type SaMetricId, type SaMetricResult, type SaProductDetail, type SaValue } from '@frontline/shared';
+import { changeOf, SA_METRICS, saDef, type SaListingRow, type SaMetricId, type SaMetricResult, type SaProductDetail, type SaValue, type SaVariantRow } from '@frontline/shared';
 import { Analytics } from '../pages/Analytics';
 import { renderApp, stubApi } from '../test-utils';
 
@@ -127,3 +127,55 @@ describe('Performance tab (SA-89)', () => {
     expect(t.getByText(/^Price/).textContent).toBe('Price $10.00 · no unit cost · fees $8 (recorded)');
   });
 });
+
+describe('Variants and Channels tabs (SA-90)', () => {
+  const variant = (id: string, more: Partial<SaVariantRow>): SaVariantRow => ({ id, title: null, sku: null, price: null, stock: null, stockState: 'not_tracked', units: V(2), netSales: V(84), refunds: V(0), contribution: V(30), ...more });
+  const open = async (more: Partial<SaProductDetail>) => {
+    render('/analytics?store=a&tab=listings&product=p1', more);
+    const d = await screen.findByRole('dialog', { name: 'Product 1' });
+    await within(d).findByRole('tabpanel', { name: 'Performance' });
+    return d;
+  };
+  const cells = (t: HTMLElement) => [...t.querySelectorAll('tbody tr')].map((tr) => [...tr.querySelectorAll('td')].map((td) => td.textContent));
+
+  it('Variants: each variant with its SKU, price, stock state and sales; the tab counts them', async () => {
+    const d = await open({
+      variants: {
+        rows: [variant('v1', { title: 'Rose / 15 ml', sku: 'LIP-R15', price: 42, stock: 38, stockState: 'low', coverDays: 5.1 }), variant('v2', { title: 'Plum', price: 42, stock: 0, stockState: 'out', units: { value: null, status: 'unavailable' } })],
+        note: 'Variant sales not recorded yet',
+      },
+    });
+    expect(within(d).getByRole('tab', { name: /^Variants/ }).textContent).toBe('Variants 2');
+    fireEvent.click(within(d).getByRole('tab', { name: /^Variants/ }));
+    const t = within(within(d).getByRole('tabpanel', { name: 'Variants' }));
+    expect(cells(t.getByRole('table', { name: 'Variants' }))).toEqual([
+      ['Rose / 15 ml · LIP-R15', '$42.00', '38 · ~5 d', '2', '$84', '$0'],
+      ['Plum', '$42.00', '0 · out', '–', '$84', '$0'],
+    ]);
+    expect(t.getByText('0 · out').className).toContain('text-red');
+    expect(t.getByText('Variant sales not recorded yet.')).toBeTruthy();
+  });
+
+  it('Channels: status, its error, since only from a publish date, sync time and period sales', async () => {
+    const synced = new Date(Date.now() - 2 * 3_600_000).toISOString();
+    const d = await open({
+      channels: [
+        { ...channel('site', 'active', null, '2026-03-04'), syncedAt: synced },
+        { ...channel('tiktok_shop', 'failed', 'Image under 600 px'), syncedAt: synced },
+        channel('amazon', null, null, '2026-05-01'),
+      ],
+      channelsNote: "Demo data isn't split by channel",
+    });
+    expect(within(d).getByRole('tab', { name: /^Channels/ }).textContent).toBe('Channels 3');
+    fireEvent.click(within(d).getByRole('tab', { name: /^Channels/ }));
+    const t = within(within(d).getByRole('tabpanel', { name: 'Channels' }));
+    expect(cells(t.getByRole('table', { name: 'Channel listings' }))).toEqual([
+      ['SHShopify site', 'Active · since Mar 4', '2 h ago', '1', '$1', '$0'],
+      ['TKTikTok Shop', 'FailedImage under 600 px', '2 h ago', '1', '$1', '$0'],
+      ['AZAmazon', 'Not listed', '–', '1', '$1', '$0'],
+    ]);
+    expect(t.getByText('Image under 600 px').className).toContain('text-red');
+    expect(t.getByText("Demo data isn't split by channel.")).toBeTruthy();
+  });
+});
+

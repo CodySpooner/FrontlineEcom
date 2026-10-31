@@ -1,6 +1,6 @@
 // SA-88 (the Listings board): the product drawer, opened by `product=` in the URL from a Listings row or a Needs
 // attention flag. Its header facts and pills come from the product endpoint (SA-87); its tabs render as their content
-// ships (decision 33): Performance (SA-89). Closed, it hands focus back to what opened it.
+// ships (decision 33): Performance (SA-89), Variants and Channels (SA-90). Closed, it hands focus back to what opened it.
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Info } from 'lucide-react';
 import { SA_METRICS, type Platform, type SaListingRow, type SaMetricId, type SaMetricResult, type SaProductDetail } from '@frontline/shared';
@@ -12,7 +12,7 @@ import { BarChart } from './BarChart';
 import { FilterScope } from './FilterScope';
 import { channelsOf } from './Filters';
 import { Change, fmtValue } from './KpiStrip';
-import { ChannelMark, val } from './ListingsTab';
+import { ChannelMark, dash, stock, val } from './ListingsTab';
 import { periodParams, type AnalyticsPage } from './state';
 import { Unavailable } from './Unavailable';
 
@@ -40,6 +40,8 @@ function stockPill(r: SaListingRow): [string, keyof typeof TONE] {
 }
 
 const TH = 'border-b border-line px-2 py-1.5 text-[11px] font-semibold whitespace-nowrap text-muted';
+const GRID = 'w-full border-collapse text-[12px] tabular-nums [&_td]:border-b [&_td]:border-[#1c1c21] [&_td]:px-2 [&_td]:py-[5px] [&_td]:whitespace-nowrap';
+const status = (c: { status: string | null }) => (c.status ? `${c.status.charAt(0).toUpperCase()}${c.status.slice(1)}` : 'Not listed');
 /** Where a unit cost came from: a platform, the owner (Unit costs, the drawer's Costs tab) or the demo catalog. */
 const costSource = (s: string) => (s === 'owner' ? 'entered by you' : s === 'demo' ? 'demo' : (PLATFORM_NAME[s as Platform] ?? s));
 
@@ -96,7 +98,7 @@ function Performance({ d, currency, platform, channel }: { d: SaProductDetail; c
         </div>
       )}
       <div>
-        <table aria-label="Channels" className="w-full border-collapse text-[12px] tabular-nums [&_td]:border-b [&_td]:border-[#1c1c21] [&_td]:px-2 [&_td]:py-[5px] [&_td]:whitespace-nowrap">
+        <table aria-label="Channels" className={GRID}>
           <thead>
             <tr>
               <th className={cx(TH, 'text-left')}>Channel</th>
@@ -116,7 +118,8 @@ function Performance({ d, currency, platform, channel }: { d: SaProductDetail; c
                   </span>
                 </td>
                 <td className={cx(c.status === 'failed' && 'text-red', !c.status && 'text-muted')} title={c.error ?? undefined}>
-                  {c.status ? `${c.status.charAt(0).toUpperCase()}${c.status.slice(1)}${c.publishedAt ? ` · since ${fmtDay(c.publishedAt)}` : ''}` : 'Not listed'}
+                  {status(c)}
+                  {c.status && c.publishedAt && ` · since ${fmtDay(c.publishedAt)}`}
                 </td>
                 <td className="text-right">{val(c.units, (n) => n.toLocaleString('en-US'))}</td>
                 <td className="text-right">{val(c.netSales, (n) => money(n, currency))}</td>
@@ -164,16 +167,106 @@ function Performance({ d, currency, platform, channel }: { d: SaProductDetail; c
   );
 }
 
+/** SA-90: each variant's SKU, price, stock state and period sales. */
+function Variants({ d, currency }: { d: SaProductDetail; currency?: string }) {
+  return (
+    <div>
+      <table aria-label="Variants" className={GRID}>
+        <thead>
+          <tr>
+            <th className={cx(TH, 'text-left')}>Variant</th>
+            <th className={cx(TH, 'text-right')}>Price</th>
+            <th className={cx(TH, 'text-right')}>Stock</th>
+            <th className={cx(TH, 'text-right')}>Units</th>
+            <th className={cx(TH, 'text-right')}>Net sales</th>
+            <th className={cx(TH, 'text-right')}>Refunds</th>
+          </tr>
+        </thead>
+        <tbody>
+          {d.variants.rows.map((v) => {
+            const [text, tone, title] = stock(v);
+            return (
+              <tr key={v.id}>
+                <td className="whitespace-normal!">
+                  {v.title ?? v.id}
+                  {v.sku && <span className="text-muted"> · {v.sku}</span>}
+                </td>
+                <td className="text-right">{v.price == null ? dash() : cents(v.price, currency)}</td>
+                <td className={cx('text-right', tone)} title={title}>
+                  {text}
+                </td>
+                <td className="text-right">{val(v.units, (n) => n.toLocaleString('en-US'))}</td>
+                <td className="text-right">{val(v.netSales, (n) => money(n, currency))}</td>
+                <td className="text-right">{val(v.refunds, (n) => money(n, currency))}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+      {d.variants.note && <p className="mt-1.5 text-[11px] text-muted">{d.variants.note}.</p>}
+    </div>
+  );
+}
+
+/** SA-90: each channel's listing status, its error, publish and sync times, and its period sales. */
+function Channels({ d, currency, platform, channel }: { d: SaProductDetail; currency?: string; platform?: string; channel: (id: string) => string }) {
+  return (
+    <div>
+      <table aria-label="Channel listings" className={GRID}>
+        <thead>
+          <tr>
+            <th className={cx(TH, 'text-left')}>Channel</th>
+            <th className={cx(TH, 'text-left')}>Status</th>
+            <th className={cx(TH, 'text-left')}>Last synced</th>
+            <th className={cx(TH, 'text-right')}>Units</th>
+            <th className={cx(TH, 'text-right')}>Net sales</th>
+            <th className={cx(TH, 'text-right')}>Refunds</th>
+          </tr>
+        </thead>
+        <tbody>
+          {d.channels.map((c) => (
+            <tr key={c.channel}>
+              <td>
+                <span className="inline-flex items-center gap-1.5">
+                  <ChannelMark channel={c.channel} platform={platform} />
+                  {channel(c.channel)}
+                </span>
+              </td>
+              <td className="whitespace-normal!">
+                <span className={cx(c.status === 'failed' && 'text-red', !c.status && 'text-muted')}>{status(c)}</span>
+                {/* the platform's own publish date only; a first sync isn't one */}
+                {c.status && c.publishedAt && <span className="text-muted"> · since {fmtDay(c.publishedAt)}</span>}
+                {c.error && <span className="block text-[11px] text-red">{c.error}</span>}
+              </td>
+              <td className="text-muted">{c.syncedAt ? ago(c.syncedAt) : dash()}</td>
+              <td className="text-right">{val(c.units, (n) => n.toLocaleString('en-US'))}</td>
+              <td className="text-right">{val(c.netSales, (n) => money(n, currency))}</td>
+              <td className="text-right">{val(c.refunds, (n) => money(n, currency))}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {d.channelsNote && <p className="mt-1.5 text-[11px] text-muted">{d.channelsNote}.</p>}
+    </div>
+  );
+}
+
 export function ProductDrawer({ s, id }: { s: AnalyticsPage & { store: string }; id: string }) {
   const ctx = useSaContext(s.store).data;
   const q = useSaProduct(s.store, id, periodParams(s));
   // what opened it (a row, a flag): focus goes back there once the drawer is gone
   const opener = useRef(document.activeElement as HTMLElement | null);
   useEffect(() => () => opener.current?.focus(), []);
-  const [tab, setTab] = useState('performance');
+  const [tab, setTab] = useState<'performance' | 'variants' | 'channels'>('performance');
   const d = q.data;
   const r = d?.row;
   const label = (c: string) => (c === 'site' ? 'site' : ((ctx && channelsOf(ctx).find((x) => x.id === c)?.label) ?? PLATFORM_NAME[c as Platform] ?? c));
+  const channel = (c: string) => (c === 'site' ? ((ctx && channelsOf(ctx)[0]?.label) ?? 'Site') : label(c));
+  const tabs = d && [
+    { value: 'performance' as const, label: 'Performance' },
+    { value: 'variants' as const, label: 'Variants', count: d.variants.rows.length },
+    { value: 'channels' as const, label: 'Channels', count: d.channels.length },
+  ];
   const pill = (text: string, tone: keyof typeof TONE, title?: string) => (
     <span key={text} title={title} className={cx('inline-flex items-center rounded-full border px-2 py-px text-[11px] font-semibold whitespace-nowrap', TONE[tone])}>
       {text}
@@ -204,9 +297,11 @@ export function ProductDrawer({ s, id }: { s: AnalyticsPage & { store: string };
         <LoadingState rows={6} />
       ) : (
         <div className="flex flex-col gap-3.5">
-          <Tabs variant="underline" label="Product sections" tabs={[{ value: 'performance', label: 'Performance' }]} value={tab} onChange={setTab} className="-mx-5 -mt-5 px-5" />
-          <div role="tabpanel" aria-label="Performance">
-            <Performance d={d} currency={ctx?.currency} platform={ctx?.platform} channel={(c) => (c === 'site' ? ((ctx && channelsOf(ctx)[0]?.label) ?? 'Site') : label(c))} />
+          <Tabs variant="underline" label="Product sections" tabs={tabs!} value={tab} onChange={setTab} className="-mx-5 -mt-5 px-5" />
+          <div role="tabpanel" aria-label={tabs!.find((t) => t.value === tab)!.label}>
+            {tab === 'performance' && <Performance d={d} currency={ctx?.currency} platform={ctx?.platform} channel={channel} />}
+            {tab === 'variants' && <Variants d={d} currency={ctx?.currency} />}
+            {tab === 'channels' && <Channels d={d} currency={ctx?.currency} platform={ctx?.platform} channel={channel} />}
           </div>
           <FilterScope scope={d.scope} />
         </div>
