@@ -40,7 +40,7 @@ function ignoredBecause(id: SaMetricId, key: SaFilterKey, demo: boolean, collect
 }
 
 /** The filters' slice, the comparison's dates and its last-day cut: what a set and a series share. */
-function setup(db: Db, storeId: string, sp: StorePeriod, filters: SaFilters) {
+export function setup(db: Db, storeId: string, sp: StorePeriod, filters: SaFilters) {
   const demo = !!db.prepare('SELECT demo FROM stores WHERE id = ?').get(storeId)?.demo;
   const active = (Object.keys(filters) as SaFilterKey[]).filter((k) => filters[k]?.length);
   // A product is in when it's in any selected collection (SA-47); collections never synced apply nothing. With the

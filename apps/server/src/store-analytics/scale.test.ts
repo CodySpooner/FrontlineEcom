@@ -8,6 +8,7 @@ import { LEDGER_NOW, LEDGER_STORE, SCALE_STORE, seedLedgerStore, seedScaleStore 
 import { listings } from './listings';
 import { computeMetricSet, computeSeries } from './metric-set';
 import { overview } from './overview';
+import { contributions } from './contributions';
 import { storePeriod, type StorePeriod } from './period';
 import { reconcile } from './reconcile';
 import { storeContext } from './routes';
@@ -77,6 +78,8 @@ function run(db: Db, storeId: string, now: number) {
   storeContext(db, storeId, now);
   listings(db, storeId, {}, period({ period: 'last30' }));
   overview(db, { storeId }, period({ period: 'last30' }));
+  contributions(db, { storeId }, period({ period: 'last30' }));
+  contributions(db, { storeId }, period({ period: 'today' }), { channel: ['site'] }, 'order_day');
   listings(db, storeId, { sort: 'net_sales', page: '2' }, period({ period: 'last365' }), {}, 'order_day');
   listings(db, storeId, { sort: 'refunds', q: 'GH', status: 'all' }, period({ period: 'last30' }), { channel: ['site'], collection: ['c-best'] });
 }

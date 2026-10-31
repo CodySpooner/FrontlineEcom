@@ -910,6 +910,33 @@ export interface SaOverview extends SaMetricSet {
   annotations: number;
 }
 
+/** One row of What moved: a product, the rest combined, or what no product line carries. */
+export interface SaMovedRow {
+  kind: 'product' | 'others' | 'unattributed';
+  /** A product's id. */
+  id?: string;
+  title: string;
+  image?: string | null;
+  /** Its change in net sales vs the comparison, in the store's currency. */
+  change: number;
+  /** Its channel split, out-of-stock variants, stock left or variant count, when known; what a combined row holds. */
+  note?: string;
+  /** A product with no sales in the comparison period. */
+  new?: true;
+}
+
+/**
+ * SA-73, GET /api/analytics/contributions: each product's share of the net sales change (top four up, top two down, the
+ * rest combined). The rows add up to `change`, the Overview KPI's change, exactly. Observed, never a cause.
+ */
+export interface SaMoved {
+  change: number | null;
+  /** Why there is no change to split. */
+  note?: string;
+  rows: SaMovedRow[];
+  scope: SaFilterScope;
+}
+
 /**
  * SA-72 (decision 45), GET /api/analytics/annotations: context on the chart, never a cause. Derived from real records:
  * a price change (`price_tests`), an approved change to the store or its ads, a sync that failed for over 3 hours.

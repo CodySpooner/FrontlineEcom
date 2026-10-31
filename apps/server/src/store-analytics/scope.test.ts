@@ -41,6 +41,7 @@ const ROUTES: Row[] = [
   { method: 'GET', path: '/api/analytics/listings' },
   { method: 'GET', path: '/api/analytics/overview' },
   { method: 'GET', path: '/api/analytics/annotations' },
+  { method: 'GET', path: '/api/analytics/contributions' },
   { method: 'PUT', path: '/api/analytics/sources/verified', record: pawsomeShopify, body: (id) => ({ integration: id, dataset: 'orders', note: 'Matched the platform report' }) },
 ];
 

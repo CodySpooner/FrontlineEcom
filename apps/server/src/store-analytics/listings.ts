@@ -8,7 +8,7 @@ import { hash, mulberry32 } from '../demo';
 import { costMetrics } from './costs';
 import { storeConverter } from './fx';
 import type { StorePeriod } from './period';
-import { CANONICAL, salesMetrics, sliceSql, type RefundBasis } from './sales';
+import { CANONICAL, salesMetrics, sliceSql, type RefundBasis, type Slice } from './sales';
 
 export const PAGE_SIZE = 25;
 const METRIC_SORTS = new Set<SaListingSort>(['units', 'net_sales', 'refunds']);
@@ -19,13 +19,13 @@ type Query = { status?: string; q?: string; sort?: string; page?: string };
  * Each product's units, net sales and refunds over [from, to], grouped in three passes so a sort covers every product.
  * The same rules as `salesMetrics` with a one-product slice (listings.test.ts holds them equal): units from order lines,
  * else the order's per-product rows; money from lines of orders with money parts at their day's rate, else the per-product
- * rows; merchandise refunds of orders with money parts.
+ * rows; merchandise refunds of orders with money parts. A slice's cut stops the last day as `salesMetrics` does (SA-73).
  */
-function totals(db: Db, storeId: string, from: string, to: string, basis: RefundBasis, channels?: string[]) {
+export function totals(db: Db, storeId: string, from: string, to: string, basis: RefundBasis, slice: Slice = {}) {
   const { fx } = storeConverter(db, String(db.prepare('SELECT currency FROM stores WHERE id = ?').get(storeId)!.currency));
   const t = new Map<string, Record<'units' | 'net_sales' | 'refunds', number>>();
   const of = (p: unknown) => t.get(String(p)) ?? t.set(String(p), { units: 0, net_sales: 0, refunds: 0 }).get(String(p))!;
-  const w = sliceSql(db, storeId, channels && { channels }, to);
+  const w = sliceSql(db, storeId, slice, to);
   for (const r of db
     .prepare(
       `SELECT l.product_id AS p, o.local_date AS day, o.currency AS cur, o.fx_rate AS locked, o.breakdown_at IS NOT NULL AS parts, sum(l.quantity) AS q, sum(l.gross - coalesce(l.discount, 0)) AS sales
@@ -48,7 +48,7 @@ function totals(db: Db, storeId: string, from: string, to: string, basis: Refund
     if (!r.parts) x.net_sales += Number(r.rev);
   }
   const dayCol = basis === 'order_day' ? 'o.local_date' : 'r.local_date';
-  const wr = sliceSql(db, storeId, channels && { channels }, to, dayCol);
+  const wr = sliceSql(db, storeId, slice, to, dayCol, basis === 'order_day' ? 'o.created_at' : 'r.refunded_at');
   for (const r of db
     .prepare(
       `SELECT r.product_id AS p, r.local_date AS day, o.currency AS cur, o.fx_rate AS locked, sum(r.merchandise) AS merch FROM refunds r JOIN orders o ON o.store_id = r.store_id AND o.id = r.order_id
@@ -79,11 +79,16 @@ function demoSplit(db: Db, storeId: string, from: string, to: string, basis: Ref
     const of = (v: SaValue, round: (n: number) => number): SaValue => (v.value == null ? v : { ...v, value: round(v.value * k) });
     return { net_sales: of(s.net_sales, cents), units: of(s.units, Math.round), refunds: of(s.refunds, cents), contribution: of(c, cents) };
   };
+  const rows = new Map([...demoShares(db, storeId)].map(([id, k]) => [id, part(k)]));
+  return (id: string) => rows.get(id) ?? part(0);
+}
+
+/** A demo store's fixed share of its sales per active product (Dashboard's `demoTopProducts` weights), adding up to 1. */
+export function demoShares(db: Db, storeId: string) {
   const products = db.prepare("SELECT id FROM products WHERE store_id = ? AND status = 'active' AND price > 0").all(storeId).map((p) => String(p.id));
   const weights = products.map((id) => 0.2 + mulberry32(hash(`${storeId}:${id}`))());
   const total = weights.reduce((a, w) => a + w, 0);
-  const rows = new Map(products.map((id, i) => [id, part(weights[i]! / total)]));
-  return (id: string) => rows.get(id) ?? part(0);
+  return new Map(products.map((id, i) => [id, weights[i]! / total]));
 }
 
 export function listings(db: Db, storeId: string, query: Query, sp: StorePeriod, filters: SaFilters = {}, basis: RefundBasis = 'refund_day'): SaListings | string {
@@ -131,7 +136,7 @@ export function listings(db: Db, storeId: string, query: Query, sp: StorePeriod,
   // ponytail: the whole matching set is sorted in memory (20,000 products in the scale fixture); SQL ORDER BY when it isn't enough.
   const all = db.prepare(`SELECT p.id, p.title, p.price, iif(p.inventory_tracked, p.inventory, NULL) AS stock FROM products p WHERE ${where.join(' AND ')}`).all(...params);
   const demoSales = demo ? demoSplit(db, storeId, sp.period.from, sp.period.to, basis) : undefined;
-  const t = METRIC_SORTS.has(key) && !demo ? totals(db, storeId, sp.period.from, sp.period.to, basis, channels) : undefined;
+  const t = METRIC_SORTS.has(key) && !demo ? totals(db, storeId, sp.period.from, sp.period.to, basis, channels && { channels }) : undefined;
   const m = key as 'units' | 'net_sales' | 'refunds';
   const sortKey = (r: (typeof all)[number]): number | string | null =>
     METRIC_SORTS.has(key) ? (demoSales ? (demoSales(String(r.id))[m].value ?? 0) : (t!.get(String(r.id))?.[m] ?? 0)) : key === 'title' ? String(r.title).toLowerCase() : key === 'price' ? Number(r.price) : (r.stock as number | null);

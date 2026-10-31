@@ -101,7 +101,7 @@ describe('Overview trend panel', () => {
           { kind: 'data_health', date: '2026-10-13', text: 'Meta Ads sync failed for 6 h, synced again Oct 13' },
           { kind: 'app_change', date: '2026-10-15', text: 'Approved: Raise Meta budget to $60/day' },
         ];
-      if (url.startsWith('/api/analytics/summary')) return new Response('{}', { status: 500 });
+      if (url.startsWith('/api/analytics/summary') || url.startsWith('/api/analytics/contributions')) return new Response('{}', { status: 500 });
       if (url.startsWith('/api/analytics/context')) return { storeId: 'a', name: 'Glow Haus', niche: 'beauty', platform: 'shopify', currency: 'USD', demo: false, channels: [], zone: null, zoneLabel: '', zoneAbbr: 'ET', historyStart: null, freshness: [] };
       return [];
     });
