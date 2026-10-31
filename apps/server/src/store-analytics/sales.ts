@@ -29,7 +29,7 @@ export const CANONICAL = `o.duplicate_of IS NULL AND iif(o.breakdown_at IS NULL,
  * `variants` (SA-83, with `products`): only the order and refund lines naming one of these variants; per-product rows
  * (`order_items`) name no variant, so none of them count.
  */
-export type Slice = { cut?: { at: string; fraction: number }; channels?: string[]; products?: string[]; variants?: string[] };
+export type Slice = { cut?: { at: string; fraction: number }; channels?: string[]; products?: string[]; variants?: string[]; countries?: string[] };
 
 /** ` AND …` conditions narrowing order `o` (and the row's own day and time columns) to a slice, with their params. */
 export function sliceSql(db: Db, storeId: string, s: Slice | undefined, to: string, day = 'o.local_date', time = 'o.created_at') {
@@ -41,6 +41,8 @@ export function sliceSql(db: Db, storeId: string, s: Slice | undefined, to: stri
     sql.push(`coalesce(o.channel, iif(+o.id GLOB 'tt-*', 'tiktok_shop', ?)) IN (${s.channels.map(() => '?').join(', ')})`);
     params.push(platform === 'shopify' || platform === 'woocommerce' ? 'site' : platform, ...s.channels);
   }
+  // SA-96: the order's recorded shipping country
+  if (s?.countries) sql.push('o.country IN (SELECT value FROM json_each(?))'), params.push(JSON.stringify(s.countries));
   if (s?.variants) {
     sql.push('EXISTS (SELECT 1 FROM order_lines x WHERE x.store_id = o.store_id AND x.order_id = o.id AND x.product_id IN (SELECT value FROM json_each(?)) AND x.variant_id IN (SELECT value FROM json_each(?)))');
     params.push(JSON.stringify(s.products ?? []), JSON.stringify(s.variants));

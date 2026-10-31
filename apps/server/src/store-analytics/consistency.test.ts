@@ -1,8 +1,8 @@
 // SA-69: one number, one value everywhere. Each surface that shows a v1 number has a row here holding it equal to
 // /metrics (or to the surface it's drawn from) for the same scope, on the ledger fixture and on a demo store. Later
 // surfaces add a row.
-import type { SaListings, SaMetricSet, SaOverview, SaProductDetail, SaSalesReport } from '@frontline/shared';
-import { SA_OVERVIEW_KPIS, SA_SALES_REPORT } from '@frontline/shared';
+import type { SaListings, SaMetricSet, SaOverview, SaProductDetail, SaSalesBreakdown, SaSalesReport } from '@frontline/shared';
+import { SA_BREAKDOWNS, SA_OVERVIEW_KPIS, SA_SALES_REPORT } from '@frontline/shared';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../app';
 import { openDb } from '../db';
@@ -54,6 +54,21 @@ for (const scope of SCOPES) {
           expect(rows.reduce((s, r) => s + (r.values[id].value ?? 0), 0), `${id}${v}`).toBeCloseTo(m.metrics.find((x) => x.id === id)!.value!, 2);
         }
         void [grain, tax, shipping];
+      }
+    });
+
+    it("each sales breakdown's total = /metrics; its rows (with Unknown) add up to it, collections unless they overlap (SA-96)", async () => {
+      const a = app();
+      for (const v of VARIANTS) {
+        const q = `store=${scope.store}&${scope.period}${v}`;
+        const m = (await get<SaMetricSet>(a, `metrics?${q.replace('&compare=year', '')}&metrics=net_sales,units&compare=none`)).metrics;
+        for (const by of SA_BREAKDOWNS) {
+          const b = await get<SaSalesBreakdown>(a, `sales/breakdown?by=${by}&${q}`);
+          expect([b.total.net_sales, b.total.units], `${by}${v}`).toEqual(m);
+          if (!b.rows.length || b.overlap) continue;
+          expect(b.rows.reduce((s, r) => s + r.net_sales!, 0), `${by}${v}`).toBeCloseTo(m[0]!.value!, 2);
+          expect(b.rows.reduce((s, r) => s + r.units!, 0), `${by}${v}`).toBe(m[1]!.value);
+        }
       }
     });
 

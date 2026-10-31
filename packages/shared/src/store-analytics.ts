@@ -806,6 +806,37 @@ export interface SaSalesReport extends SaMetricSet {
   rows: SaSalesRow[];
 }
 
+/** SA-96: what `GET /api/analytics/sales/breakdown?by=` splits net sales and units by. */
+export const SA_BREAKDOWNS = ['channel', 'product', 'collection', 'country'] as const;
+export type SaBreakdownBy = (typeof SA_BREAKDOWNS)[number];
+
+/**
+ * One row of a breakdown, largest first. `kind`: `more` sums the rows past the top ones; `none` is the products in no
+ * collection; `unknown` is what the rows can't place (the total less them), e.g. orders with no country recorded.
+ */
+export interface SaBreakdownRow {
+  id: string | null;
+  /** The product's or collection's title, the ISO country code or the channel id. */
+  label: string;
+  net_sales: number | null;
+  units: number | null;
+  kind?: 'more' | 'none' | 'unknown';
+}
+
+export interface SaSalesBreakdown {
+  by: SaBreakdownBy;
+  period: SaPeriod;
+  /** /metrics' net sales and units for the scope (no comparison): the rows add up to them. */
+  total: { net_sales: SaMetricResult; units: SaMetricResult };
+  rows: SaBreakdownRow[];
+  /** A product in several collections counts in each, so collection rows add up to more than the total. */
+  overlap?: true;
+  /** Why there are no rows (a demo store, collections or countries not read). */
+  reason?: SaReason;
+  note?: string;
+  scope: SaFilterScope;
+}
+
 /** One point of a series: a day, or a week over long periods, with the comparison's aligned point (same day offset). */
 export interface SaSeriesPoint {
   from: string;

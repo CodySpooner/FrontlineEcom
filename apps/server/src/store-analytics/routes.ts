@@ -1,7 +1,8 @@
-import { SA_METRICS, SA_SALES_GRAINS, SA_SOURCES, type SaCollection, type SaContext, type SaMetricId, type SaSalesGrain, type SaSourceKind } from '@frontline/shared';
+import { SA_BREAKDOWNS, SA_METRICS, SA_SALES_GRAINS, SA_SOURCES, type SaBreakdownBy, type SaCollection, type SaContext, type SaMetricId, type SaSalesGrain, type SaSourceKind } from '@frontline/shared';
 import { Hono } from 'hono';
 import type { Db } from '../db';
 import { annotations } from './annotations';
+import { salesBreakdown } from './breakdowns';
 import { compareProducts } from './compare';
 import { contributions } from './contributions';
 import { exportListings } from './exports';
@@ -111,6 +112,20 @@ export function storeAnalyticsRoutes(db: Db) {
       if (!SA_SALES_GRAINS.includes(grain)) return c.json({ error: 'grain must be day, week or month' }, 400);
       if (grain === 'day' && sp.period.days > 400) return c.json({ error: 'Days cover up to 400 days: pick week or month' }, 400);
       return c.json(salesReport(db, s, sp, filters, basis, grain));
+    })
+    // SA-96: net sales and units by channel, product, collection or country, adding up to the totals.
+    .get('/api/analytics/sales/breakdown', (c) => {
+      const s = scoped(c);
+      if ('error' in s) return c.json({ error: s.error }, s.status);
+      const by = c.req.query('by') as SaBreakdownBy;
+      if (!SA_BREAKDOWNS.includes(by)) return c.json({ error: `by must be one of ${SA_BREAKDOWNS.join(', ')}` }, 400);
+      const sp = storePeriod(db, s.storeId, (k) => c.req.query(k));
+      if (typeof sp === 'string') return c.json({ error: sp }, 400);
+      const filters = parseFilters(c.req.query('filters'));
+      if (typeof filters === 'string') return c.json({ error: filters }, 400);
+      const basis = c.req.query('refunds') ?? 'refund_day';
+      if (basis !== 'refund_day' && basis !== 'order_day') return c.json({ error: 'refunds must be refund_day or order_day' }, 400);
+      return c.json(salesBreakdown(db, s, sp, filters, basis, by));
     })
     // SA-24: Dashboard's revenue to v1 net sales for the period, line by line.
     .get('/api/analytics/reconcile', (c) => {

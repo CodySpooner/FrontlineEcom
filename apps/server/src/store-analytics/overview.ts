@@ -9,18 +9,21 @@ import type { StorePeriod } from './period';
 import type { Scope } from './routes';
 import { CANONICAL, type RefundBasis } from './sales';
 
-export function overview(db: Db, scope: Scope, sp: StorePeriod, filters: SaFilters = {}, basis: RefundBasis = 'refund_day'): SaOverview {
-  const set = { ...computeMetricSet(db, scope, SA_OVERVIEW_KPIS, sp, filters, basis), annotations: annotations(db, scope.storeId, sp).length, attention: insights(db, scope.storeId, sp).insights.length };
-  const store = db.prepare('SELECT platform, demo FROM stores WHERE id = ?').get(scope.storeId)!;
-  if (store.demo) return { ...set, channels: [], channelsNote: "Demo data isn't split by channel" };
-  // The channels the period's orders came through, as the channel filter names them (sliceSql's rule).
-  const own = store.platform === 'shopify' || store.platform === 'woocommerce' ? 'site' : String(store.platform);
-  const seen = db
+/** The channels the period's orders came through, as the channel filter names them (sliceSql's rule). */
+export function channelsIn(db: Db, storeId: string, from: string, to: string, filters: SaFilters) {
+  const platform = String(db.prepare('SELECT platform FROM stores WHERE id = ?').get(storeId)!.platform);
+  const own = platform === 'shopify' || platform === 'woocommerce' ? 'site' : platform;
+  return db
     .prepare(`SELECT DISTINCT coalesce(o.channel, iif(+o.id GLOB 'tt-*', 'tiktok_shop', ?)) AS ch FROM orders o WHERE o.store_id = ? AND o.local_date BETWEEN ? AND ? AND ${CANONICAL}`)
-    .all(own, scope.storeId, sp.period.from, sp.period.to)
+    .all(own, storeId, from, to)
     .map((r) => String(r.ch))
     .filter((c) => !filters.channel?.length || filters.channel.includes(c));
-  const channels = seen.map((channel) => {
+}
+
+export function overview(db: Db, scope: Scope, sp: StorePeriod, filters: SaFilters = {}, basis: RefundBasis = 'refund_day'): SaOverview {
+  const set = { ...computeMetricSet(db, scope, SA_OVERVIEW_KPIS, sp, filters, basis), annotations: annotations(db, scope.storeId, sp).length, attention: insights(db, scope.storeId, sp).insights.length };
+  if (db.prepare('SELECT demo FROM stores WHERE id = ?').get(scope.storeId)!.demo) return { ...set, channels: [], channelsNote: "Demo data isn't split by channel" };
+  const channels = channelsIn(db, scope.storeId, sp.period.from, sp.period.to, filters).map((channel) => {
     const [net, orders] = computeMetricSet(db, scope, ['net_sales', 'orders'], { ...sp, compare: undefined }, { ...filters, channel: [channel] }, basis).metrics;
     return { channel, net_sales: net!, orders: orders! };
   });
