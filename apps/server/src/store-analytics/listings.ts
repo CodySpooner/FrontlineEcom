@@ -31,9 +31,15 @@ export function coverUnits(db: Db, storeId: string, today: string, demo: boolean
   return new Map([...demoShares(db, storeId)].map(([id, k]) => [id, Math.round(all * k)]));
 }
 
-/** SA-80: a product's stock now. FBA stock is Amazon's and untracked stock has no count: neither is judged. */
+/** SA-81 (decision 27): an untracked product is supplier-managed when an order this many days back names a supplier. */
+export const SUPPLIER_DAYS = 30;
+const SUPPLIED = (via: string) =>
+  `EXISTS (SELECT 1 FROM ${via} x JOIN orders o ON o.store_id = x.store_id AND o.id = x.order_id WHERE x.store_id = p.store_id AND x.product_id = p.id AND o.supplier IS NOT NULL AND o.local_date >= ?)`;
+
+/** SA-80: a product's stock now. FBA stock is Amazon's, a supplier's is theirs, untracked stock has no count: none is judged. */
 function stockState(p: Record<string, unknown>, sold: number): SaStockState {
   if (p.fba) return 'fba';
+  if (p.supplier) return 'supplier';
   if (!p.tracked) return 'not_tracked';
   if (Number(p.inv) <= 0) return 'out';
   return sold >= COVER_MIN_UNITS && Number(p.inv) / (sold / COVER_WINDOW) < COVER_DAYS ? 'low' : 'in_stock';
@@ -167,10 +173,11 @@ export function listings(db: Db, storeId: string, query: Query, sp: StorePeriod,
          EXISTS (SELECT 1 FROM product_variants v WHERE v.store_id = p.store_id AND v.product_id = p.id AND v.inventory_policy = 'fba') AS fba,
          (SELECT count(*) FROM product_variants v WHERE v.store_id = p.store_id AND v.product_id = p.id) AS nv,
          (SELECT count(*) FROM product_variants v WHERE v.store_id = p.store_id AND v.product_id = p.id AND v.inventory_tracked AND v.inventory <= 0) AS vout,
-         (SELECT count(*) FROM channel_listings c WHERE c.store_id = p.store_id AND c.product_id = p.id) AS nc
+         (SELECT count(*) FROM channel_listings c WHERE c.store_id = p.store_id AND c.product_id = p.id) AS nc,
+         NOT p.inventory_tracked AND (${SUPPLIED('order_lines')} OR ${SUPPLIED('order_items')}) AS supplier
        FROM products p WHERE ${where.join(' AND ')}`,
     )
-    .all(...params);
+    .all(...Array(2).fill(addDays(sp.today, -SUPPLIER_DAYS)), ...params);
   const demoSales = demo ? demoSplit(db, storeId, sp.period.from, sp.period.to, basis) : undefined;
   const { compare, cut } = setup(db, storeId, sp, {});
   const demoBefore = demo && compare ? demoSplit(db, storeId, compare.from, compare.to, basis, cut && { cut }) : undefined;

@@ -25,6 +25,14 @@ function fixture() {
 const p1 = (db: Db, refunds = 'refund_day') => storePeriod(db, LEDGER_STORE, (k) => ({ period: 'custom', from: P1.from, to: P1.to })[k], LEDGER_NOW) as StorePeriod;
 const list = (db: Db, q: Record<string, string> = {}, filters: SaFilters = {}, basis: 'refund_day' | 'order_day' = 'refund_day') => listings(db, LEDGER_STORE, q, p1(db), filters, basis) as SaListings;
 const titles = (l: SaListings) => l.rows.map((r) => r.title);
+/** A paid site order of one line on `day`, its supplier named or not. */
+function sale(db: Db, id: string, day: string, product: string, qty: number, supplier: string | null = null) {
+  db.prepare(
+    `INSERT INTO orders (store_id, id, created_at, total, status, fulfillment_status, supplier, cogs, local_date, tax, source_kind, source_id, channel, currency, gross_sales, discounts, shipping, paid_at, source_updated_at, breakdown_at)
+     VALUES (?1, ?2, ?3, ?4, 'paid', 'fulfilled', ?5, 0, ?6, 0, 'shopify', ?2, 'site', 'USD', ?4, 0, 0, ?3, ?3, ?3)`,
+  ).run(LEDGER_STORE, id, `${day}T15:00:00Z`, qty * 3, supplier, day);
+  db.prepare("INSERT INTO order_lines (store_id, order_id, line_id, product_id, variant_id, quantity, gross, discount) VALUES (?, ?, 'l1', ?, NULL, ?, ?, 0)").run(LEDGER_STORE, id, product, qty, qty * 3);
+}
 
 afterEach(() => vi.useRealTimers());
 
@@ -153,11 +161,7 @@ describe('listings (SA-66)', () => {
     db.prepare("UPDATE products SET inventory = 0 WHERE store_id = ? AND id = '8002'").run(LEDGER_STORE);
     // x3: 1 left after 4 sold on Nov 5, under the 5 a rate needs: not judged low
     db.prepare("UPDATE products SET inventory = 1 WHERE store_id = ? AND id = 'x3'").run(LEDGER_STORE);
-    db.prepare(
-      `INSERT INTO orders (store_id, id, created_at, total, status, fulfillment_status, cogs, local_date, tax, source_kind, source_id, channel, currency, gross_sales, discounts, shipping, paid_at, source_updated_at, breakdown_at)
-       VALUES (?, '#x3', '2026-11-05T15:00:00Z', 12, 'paid', 'fulfilled', 0, '2026-11-05', 0, 'shopify', '#x3', 'site', 'USD', 12, 0, 0, '2026-11-05T15:00:00Z', '2026-11-05T15:00:00Z', '2026-11-05T15:00:00Z')`,
-    ).run(LEDGER_STORE);
-    db.prepare("INSERT INTO order_lines (store_id, order_id, line_id, product_id, variant_id, quantity, gross, discount) VALUES (?, '#x3', 'l1', 'x3', NULL, 4, 12, 0)").run(LEDGER_STORE);
+    sale(db, '#x3', '2026-11-05', 'x3', 4);
     db.prepare("UPDATE product_variants SET inventory = 0 WHERE store_id = ? AND id = '8002-1'").run(LEDGER_STORE);
     db.prepare("INSERT INTO product_variants (store_id, product_id, id, title, inventory, inventory_tracked, inventory_policy) VALUES (?, 'x1', 'x1-1', 'Default', 5, 0, 'fba')").run(LEDGER_STORE);
     const q = (query: Record<string, string>) => list(db, { status: 'all', sort: 'title', ...query });
@@ -183,12 +187,24 @@ describe('listings (SA-66)', () => {
     expect(ids(q({ sync: 'failed' }))).toEqual(['tt-9001']);
     expect(list(db, { stock: 'in_stock', sales: 'with' })).toMatchObject({ total: 2, counts: { active: 2, draft: 0, archived: 0, all: 2 }, variants: 4, channelListings: 2 });
 
-    expect(list(db, { stock: 'wet' })).toBe('stock must be one of in_stock, low, out, not_tracked, fba, variants_out');
+    expect(list(db, { stock: 'wet' })).toBe('stock must be one of in_stock, low, out, not_tracked, fba, supplier, variants_out');
     expect(list(db, { sales: 'some' })).toBe('sales must be one of any, with, none');
     const demo = openDb();
     seedDemo(demo, '2026-10-26');
     const sp = storePeriod(demo, 'glow', () => undefined, Date.parse('2026-10-26T15:00:00Z')) as StorePeriod;
     expect((listings(demo, 'glow', { cost: 'missing' }, sp) as SaListings).total).toBe(0); // a demo store's costs are its catalog's
+  });
+
+  it("SA-81: an untracked product a supplier filled an order for in the last 30 days is supplier-managed: no count, no cover", () => {
+    const db = fixture();
+    sale(db, '#cj-1', '2026-11-02', 'x2', 1, 'CJ Dropshipping'); // x2, x4: untracked
+    sale(db, '#cj-2', '2026-10-09', 'x4', 1, 'CJ Dropshipping'); // 31 days back: too old
+    sale(db, '#cj-3', '2026-11-02', 'x3', 1, 'CJ Dropshipping'); // x3 tracks its stock: keeps its count
+    sale(db, '#own-1', '2026-11-02', 'x6', 1); // no supplier named
+    const rows = list(db, { status: 'all', sort: 'title' }, { product: ['x2', 'x3', 'x4', 'x6'] }).rows;
+    expect(rows.map((r) => [r.id, r.stockState, r.stock])).toEqual([['x2', 'supplier', null], ['x3', 'in_stock', 5], ['x4', 'not_tracked', null], ['x6', 'not_tracked', null]]);
+    expect(list(db, { status: 'all', stock: 'supplier' }).rows.map((r) => r.id)).toEqual(['x2']);
+    expect(list(db, { status: 'all', stock: 'not_tracked' }).total).toBe(31);
   });
 
   it('GET /api/analytics/listings: the page, and 400 for a bad status, sort or page', async () => {
