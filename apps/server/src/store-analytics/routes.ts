@@ -16,6 +16,7 @@ import { productDetail } from './product';
 import { historyStart, storePeriod, zoneInfo } from './period';
 import { reconcile } from './reconcile';
 import { salesReport } from './sales-report';
+import { CANONICAL } from './sales';
 import { customerCohorts, customerCountries, customersReport } from './customers';
 import { datasetFreshness, markVerified, sourceRows } from './sources';
 import { trafficBreakdown, trafficFunnel } from './traffic';
@@ -58,6 +59,7 @@ export function storeContext(db: Db, storeId: string, now = Date.now()): SaConte
     zoneAbbr: zone.abbr,
     historyStart: historyStart(db, storeId) ?? null,
     freshness: datasetFreshness(db, storeId, now),
+    countries: db.prepare(`SELECT DISTINCT o.country AS c FROM orders o WHERE o.store_id = ? AND o.country IS NOT NULL AND ${CANONICAL} ORDER BY 1`).all(storeId).map((r) => String(r.c)),
   };
 }
 

@@ -758,6 +758,8 @@ export interface SaContext {
   zoneAbbr: string;
   historyStart: string | null;
   freshness: SaFreshness[];
+  /** SA-107: the countries (ISO-2) the store's counted orders ship to, for the Market filter. */
+  countries?: string[];
 }
 
 /** The global filters as sent to the API (SA-22): `filters=` is this object as JSON, e.g. {"channel":["site"]}. */

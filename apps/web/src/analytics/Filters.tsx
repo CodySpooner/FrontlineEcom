@@ -1,5 +1,6 @@
-// SA-68: the page's filters (spec §4; decision 4): Channel, Product and Collection in one popover (Market and Segment
-// arrive in SA-107), each applied value a removable chip. Every panel applies a filter or names it (FilterScope).
+// SA-68: the page's filters (spec §4; decision 4): Channel, Product, Collection, and since SA-107 Market (the
+// countries the store's orders ship to) and Segment (new or returning customers), in one popover, each applied value a
+// removable chip. Every panel applies a filter or names it (FilterScope).
 import { useDeferredValue, useState, type ReactNode } from 'react';
 import { Check, ListFilter, X } from 'lucide-react';
 import { SA_FILTERS, type SaContext, type SaFilterKey, type SaFilters, type Store } from '@frontline/shared';
@@ -8,11 +9,16 @@ import { PLATFORM_NAME } from '../components/StoreForm';
 import { cx, inputClass } from '../components/ui';
 import { useSaCollections, useSaListings } from './api';
 import { ctl } from './Pickers';
+import { countryName } from './TrafficTab';
 import type { useAnalyticsState } from './state';
 
 type S = ReturnType<typeof useAnalyticsState>;
 const SALES = new Set(['shopify', 'woocommerce', 'etsy', 'amazon', 'tiktok_shop']);
 const SITES = new Set(['shopify', 'woocommerce']);
+const SEGMENTS = [
+  { id: 'new', label: 'New customers' },
+  { id: 'returning', label: 'Returning customers' },
+];
 
 /** The store's sales channels as the channel filter names them: its own ("site" for a web store), then the others it sells on. */
 export function channelsOf(ctx: Pick<SaContext, 'platform' | 'channels'>) {
@@ -106,6 +112,26 @@ export function FiltersButton({ s, ctx }: { s: S; ctx?: SaContext }) {
             ))
           )}
         </Group>
+        <Group title={SA_FILTERS.market}>
+          {ctx?.countries?.length === 0 ? (
+            <p className="px-1.5 py-1 text-[11.5px] text-muted">No order records a country for this store.</p>
+          ) : (
+            <div className="max-h-40 overflow-y-auto">
+              {ctx?.countries?.map((c) => (
+                <Option key={c} on={has('market', c)} onClick={() => toggle('market', c)}>
+                  {countryName(c)}
+                </Option>
+              ))}
+            </div>
+          )}
+        </Group>
+        <Group title={SA_FILTERS.segment}>
+          {SEGMENTS.map((g) => (
+            <Option key={g.id} on={has('segment', g.id)} onClick={() => toggle('segment', g.id)}>
+              {g.label}
+            </Option>
+          ))}
+        </Group>
       </Popover>
     </>
   );
@@ -122,6 +148,8 @@ export function FilterChips({ s, ctx }: { s: S; ctx?: SaContext }) {
     (k === 'channel' && ctx && channelsOf(ctx).find((c) => c.id === v)?.label) ||
     (k === 'product' && products.data?.rows.find((p) => p.id === v)?.title) ||
     (k === 'collection' && collections.data?.find((c) => c.id === v)?.title) ||
+    (k === 'market' && countryName(v)) ||
+    (k === 'segment' && SEGMENTS.find((g) => g.id === v)?.label) ||
     v;
   const chips = (Object.keys(SA_FILTERS) as SaFilterKey[]).flatMap((k) => (s.filters[k] ?? []).map((v) => ({ k, v, label: `${SA_FILTERS[k]}: ${name(k, v)}` })));
   return (

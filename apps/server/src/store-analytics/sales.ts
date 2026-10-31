@@ -30,7 +30,7 @@ export const CANONICAL = `o.duplicate_of IS NULL AND ${PAID}`;
  * `variants` (SA-83, with `products`): only the order and refund lines naming one of these variants; per-product rows
  * (`order_items`) name no variant, so none of them count.
  */
-export type Slice = { cut?: { at: string; fraction: number }; channels?: string[]; products?: string[]; variants?: string[]; countries?: string[] };
+export type Slice = { cut?: { at: string; fraction: number }; channels?: string[]; products?: string[]; variants?: string[]; countries?: string[]; segments?: string[] };
 
 /** ` AND …` conditions narrowing order `o` (and the row's own day and time columns) to a slice, with their params. */
 export function sliceSql(db: Db, storeId: string, s: Slice | undefined, to: string, day = 'o.local_date', time = 'o.created_at') {
@@ -44,6 +44,11 @@ export function sliceSql(db: Db, storeId: string, s: Slice | undefined, to: stri
   }
   // SA-96: the order's recorded shipping country
   if (s?.countries) sql.push('o.country IN (SELECT value FROM json_each(?))'), params.push(JSON.stringify(s.countries));
+  // SA-107: new is a customer's first counted order (since the first synced one), returning any later one; guests neither
+  if (s?.segments) {
+    const earlier = `EXISTS (SELECT 1 FROM orders p WHERE p.store_id = o.store_id AND p.customer_ref = o.customer_ref AND (p.created_at, p.id) < (o.created_at, o.id) AND ${CANONICAL.replace(/\bo\./g, 'p.')})`;
+    sql.push(`o.customer_ref IS NOT NULL AND iif(${earlier}, 'returning', 'new') IN (SELECT value FROM json_each(?))`), params.push(JSON.stringify(s.segments));
+  }
   if (s?.variants) {
     sql.push('EXISTS (SELECT 1 FROM order_lines x WHERE x.store_id = o.store_id AND x.order_id = o.id AND x.product_id IN (SELECT value FROM json_each(?)) AND x.variant_id IN (SELECT value FROM json_each(?)))');
     params.push(JSON.stringify(s.products ?? []), JSON.stringify(s.variants));
@@ -197,7 +202,7 @@ export function salesMetrics(db: Db, storeId: string, from: string, to: string, 
 
   // Paid orders cancelled on a day of the period (the store's days), whenever they were placed.
   const zone = storeZone(db, storeId);
-  const wc = sliceSql(db, storeId, { channels: slice?.channels, products: slice?.products, variants: slice?.variants }, to);
+  const wc = sliceSql(db, storeId, { ...slice, cut: undefined }, to);
   const cancelled = db
     .prepare(`SELECT o.cancelled_at AS at FROM orders o WHERE o.store_id = ? AND o.cancelled_at BETWEEN ? AND ? AND o.breakdown_at IS NOT NULL AND ${CANONICAL}${wc.sql}`)
     .all(storeId, addDays(from, -1), addDays(to, 2), ...wc.params)

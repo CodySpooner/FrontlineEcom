@@ -6,6 +6,8 @@ import { openDb } from '../db';
 import { seedDemo } from '../demo';
 import { insertStore } from '../stores';
 import { customerCohorts, customersMissing, customersReport } from './customers';
+import { computeMetricSet, computeSeries } from './metric-set';
+import { storePeriod, type StorePeriod } from './period';
 import { LEDGER_NOW, LEDGER_PERIODS, LEDGER_STORE, seedLedgerStore } from './fixture';
 
 const { P1, P2 } = LEDGER_PERIODS;
@@ -202,6 +204,42 @@ describe('cohorts and countries (SA-105, Q22)', () => {
     vi.setSystemTime(LEDGER_NOW);
     const r = (await (await createApp(ledger()).request(`/api/analytics/customers?store=${LEDGER_STORE}&period=custom&from=${P1.from}&to=${P1.to}`)).json()) as SaCustomers;
     expect([r.missing?.reason, r.cohorts, r.countries]).toEqual(['needs_ingestion', [], { rows: [] }]);
+  });
+});
+
+describe('the segment filter (SA-107)', () => {
+  const q: Record<string, string> = { period: 'custom', from: P1.from, to: P1.to };
+  const sp = (db: ReturnType<typeof openDb>) => storePeriod(db, LEDGER_STORE, (k) => q[k], LEDGER_NOW) as StorePeriod;
+  const orders = (db: ReturnType<typeof openDb>, segment: string[]) => computeMetricSet(db, { storeId: LEDGER_STORE }, ['orders'], sp(db), { segment });
+
+  it("new is a customer's first counted order, returning a later one; guests in neither; as many new orders as new customers", () => {
+    const db = withCustomers(ledger());
+    // an unpaid order of t's, before t's TikTok order, isn't counted, so it doesn't make that one returning
+    db.prepare("UPDATE orders SET customer_ref = 'c_t', customer_state = 'identified' WHERE store_id = 'ledger' AND id = '#1007'").run();
+    const neu = orders(db, ['new']);
+    // b's #1005, c's first of two and t's TikTok order; the order synced before ids is in neither
+    expect(neu.metrics[0]).toMatchObject({ value: 3, status: 'partial', note: '1 order synced before customer ids in neither segment' });
+    expect(neu.metrics[0]!.value).toBe(customersReport(db, LEDGER_STORE, { ...P1, preset: 'custom', days: 7, partial: false }).new.value);
+    expect(neu.scope).toEqual({ applied: ['segment'], ignored: [] });
+    // a's #1003 and #1008 (a bought #1001 in P2) and c's second
+    expect(orders(db, ['returning']).metrics[0]!.value).toBe(3);
+    expect(orders(db, ['new', 'returning']).metrics[0]!.value).toBe(6);
+    // P2: a's #1001 and d's #1002 are first orders
+    expect(neu.metrics[0]!.previous).toMatchObject({ value: 2, status: 'partial' });
+    // days add up to the period: an order is new or returning whatever the window
+    const days = computeSeries(db, { storeId: LEDGER_STORE }, 'orders', sp(db), { segment: ['new'] }).points;
+    expect(days.reduce((a, p) => a + (p.value ?? 0), 0)).toBe(3);
+  });
+
+  it("a window whose orders all predate customer ids is unavailable; a period with no customer ids leaves the segment out and says why", () => {
+    const db = withCustomers(ledger());
+    db.prepare("UPDATE orders SET customer_ref = NULL, customer_state = NULL WHERE store_id = 'ledger' AND id IN ('#1001', '#1002')").run();
+    const neu = orders(db, ['new']);
+    expect(neu.metrics[0]!.previous).toMatchObject({ value: null, status: 'unavailable', reason: 'not_tracked', note: 'These orders were synced before customer ids were read' });
+    expect(neu.metrics[0]!.value).toBe(4); // a's first counted order is now #1003
+    const none = orders(ledger(), ['new']);
+    expect(none.metrics[0]!.value).toBe(9);
+    expect(none.scope.ignored).toEqual([{ key: 'segment', reason: 'These orders were synced before customer ids were read; the next full sync adds them', metric: 'orders' }]);
   });
 });
 

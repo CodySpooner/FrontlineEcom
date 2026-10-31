@@ -6,6 +6,7 @@ import { openDb } from '../db';
 import { seedDemo } from '../demo';
 import { LEDGER_NOW, LEDGER_PERIODS, LEDGER_STORE, seedLedgerStore } from './fixture';
 import { computeMetricSet, parseFilters } from './metric-set';
+import { storeContext } from './routes';
 import { storePeriod, type StorePeriod } from './period';
 
 const { P1 } = LEDGER_PERIODS;
@@ -58,7 +59,8 @@ describe('computeMetricSet', () => {
     const p1 = period(db, { period: 'custom', from: P1.from, to: P1.to });
     const set = computeMetricSet(db, { storeId: LEDGER_STORE }, ['net_sales'], p1, { product: ['8001'], market: ['US'] });
     expect(set.metrics[0]!.value).toBe(179.2); // the serum's lines 28.8 + 32 + 86.4 + 32 + 32 (not #1009, a copy), less the 32 refunded Oct 29
-    expect(set.scope).toEqual({ applied: ['product'], ignored: [{ key: 'market', reason: 'Not applied to this metric yet', metric: 'net_sales' }] });
+    // no order records a country, so the market is left out, and said (SA-107)
+    expect(set.scope).toEqual({ applied: ['product'], ignored: [{ key: 'market', reason: "This store's orders don't record a country", metric: 'net_sales' }] });
     // with a collection too, only the picked products in it: the cream isn't a best seller
     expect(computeMetricSet(db, { storeId: LEDGER_STORE }, ['net_sales'], p1, { product: ['8001', '8002'], collection: ['c-best'] }).metrics[0]!.value).toBe(179.2);
   });
@@ -165,3 +167,41 @@ describe('the collection filter (SA-47)', () => {
     ]);
   });
 });
+
+describe('the market filter (SA-107)', () => {
+  const withCountries = () => {
+    const db = openDb();
+    seedLedgerStore(db);
+    db.prepare("UPDATE orders SET country = 'US' WHERE store_id = ? AND id IN ('#1003', '#1004', '#1009')").run(LEDGER_STORE); // #1009 copies #1008
+    db.prepare("UPDATE orders SET country = 'CA' WHERE store_id = ? AND id IN ('#1005', '#1008')").run(LEDGER_STORE); // #1005 was cancelled
+    db.prepare("UPDATE orders SET country = 'MX' WHERE store_id = ? AND id = '#1006'").run(LEDGER_STORE); // a test order: not counted
+    db.prepare("INSERT INTO order_fees (store_id, order_id, kind, amount, currency, local_date, source) VALUES (?, '#1003', 'payment', 1.5, 'USD', '2026-10-27', 'shopify')").run(LEDGER_STORE);
+    return db;
+  };
+  const set = (db: ReturnType<typeof openDb>, market: string[]) =>
+    byId(computeMetricSet(db, { storeId: LEDGER_STORE }, ['orders', 'fees', 'cancelled_orders', 'sessions'], period(db, { period: 'custom', from: P1.from, to: P1.to }), { market }));
+
+  it("counts the market's orders; orders with no country make it partial, a comparison with none unavailable; traffic says it's store level", () => {
+    const db = withCountries();
+    const m = set(db, ['US']);
+    expect(m.orders).toMatchObject({ value: 2, status: 'partial', note: '5 orders with no recorded country in no market' });
+    expect([m.cancelled_orders!.value, set(db, ['CA']).cancelled_orders!.value]).toEqual([0, 1]);
+    expect(m.orders!.previous).toMatchObject({ value: null, status: 'unavailable', reason: 'not_tracked', note: 'None of these orders records a country' });
+    expect([m.sessions!.value, m.sessions!.status, m.sessions!.note]).toEqual([set(db, []).sessions!.value, set(db, []).sessions!.status, set(db, []).sessions!.note]);
+    const all = computeMetricSet(db, { storeId: LEDGER_STORE }, ['orders', 'sessions'], period(db, { period: 'custom', from: P1.from, to: P1.to }), { market: ['US', 'CA'] });
+    expect(all.metrics[0]!.value).toBe(4);
+    expect(all.scope).toEqual({ applied: ['market'], ignored: [{ key: 'market', reason: 'Not applied to traffic yet', metric: 'sessions' }] });
+    // fees follow the order's market too, a recorded one (#1003's) as well as an estimate
+    const fees = (k: string[]) => set(db, k).fees!.value!;
+    expect(Math.abs(fees(['US']) + fees(['CA']) - fees(['US', 'CA']))).toBeLessThanOrEqual(0.011); // each rounded to the cent
+    expect(fees(['US', 'CA'])).toBeLessThan(set(db, []).fees!.value!);
+    // the Market row lists the countries the counted orders ship to
+    expect(storeContext(db, LEDGER_STORE).countries).toEqual(['CA', 'US']);
+  });
+
+  it('a segment that is neither new nor returning is refused', () => {
+    expect(parseFilters('{"segment":["vip"]}')).toBe('filters.segment must list new or returning');
+    expect(parseFilters('{"segment":["new","returning"],"market":["US"]}')).toEqual({ segment: ['new', 'returning'], market: ['US'] });
+  });
+});
+

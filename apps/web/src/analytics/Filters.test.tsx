@@ -20,7 +20,7 @@ beforeEach(() => {
     calls.push(url);
     if (url === '/api/stores') return [{ id: 'a', name: 'Glow Haus' }];
     if (url.startsWith('/api/analytics/context'))
-      return { storeId: 'a', name: 'Glow Haus', niche: 'beauty', platform: 'shopify', currency: 'USD', demo: false, channels: [{ kind: 'shopify', name: 'Shopify', status: 'connected' }, { kind: 'tiktok_shop', name: 'TikTok Shop', status: 'connected' }, { kind: 'meta_ads', name: 'Meta Ads', status: 'connected' }], zone: null, zoneLabel: '', zoneAbbr: 'ET', historyStart: null, freshness: [] };
+      return { storeId: 'a', name: 'Glow Haus', niche: 'beauty', platform: 'shopify', currency: 'USD', demo: false, countries: ['CA', 'US'], channels: [{ kind: 'shopify', name: 'Shopify', status: 'connected' }, { kind: 'tiktok_shop', name: 'TikTok Shop', status: 'connected' }, { kind: 'meta_ads', name: 'Meta Ads', status: 'connected' }], zone: null, zoneLabel: '', zoneAbbr: 'ET', historyStart: null, freshness: [] };
     if (url.startsWith('/api/analytics/collections')) return [{ id: 'c-best', title: 'Best sellers', source: 'shopify', products: 2 }];
     if (url.startsWith('/api/analytics/listings')) {
       const q = new URLSearchParams(url.split('?')[1]);
@@ -90,6 +90,32 @@ describe('Filters (SA-68)', () => {
     cleanup();
     render(<FilterScope scope={{ applied: [], ignored: [{ key: 'channel', reason: 'Store level', metric: 'net_sales' }] }} />);
     expect(screen.getByText(/^Not applied here:/).textContent).toBe('Not applied here: Channel (Store level)'); // one metric: the panel says which
+  });
+
+  it("market lists the countries the store's orders ship to, by name; segment is new or returning customers; each a named chip (SA-107)", async () => {
+    renderApp(<Analytics />, '/analytics?store=a');
+    await screen.findByRole('button', { name: 'Filters' });
+    const menu = within(document.getElementById('sa-filters')!);
+    const market = within(await menu.findByRole('group', { name: 'Market', ...hidden }));
+    expect((await market.findAllByRole('menuitemcheckbox', hidden)).map((o) => o.textContent)).toEqual(['Canada', 'United States']);
+    expect(within(menu.getByRole('group', { name: 'Segment', ...hidden })).getAllByRole('menuitemcheckbox', hidden).map((o) => o.textContent)).toEqual(['New customers', 'Returning customers']);
+    fireEvent.click(market.getByRole('menuitemcheckbox', { name: 'Canada', ...hidden }));
+    fireEvent.click(menu.getByRole('menuitemcheckbox', { name: 'Returning customers', ...hidden }));
+    await waitFor(() => expect(where()).toContain('filters={"market":["CA"],"segment":["returning"]}'));
+    const chips = within(screen.getByRole('group', { name: 'Applied filters' }));
+    expect(chips.getAllByText(/^(Market|Segment):/).map((c) => c.textContent)).toEqual(['Market: Canada', 'Segment: Returning customers']);
+  });
+
+  it('a store whose orders record no country says so in the Market row', async () => {
+    stubApi((url) => {
+      if (url === '/api/stores') return [{ id: 'a', name: 'Glow Haus' }];
+      if (url.startsWith('/api/analytics/context')) return { storeId: 'a', name: 'Glow Haus', niche: 'beauty', platform: 'shopify', currency: 'USD', demo: false, countries: [], channels: [], zone: null, zoneLabel: '', zoneAbbr: 'ET', historyStart: null, freshness: [] };
+      if (url.startsWith('/api/analytics/summary') || url.startsWith('/api/analytics/overview')) return new Response('{}', { status: 500 });
+      return [];
+    });
+    renderApp(<Analytics />, '/analytics?store=a');
+    const market = within(await screen.findByRole('group', { name: 'Market', ...hidden }));
+    expect(await market.findByText('No order records a country for this store.')).toBeTruthy();
   });
 
   it('a filter changes the page back to 1; a store without collections says so', async () => {

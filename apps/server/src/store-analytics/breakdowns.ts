@@ -14,7 +14,7 @@ import { CANONICAL, salesMetrics, sliceSql, type RefundBasis } from './sales';
 const cents = (n: number) => Math.round(n * 100) / 100;
 
 /** Why no order has a country: Shopify's last probe of it was denied (SA-32), else nothing reads one. */
-function countryReason(db: Db, storeId: string): { reason: SaReason; note: string } {
+export function countryReason(db: Db, storeId: string): { reason: SaReason; note: string } {
   const last = db.prepare('SELECT ref FROM done_once WHERE ref GLOB ? ORDER BY ref DESC LIMIT 1').get(`sa-probe:shopify:${storeId}:country:*`)?.ref;
   return String(last ?? '').endsWith(':denied')
     ? { reason: 'needs_permission', note: "Shopify hasn't allowed reading the orders' shipping country (protected customer data)" }
