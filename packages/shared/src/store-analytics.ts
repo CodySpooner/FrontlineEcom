@@ -852,6 +852,15 @@ export const SA_LISTING_STATUSES = ['active', 'draft', 'archived', 'all'] as con
 export type SaListingStatus = (typeof SA_LISTING_STATUSES)[number];
 export const SA_LISTING_SORTS = ['units', 'net_sales', 'refunds', 'title', 'price', 'stock'] as const;
 export type SaListingSort = (typeof SA_LISTING_SORTS)[number];
+/**
+ * SA-80 (spec §7 Status handling): a listing's stock now, apart from its publication and sync states. Amazon-managed
+ * (FBA) and untracked stock aren't judged; low is under the stock-cover rule's days. A product with some variants out
+ * keeps its own state; `variantsOut` counts them.
+ */
+export const SA_STOCK_STATES = ['in_stock', 'low', 'out', 'not_tracked', 'fba'] as const;
+export type SaStockState = (typeof SA_STOCK_STATES)[number];
+/** SA-80: the Listings API's own filters, beside the page's global ones (channel, product, collection). */
+export const SA_LISTING_FILTERS = { stock: [...SA_STOCK_STATES, 'variants_out'], sales: ['any', 'with', 'none'], cost: ['missing'], sync: ['failed'] } as const;
 
 /** One product on the Listings tab: its state now, and its sales over the period (the v1 functions, product-sliced). */
 export interface SaListingRow {
@@ -871,6 +880,8 @@ export interface SaListingRow {
   compareAt: number | null;
   /** In stock now; null when its stock isn't tracked. */
   stock: number | null;
+  /** SA-80. */
+  stockState: SaStockState;
   channels: { channel: string; status: string; error: string | null }[];
   syncedAt: string | null;
   netSales: SaValue;

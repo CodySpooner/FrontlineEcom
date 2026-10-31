@@ -1,21 +1,15 @@
 // SA-74 (decision 28): the one rule engine. Each rule has an id@version, named thresholds, a minimum sample and the
 // datasets it reads; its insights are Observed only, never scored. A rule that flags on datasets from a stale or failed
 // source is held back: one data-health insight says so and why, never a business alert (`source_health` names the source).
-import { SA_SOURCES, type SaDataset, type SaFreshness, type SaInsight, type SaInsights, type SaRule, type SaSourceKind } from '@frontline/shared';
-import { addDays } from '../dates';
+import { SA_SOURCES, type SaFreshness, type SaInsight, type SaInsights, type SaRule, type SaSourceKind } from '@frontline/shared';
 import type { Db } from '../db';
 import { LINE_COST } from './costs';
-import { demoShares, totals } from './listings';
+import { COVER_DAYS, COVER_MIN_UNITS, COVER_WINDOW, coverUnits, totals } from './listings';
 import type { StorePeriod } from './period';
 import { computeMetricSet, setup } from './metric-set';
 import { CANONICAL, salesMetrics } from './sales';
 import { datasetFreshness } from './sources';
 
-/** Stock cover under this many days flags, at the sales rate of the last `COVER_WINDOW` full days. */
-export const COVER_DAYS = 10;
-export const COVER_WINDOW = 14;
-/** Units sold in the cover window below which there is no rate to judge by. */
-export const COVER_MIN_UNITS = 5;
 /** A product's refund rate over this multiple of the store's flags… */
 export const REFUND_MULTIPLE = 2;
 /** …once it ordered at least this many units in the period. */
@@ -43,12 +37,7 @@ const sourceName = (kind: string) => SA_SOURCES[kind as SaSourceKind]?.name ?? k
 const bad = (f: SaFreshness) => f.status === 'failed' || f.stale;
 
 function stockCover({ db, storeId, sp, demo }: Ctx): SaInsight[] {
-  const [from, to] = [addDays(sp.today, -COVER_WINDOW), addDays(sp.today, -1)];
-  let units: Map<string, number>;
-  if (demo) {
-    const all = salesMetrics(db, storeId, from, to).units.value ?? 0;
-    units = new Map([...demoShares(db, storeId)].map(([id, k]) => [id, Math.round(all * k)]));
-  } else units = new Map([...totals(db, storeId, from, to, 'refund_day')].map(([id, t]) => [id, t.units]));
+  const units = coverUnits(db, storeId, sp.today, demo);
   return db
     .prepare("SELECT id, title, inventory AS stock FROM products WHERE store_id = ? AND status = 'active' AND inventory_tracked AND inventory > 0 ORDER BY title")
     .all(storeId)

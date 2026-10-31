@@ -147,6 +147,50 @@ describe('listings (SA-66)', () => {
     }
   });
 
+  it('SA-80: each stock state; the stock, sales, cost and sync filters pick from the whole set and the counts follow', () => {
+    const db = fixture();
+    db.prepare("UPDATE products SET inventory = 3 WHERE store_id = ? AND id = '8001'").run(LEDGER_STORE); // 3 left at its last 14 days' rate
+    db.prepare("UPDATE products SET inventory = 0 WHERE store_id = ? AND id = '8002'").run(LEDGER_STORE);
+    // x3: 1 left after 4 sold on Nov 5, under the 5 a rate needs: not judged low
+    db.prepare("UPDATE products SET inventory = 1 WHERE store_id = ? AND id = 'x3'").run(LEDGER_STORE);
+    db.prepare(
+      `INSERT INTO orders (store_id, id, created_at, total, status, fulfillment_status, cogs, local_date, tax, source_kind, source_id, channel, currency, gross_sales, discounts, shipping, paid_at, source_updated_at, breakdown_at)
+       VALUES (?, '#x3', '2026-11-05T15:00:00Z', 12, 'paid', 'fulfilled', 0, '2026-11-05', 0, 'shopify', '#x3', 'site', 'USD', 12, 0, 0, '2026-11-05T15:00:00Z', '2026-11-05T15:00:00Z', '2026-11-05T15:00:00Z')`,
+    ).run(LEDGER_STORE);
+    db.prepare("INSERT INTO order_lines (store_id, order_id, line_id, product_id, variant_id, quantity, gross, discount) VALUES (?, '#x3', 'l1', 'x3', NULL, 4, 12, 0)").run(LEDGER_STORE);
+    db.prepare("UPDATE product_variants SET inventory = 0 WHERE store_id = ? AND id = '8002-1'").run(LEDGER_STORE);
+    db.prepare("INSERT INTO product_variants (store_id, product_id, id, title, inventory, inventory_tracked, inventory_policy) VALUES (?, 'x1', 'x1-1', 'Default', 5, 0, 'fba')").run(LEDGER_STORE);
+    const q = (query: Record<string, string>) => list(db, { status: 'all', sort: 'title', ...query });
+    const ids = (l: SaListings) => l.rows.map((r) => r.id);
+
+    const picked = list(db, { status: 'all', sort: 'title' }, { product: ['8001', '8002', '8003', 'tt-9001', 'x1', 'x2', 'x3'] });
+    expect(Object.fromEntries(picked.rows.map((r) => [r.id, [r.stockState, r.variantsOut]]))).toEqual({
+      '8001': ['low', 0], '8002': ['out', 1], '8003': ['in_stock', 1], 'tt-9001': ['in_stock', 0], x1: ['fba', 0], x2: ['not_tracked', 0], x3: ['in_stock', 0],
+    });
+    expect(ids(q({ stock: 'low' }))).toEqual(['8001']);
+    expect(ids(q({ stock: 'out' }))).toEqual(['8002']);
+    expect(ids(q({ stock: 'fba' }))).toEqual(['x1']);
+    expect(ids(q({ stock: 'variants_out' }))).toEqual(['8002', '8003']); // Hydra (all out), Overnight (Mint)
+    expect(q({ stock: 'not_tracked' })).toMatchObject({ total: 32, counts: { active: 28, draft: 2, archived: 2, all: 32 } });
+    expect(q({ stock: 'in_stock' }).total).toBe(33);
+
+    expect(ids(q({ sales: 'with' }))).toEqual(['8002', '8003', 'tt-9001', '8001']);
+    expect(q({ sales: 'none' }).total).toBe(64);
+    expect(q({ sales: 'any' }).total).toBe(68);
+    expect(q({ cost: 'missing' }).total).toBe(66); // the extras, the mask and the scrunchie: the serum and cream have variant costs
+    db.prepare("INSERT INTO unit_costs (store_id, product_id, variant_id, cost, currency, source, effective_from, recorded_at) VALUES (?, 'tt-9001', NULL, 4, 'USD', 'owner', '2026-10-01', '2026-10-01')").run(LEDGER_STORE);
+    expect(ids(list(db, { status: 'all', cost: 'missing' }, { product: ['8001', '8002', '8003', 'tt-9001'] }))).toEqual(['8003']);
+    expect(ids(q({ sync: 'failed' }))).toEqual(['tt-9001']);
+    expect(list(db, { stock: 'in_stock', sales: 'with' })).toMatchObject({ total: 2, counts: { active: 2, draft: 0, archived: 0, all: 2 }, variants: 4, channelListings: 2 });
+
+    expect(list(db, { stock: 'wet' })).toBe('stock must be one of in_stock, low, out, not_tracked, fba, variants_out');
+    expect(list(db, { sales: 'some' })).toBe('sales must be one of any, with, none');
+    const demo = openDb();
+    seedDemo(demo, '2026-10-26');
+    const sp = storePeriod(demo, 'glow', () => undefined, Date.parse('2026-10-26T15:00:00Z')) as StorePeriod;
+    expect((listings(demo, 'glow', { cost: 'missing' }, sp) as SaListings).total).toBe(0); // a demo store's costs are its catalog's
+  });
+
   it('GET /api/analytics/listings: the page, and 400 for a bad status, sort or page', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(LEDGER_NOW);

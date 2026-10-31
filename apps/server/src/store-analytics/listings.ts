@@ -2,7 +2,8 @@
 // sorted over the whole matching set and paged at 25 (decision 38). A row's state is current; its sales are the period's,
 // from the v1 functions narrowed to that product.
 import type { SQLInputValue } from 'node:sqlite';
-import { SA_LISTING_SORTS, SA_LISTING_STATUSES, type SaFilterScope, type SaFilters, type SaListingRow, type SaListings, type SaListingSort, type SaListingStatus, type SaValue } from '@frontline/shared';
+import { SA_LISTING_FILTERS, SA_LISTING_SORTS, SA_LISTING_STATUSES, type SaFilterScope, type SaFilters, type SaListingRow, type SaListings, type SaListingSort, type SaListingStatus, type SaStockState, type SaValue } from '@frontline/shared';
+import { addDays } from '../dates';
 import type { Db } from '../db';
 import { hash, mulberry32 } from '../demo';
 import { costMetrics } from './costs';
@@ -14,7 +15,35 @@ import { CANONICAL, salesMetrics, sliceSql, type RefundBasis, type Slice } from 
 export const PAGE_SIZE = 25;
 const METRIC_SORTS = new Set<SaListingSort>(['units', 'net_sales', 'refunds']);
 
-type Query = { status?: string; q?: string; sort?: string; page?: string };
+type Query = { status?: string; q?: string; sort?: string; page?: string } & { [K in keyof typeof SA_LISTING_FILTERS]?: string };
+
+/** SA-74: stock cover under this many days is low, at the sales rate of the last `COVER_WINDOW` full days… */
+export const COVER_DAYS = 10;
+export const COVER_WINDOW = 14;
+/** …once that window sold this many units; below it there is no rate to judge by. */
+export const COVER_MIN_UNITS = 5;
+
+/** Each product's units over the `COVER_WINDOW` full days before `today`; a demo store's by its fixed shares. */
+export function coverUnits(db: Db, storeId: string, today: string, demo: boolean) {
+  const [from, to] = [addDays(today, -COVER_WINDOW), addDays(today, -1)];
+  if (!demo) return new Map([...totals(db, storeId, from, to, 'refund_day')].map(([id, t]) => [id, t.units]));
+  const all = salesMetrics(db, storeId, from, to).units.value ?? 0;
+  return new Map([...demoShares(db, storeId)].map(([id, k]) => [id, Math.round(all * k)]));
+}
+
+/** SA-80: a product's stock now. FBA stock is Amazon's and untracked stock has no count: neither is judged. */
+function stockState(p: Record<string, unknown>, sold: number): SaStockState {
+  if (p.fba) return 'fba';
+  if (!p.tracked) return 'not_tracked';
+  if (Number(p.inv) <= 0) return 'out';
+  return sold >= COVER_MIN_UNITS && Number(p.inv) / (sold / COVER_WINDOW) < COVER_DAYS ? 'low' : 'in_stock';
+}
+
+/** A product with no unit cost for itself, and none for one of its variants (or it has no variant rows). */
+const MISSING_COST = `NOT EXISTS (SELECT 1 FROM unit_costs u WHERE u.store_id = p.store_id AND u.product_id = p.id AND u.variant_id IS NULL)
+  AND (NOT EXISTS (SELECT 1 FROM product_variants v WHERE v.store_id = p.store_id AND v.product_id = p.id)
+    OR EXISTS (SELECT 1 FROM product_variants v WHERE v.store_id = p.store_id AND v.product_id = p.id
+      AND NOT EXISTS (SELECT 1 FROM unit_costs u WHERE u.store_id = v.store_id AND u.product_id = v.product_id AND u.variant_id = v.id)))`;
 
 /**
  * Each product's units, net sales and refunds over [from, to], grouped in three passes so a sort covers every product.
@@ -99,6 +128,8 @@ export function listings(db: Db, storeId: string, query: Query, sp: StorePeriod,
   if (!SA_LISTING_SORTS.includes(key) || (dir !== 'asc' && dir !== 'desc')) return `sort must be one of ${SA_LISTING_SORTS.join(', ')}, optionally :asc or :desc`;
   const page = Number(query.page || 1);
   if (!Number.isInteger(page) || page < 1) return 'page must be a whole number from 1';
+  for (const k of Object.keys(SA_LISTING_FILTERS) as (keyof typeof SA_LISTING_FILTERS)[])
+    if (query[k] && !(SA_LISTING_FILTERS[k] as readonly string[]).includes(query[k])) return `${k} must be one of ${SA_LISTING_FILTERS[k].join(', ')}`;
 
   const demo = !!db.prepare('SELECT demo FROM stores WHERE id = ?').get(storeId)?.demo;
   const scope: SaFilterScope = { applied: [], ignored: [] };
@@ -126,20 +157,36 @@ export function listings(db: Db, storeId: string, query: Query, sp: StorePeriod,
   if (channels) scope.applied.push('channel');
   else if (filters.channel?.length) scope.ignored.push({ key: 'channel', reason: "Demo data isn't split by channel" });
   for (const k of ['market', 'segment'] as const) if (filters[k]?.length) scope.ignored.push({ key: k, reason: 'Not applied to listings yet' });
+  if (query.cost === 'missing') where.push(demo ? 'coalesce(p.cost, 0) = 0' : MISSING_COST); // a demo store's costs are its catalog's
+  if (query.sync === 'failed') where.push("EXISTS (SELECT 1 FROM channel_listings c WHERE c.store_id = p.store_id AND c.product_id = p.id AND c.status = 'failed')");
 
-  const counts = { active: 0, draft: 0, archived: 0, all: 0 };
-  for (const r of db.prepare(`SELECT p.status AS s, count(*) AS n FROM products p WHERE ${where.join(' AND ')} GROUP BY 1`).all(...params)) {
-    if (r.s === 'active' || r.s === 'draft' || r.s === 'archived') counts[r.s] = Number(r.n);
-    counts.all += Number(r.n);
-  }
-  if (status !== 'all') where.push('p.status = ?'), params.push(status);
-
-  // ponytail: the whole matching set is sorted in memory (20,000 products in the scale fixture); SQL ORDER BY when it isn't enough.
-  const all = db.prepare(`SELECT p.id, p.title, p.price, iif(p.inventory_tracked, p.inventory, NULL) AS stock FROM products p WHERE ${where.join(' AND ')}`).all(...params);
+  // ponytail: the whole matching set is filtered and sorted in memory (20,000 products in the scale fixture); SQL when it isn't enough.
+  const matched = db
+    .prepare(
+      `SELECT p.id, p.title, p.price, p.status, iif(p.inventory_tracked, p.inventory, NULL) AS stock, p.inventory_tracked AS tracked, p.inventory AS inv,
+         EXISTS (SELECT 1 FROM product_variants v WHERE v.store_id = p.store_id AND v.product_id = p.id AND v.inventory_policy = 'fba') AS fba,
+         (SELECT count(*) FROM product_variants v WHERE v.store_id = p.store_id AND v.product_id = p.id) AS nv,
+         (SELECT count(*) FROM product_variants v WHERE v.store_id = p.store_id AND v.product_id = p.id AND v.inventory_tracked AND v.inventory <= 0) AS vout,
+         (SELECT count(*) FROM channel_listings c WHERE c.store_id = p.store_id AND c.product_id = p.id) AS nc
+       FROM products p WHERE ${where.join(' AND ')}`,
+    )
+    .all(...params);
   const demoSales = demo ? demoSplit(db, storeId, sp.period.from, sp.period.to, basis) : undefined;
   const { compare, cut } = setup(db, storeId, sp, {});
   const demoBefore = demo && compare ? demoSplit(db, storeId, compare.from, compare.to, basis, cut && { cut }) : undefined;
-  const t = METRIC_SORTS.has(key) && !demo ? totals(db, storeId, sp.period.from, sp.period.to, basis, channels && { channels }) : undefined;
+  const t = (METRIC_SORTS.has(key) || (query.sales && query.sales !== 'any')) && !demo ? totals(db, storeId, sp.period.from, sp.period.to, basis, channels && { channels }) : undefined;
+  const sold = coverUnits(db, storeId, sp.today, demo);
+  const state = (r: (typeof matched)[number]) => stockState(r, sold.get(String(r.id)) ?? 0);
+  const units = (id: string) => (demoSales ? (demoSales(id).units.value ?? 0) : (t!.get(id)?.units ?? 0));
+  const matching = matched.filter(
+    (r) =>
+      (!query.stock || (query.stock === 'variants_out' ? Number(r.vout) > 0 : state(r) === query.stock)) &&
+      (!query.sales || query.sales === 'any' || units(String(r.id)) > 0 === (query.sales === 'with')),
+  );
+  const counts = { active: 0, draft: 0, archived: 0, all: matching.length };
+  for (const r of matching) if (r.status === 'active' || r.status === 'draft' || r.status === 'archived') counts[r.status]++;
+  const all = status === 'all' ? matching : matching.filter((r) => r.status === status);
+  const byId = new Map(all.map((r) => [String(r.id), r]));
   const m = key as 'units' | 'net_sales' | 'refunds';
   const sortKey = (r: (typeof all)[number]): number | string | null =>
     METRIC_SORTS.has(key) ? (demoSales ? (demoSales(String(r.id))[m].value ?? 0) : (t!.get(String(r.id))?.[m] ?? 0)) : key === 'title' ? String(r.title).toLowerCase() : key === 'price' ? Number(r.price) : (r.stock as number | null);
@@ -179,6 +226,7 @@ export function listings(db: Db, storeId: string, query: Query, sp: StorePeriod,
       price: Number(p.price),
       compareAt: p.compare_at == null ? null : Number(p.compare_at),
       stock: p.stock == null ? null : Number(p.stock),
+      stockState: state(byId.get(id)!),
       channels: listed.all(storeId, id).map((c) => ({ channel: String(c.channel), status: String(c.status), error: c.error == null ? null : String(c.error) })),
       syncedAt: p.synced == null ? null : String(p.synced),
       netSales: d.net_sales,
@@ -189,7 +237,6 @@ export function listings(db: Db, storeId: string, query: Query, sp: StorePeriod,
     };
   });
 
-  const n = (sql: string, ...first: SQLInputValue[]) => Number(db.prepare(sql).get(...first, ...params)!.n);
   return {
     period: sp.period,
     status,
@@ -198,8 +245,8 @@ export function listings(db: Db, storeId: string, query: Query, sp: StorePeriod,
     pageSize: PAGE_SIZE,
     total: all.length,
     counts,
-    variants: n(`SELECT coalesce(sum(max(1, (SELECT count(*) FROM product_variants v WHERE v.store_id = p.store_id AND v.product_id = p.id))), 0) AS n FROM products p WHERE ${where.join(' AND ')}`),
-    channelListings: n(`SELECT count(*) AS n FROM channel_listings c WHERE c.store_id = ? AND c.product_id IN (SELECT p.id FROM products p WHERE ${where.join(' AND ')})`, storeId),
+    variants: all.reduce((a, r) => a + Math.max(1, Number(r.nv)), 0),
+    channelListings: all.reduce((a, r) => a + Number(r.nc), 0),
     rows,
     scope,
   };
