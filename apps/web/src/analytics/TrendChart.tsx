@@ -1,6 +1,7 @@
 // SA-71 (decision 34): the Overview's trend. The period as a red line and area, the comparison dashed, a day with
 // nothing reported a gap (never 0), today dashed and labelled "so far" when the period holds it. A text summary names
-// the numbers for screen readers, and the Table toggle shows them.
+// the numbers for screen readers, and the Table toggle shows them. `marks` (SA-72) are dashed verticals topped by their
+// number, or a red "!" for data health.
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
 import { SA_METRICS, type SaSeries, type SaSeriesPoint } from '@frontline/shared';
 import { Table } from '../components/ui';
@@ -9,7 +10,9 @@ import { fmtDay, shortMoney } from '../lib/format';
 import { fmtValue } from './KpiStrip';
 
 const H = 186;
-const [PL, PR, PT, PB] = [46, 10, 12, 22];
+const [PL, PR, PB] = [46, 10, 22];
+
+export type Mark = { date: string; label: string; red?: boolean };
 const plusDays = (ymd: string, n: number) => new Date(Date.parse(`${ymd}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
 const weekday = (ymd: string) => new Date(`${ymd}T00:00:00Z`).toLocaleDateString('en-US', { weekday: 'short', timeZone: 'UTC' });
 
@@ -48,7 +51,7 @@ export function summary(s: SaSeries, label: string, currency?: string) {
   ].join('');
 }
 
-export function TrendChart({ series: s, label, currency, table }: { series: SaSeries; label: string; currency?: string; table: boolean }) {
+export function TrendChart({ series: s, label, currency, table, marks = [] }: { series: SaSeries; label: string; currency?: string; table: boolean; marks?: Mark[] }) {
   const wrap = useRef<HTMLDivElement>(null);
   const [W, setW] = useState(740);
   const [hover, setHover] = useState<number | null>(null);
@@ -97,6 +100,7 @@ export function TrendChart({ series: s, label, currency, table }: { series: SaSe
     );
 
   const n = pts.length;
+  const PT = marks.length ? 24 : 12; // room for the marks' circles over the plot
   const all = pts.flatMap((p) => [p.value, p.previous]).filter((v): v is number => v != null);
   const ticks = niceTicks(Math.max(0, ...all) * 1.1, Math.min(0, ...all) * 1.1);
   const [lo, hi] = [ticks[0]!, ticks.at(-1)!];
@@ -160,6 +164,20 @@ export function TrendChart({ series: s, label, currency, table }: { series: SaSe
         ))}
         {cur.filter((r) => r.length === 1).map((r) => <circle key={`d${r[0]}`} cx={x(r[0]!)} cy={y(pts[r[0]!]!.value!)} r="2.5" className="fill-red" />)}
         {partial && <path data-series="partial" d={path([n - 2, n - 1], (j) => pts[j]!.value!)} fill="none" stroke="var(--color-red)" strokeWidth="2" strokeDasharray="3 4" strokeLinecap="round" />}
+        {/* ponytail: two marks on one day overlap; the list under the chart names both */}
+        {marks.map((m) => {
+          const j = pts.findIndex((q) => q.from <= m.date && m.date <= q.to);
+          if (j < 0) return null;
+          return (
+            <g key={`${m.label}${m.date}`} data-mark={m.label}>
+              <line x1={x(j)} x2={x(j)} y1={16} y2={H - PB} stroke={m.red ? '#ff6b77' : '#8b8b94'} strokeDasharray="2 3" />
+              <circle cx={x(j)} cy={8} r={7} fill={m.red ? '#2a1316' : '#1a1a1e'} stroke={m.red ? '#ff6b77' : '#8b8b94'} />
+              <text x={x(j)} y={11.5} textAnchor="middle" className="fill-[#f0f0f2] text-[9.5px] font-bold">
+                {m.label}
+              </text>
+            </g>
+          );
+        })}
         {p && (
           <>
             <line x1={tipX} x2={tipX} y1={PT} y2={H - PB} stroke="rgba(255,255,255,.22)" />

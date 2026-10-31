@@ -906,4 +906,17 @@ export interface SaOverview extends SaMetricSet {
   channels: { channel: string; net_sales: SaValue; orders: SaValue }[];
   /** Why there is no split (a demo store's sales aren't split by channel). */
   channelsNote?: string;
+  /** How many annotations the period has (GET /api/analytics/annotations). */
+  annotations: number;
+}
+
+/**
+ * SA-72 (decision 45), GET /api/analytics/annotations: context on the chart, never a cause. Derived from real records:
+ * a price change (`price_tests`), an approved change to the store or its ads, a sync that failed for over 3 hours.
+ */
+export interface SaAnnotation {
+  kind: 'price_test' | 'app_change' | 'data_health';
+  /** The store's day it sits on (a sync failure that began before the period: the period's first day). */
+  date: string;
+  text: string;
 }

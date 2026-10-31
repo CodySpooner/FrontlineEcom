@@ -1,14 +1,14 @@
 // The v1 Overview as its pieces ship (SA-70 on), above the legacy view until SA-79 replaces it.
 import { useState } from 'react';
-import { SA_METRICS, type SaContext, type SaMetricId, type SaOverview } from '@frontline/shared';
-import { Button, ErrorState, LoadingState, Segmented } from '../components/ui';
+import { SA_METRICS, type SaAnnotation, type SaContext, type SaMetricId, type SaOverview } from '@frontline/shared';
+import { Button, cx, ErrorState, LoadingState, Segmented } from '../components/ui';
 import { fmtDay, money } from '../lib/format';
-import { useSaContext, useSaOverview, useSaSeries } from './api';
+import { useSaAnnotations, useSaContext, useSaOverview, useSaSeries } from './api';
 import { FilterScope } from './FilterScope';
 import { channelsOf } from './Filters';
 import { KpiStrip } from './KpiStrip';
 import type { AnalyticsState } from './state';
-import { TrendChart } from './TrendChart';
+import { TrendChart, type Mark } from './TrendChart';
 
 /** The chart's quick picks; a tile picks any of the six. Contribution is after ads with ad data, else before (Q15). */
 const SEGMENTS = [
@@ -17,15 +17,19 @@ const SEGMENTS = [
   { value: 'contribution', label: 'Contribution' },
 ];
 const SWATCH = ['bg-red', 'bg-[#9db4d6]', 'bg-[#6f6f78]', 'bg-[#4a4a53]'];
+const SOURCE: Record<SaAnnotation['kind'], string> = { price_test: 'price test', app_change: 'approved in the app', data_health: 'data health, not a sales change' };
 
 function TrendPanel({ s, ctx, o, chart, onChart }: { s: AnalyticsState; ctx?: SaContext; o: SaOverview; chart: string; onChart: (k: string) => void }) {
   const hasAds = o.metrics.find((m) => m.id === 'ad_spend')?.value != null;
   const metric = (chart === 'contribution' ? (hasAds ? 'contribution_after_ads' : 'contribution_before_ads') : chart) as SaMetricId;
   const series = useSaSeries(s, metric);
+  const notes = useSaAnnotations(s);
   const [table, setTable] = useState(false);
   const label = SA_METRICS[metric].label;
   const d = series.data;
   const names = ctx ? channelsOf(ctx) : [];
+  let k = 0; // derived markers are numbered in date order, data health is "!"
+  const marks: Mark[] = (notes.data ?? []).map((a) => (a.kind === 'data_health' ? { date: a.date, label: '!', red: true } : { date: a.date, label: String(++k) }));
   const options = SEGMENTS.some((x) => x.value === chart) ? SEGMENTS : [...SEGMENTS, { value: chart, label }];
   return (
     // Panel's header, but wrapping: the segment drops under the title on a phone
@@ -66,7 +70,26 @@ function TrendPanel({ s, ctx, o, chart, onChart }: { s: AnalyticsState; ctx?: Sa
         <LoadingState rows={3} />
       ) : (
         // the data's own label: the last metric's series stays up while the next one loads
-        <TrendChart series={d} label={SA_METRICS[d.metric].label} currency={ctx?.currency} table={table} />
+        <TrendChart series={d} label={SA_METRICS[d.metric].label} currency={ctx?.currency} table={table} marks={marks} />
+      )}
+      {notes.isError ? (
+        <p className="mt-1 text-xs text-muted">
+          Couldn't load the chart's markers.{' '}
+          <button type="button" className="cursor-pointer underline hover:text-white" onClick={() => notes.refetch()}>
+            Retry
+          </button>
+        </p>
+      ) : (
+        !!notes.data?.length && (
+          <div className="mt-1 grid gap-[3px] text-xs text-text-2">
+            <span className="text-muted">Context only, not a cause</span>
+            {notes.data.map((a, i) => (
+              <span key={i}>
+                <b className={cx('font-mono', marks[i]!.red ? 'text-[#ff6b77]' : 'text-[#f0f0f2]')}>{marks[i]!.label}</b> {fmtDay(a.date)} · {a.text} <span className="text-muted">· {SOURCE[a.kind]}</span>
+              </span>
+            ))}
+          </div>
+        )
       )}
       <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2">
         <FilterScope scope={d?.scope} />

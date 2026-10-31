@@ -1,6 +1,7 @@
 import { SA_METRICS, SA_SOURCES, type SaCollection, type SaContext, type SaMetricId, type SaSourceKind } from '@frontline/shared';
 import { Hono } from 'hono';
 import type { Db } from '../db';
+import { annotations } from './annotations';
 import { computeMetricSet, computeSeries, parseFilters } from './metric-set';
 import { listings } from './listings';
 import { overview } from './overview';
@@ -110,6 +111,13 @@ export function storeAnalyticsRoutes(db: Db) {
       const basis = c.req.query('refunds') ?? 'refund_day';
       if (basis !== 'refund_day' && basis !== 'order_day') return c.json({ error: 'refunds must be refund_day or order_day' }, 400);
       return c.json(overview(db, s, sp, filters, basis));
+    })
+    // SA-72: the chart's markers for the period (price tests, approved changes, sync failures over 3 h).
+    .get('/api/analytics/annotations', (c) => {
+      const s = scoped(c);
+      if ('error' in s) return c.json({ error: s.error }, s.status);
+      const sp = storePeriod(db, s.storeId, (k) => c.req.query(k));
+      return typeof sp === 'string' ? c.json({ error: sp }, 400) : c.json(annotations(db, s.storeId, sp));
     })
     // SA-66: one page of the store's products with their state now and their period sales, sorted over all of them.
     .get('/api/analytics/listings', (c) => {

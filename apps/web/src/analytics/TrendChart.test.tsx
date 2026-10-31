@@ -60,6 +60,15 @@ describe('TrendChart (SA-71)', () => {
     expect(screen.getByText(/Wed Oct 14 · Not reported/)).toBeTruthy();
   });
 
+  it('marks sit on their day: numbered grey, data health a red "!"; a date outside the points draws nothing', () => {
+    const marks = [{ date: '2026-10-13', label: '1' }, { date: '2026-10-15', label: '!', red: true }, { date: '2026-11-30', label: '2' }];
+    const { container } = render(<TrendChart series={SERIES} label="Net sales" table={false} marks={marks} />);
+    const drawn = [...container.querySelectorAll('[data-mark]')];
+    expect(drawn.map((g) => [g.getAttribute('data-mark'), g.querySelector('line')!.getAttribute('stroke')])).toEqual([['1', '#8b8b94'], ['!', '#ff6b77']]);
+    const xs = drawn.map((g) => Number(g.querySelector('line')!.getAttribute('x1')));
+    expect(xs[1]! - xs[0]!).toBeCloseTo((xs[0]! - 46) * 2); // Oct 13 is the 2nd of 5 points, Oct 15 the 4th
+  });
+
   it('today in the period is dashed and labelled so far', () => {
     const today = { ...SERIES, period: { ...SERIES.period, partial: true }, points: SERIES.points.map((p, i) => (i === 4 ? { ...p, partial: true as const } : p)) };
     const { container } = render(<TrendChart series={today} label="Net sales" table={false} />);
@@ -86,6 +95,12 @@ describe('Overview trend panel', () => {
         asked.push(metric);
         return { ...SERIES, metric, def: saDef(metric as 'orders') };
       }
+      if (url.startsWith('/api/analytics/annotations'))
+        return [
+          { kind: 'price_test', date: '2026-10-12', text: 'Price $32 → $34 on Vitamin C Glow Serum' },
+          { kind: 'data_health', date: '2026-10-13', text: 'Meta Ads sync failed for 6 h, synced again Oct 13' },
+          { kind: 'app_change', date: '2026-10-15', text: 'Approved: Raise Meta budget to $60/day' },
+        ];
       if (url.startsWith('/api/analytics/summary')) return new Response('{}', { status: 500 });
       if (url.startsWith('/api/analytics/context')) return { storeId: 'a', name: 'Glow Haus', niche: 'beauty', platform: 'shopify', currency: 'USD', demo: false, channels: [], zone: null, zoneLabel: '', zoneAbbr: 'ET', historyStart: null, freshness: [] };
       return [];
@@ -94,6 +109,14 @@ describe('Overview trend panel', () => {
     const panel = (await screen.findByText('Daily · today (partial) not included · Eastern Time')).closest('section')!;
     expect(within(panel).getByRole('heading', { name: 'Net sales' })).toBeTruthy();
     expect(within(panel).getByText("Demo data isn't split by channel")).toBeTruthy(); // no split: says why, no swatches
+    expect(within(panel).getByText('Context only, not a cause')).toBeTruthy();
+    const notes = [...within(panel).getByText('Context only, not a cause').parentElement!.children].slice(1).map((r) => r.textContent);
+    expect(notes).toEqual([
+      '1 Oct 12 · Price $32 → $34 on Vitamin C Glow Serum · price test',
+      '! Oct 13 · Meta Ads sync failed for 6 h, synced again Oct 13 · data health, not a sales change',
+      '2 Oct 15 · Approved: Raise Meta budget to $60/day · approved in the app',
+    ]);
+    expect(panel.querySelectorAll('[data-mark]')).toHaveLength(3);
     fireEvent.click(within(screen.getByRole('region', { name: 'Key numbers' })).getByRole('button', { name: /Orders/ }));
     await waitFor(() => expect(within(panel).getByRole('heading', { name: 'Orders' })).toBeTruthy());
     expect(within(panel).getByRole('radio', { name: 'Orders' }).getAttribute('aria-checked')).toBe('true');
