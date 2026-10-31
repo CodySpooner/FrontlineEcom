@@ -2,7 +2,7 @@ import { copyFileSync, existsSync, mkdirSync, readdirSync, renameSync, rmSync, s
 import { join } from 'node:path';
 import { backup, DatabaseSync } from 'node:sqlite';
 import { Hono } from 'hono';
-import { settingsUrl, type Backup } from '@frontline/shared';
+import { settingsUrl, type Backup, type BackupKind } from '@frontline/shared';
 import { dataDir, dbFile, MIGRATIONS, type Db } from './db';
 import { log } from './log';
 import { notify } from './settings';
@@ -24,19 +24,22 @@ export function listBackups(dir = backupDir()): Backup[] {
   return names
     .map((name) => {
       const s = statSync(join(dir, name));
-      return { name, size: s.size, createdAt: s.mtime.toISOString() };
+      return { name, size: s.size, createdAt: s.mtime.toISOString(), kind: kindOf(name) };
     })
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.name.localeCompare(a.name));
 }
 
+/** The kind recorded in a file name (`frontline-<ISO>-<kind>.db`, settings ST-31); null on older snapshots. */
+const kindOf = (name: string) => (/-(daily|manual|before-restore|before-update)\.db$/.exec(name)?.[1] as BackupKind | undefined) ?? null;
+
 /**
- * A consistent copy of the live database, then prunes to the newest KEEP. node:sqlite's backup copies a batch of pages
+ * A consistent copy of the live database, then prunes to the newest KEEP. `kind` goes in the file name. node:sqlite's backup copies a batch of pages
  * per turn, so the server keeps answering (VACUUM INTO held it ~0.5 s on a 70 MB database, longer as it grows). It's
  * written as .part and renamed once whole, so a failed one never lists.
  */
-export async function backupNow(db: Db, dir = backupDir(), now = new Date()): Promise<Backup> {
+export async function backupNow(db: Db, dir = backupDir(), now = new Date(), kind?: Exclude<BackupKind, 'before-update'>): Promise<Backup> {
   mkdirSync(dir, { recursive: true });
-  const name = `frontline-${now.toISOString().slice(0, 19).replace(/:/g, '-')}.db`;
+  const name = `frontline-${now.toISOString().slice(0, 19).replace(/:/g, '-')}${kind ? `-${kind}` : ''}.db`;
   const file = join(dir, name);
   // A .part untouched for an hour is from a run the app quit during; one still being copied keeps being written.
   for (const n of readdirSync(dir)) {
@@ -53,7 +56,7 @@ export async function backupNow(db: Db, dir = backupDir(), now = new Date()): Pr
   renameSync(`${file}.part`, file);
   for (const old of listBackups(dir).slice(KEEP)) rmSync(join(dir, old.name), { force: true });
   log('info', 'backup', { name });
-  return { name, size: statSync(file).size, createdAt: statSync(file).mtime.toISOString() };
+  return { name, size: statSync(file).size, createdAt: statSync(file).mtime.toISOString(), kind: kind ?? null };
 }
 
 /**
@@ -68,7 +71,7 @@ export function startBackupLoop(db: Db, dir = backupDir()) {
     if (running || (newest && Date.now() - Date.parse(newest.createdAt) < DAY_MS)) return;
     running = true;
     try {
-      await backupNow(db, dir);
+      await backupNow(db, dir, new Date(), 'daily');
       if (failing) notify(db, { kind: 'info', title: 'Backups are working again', link: settingsUrl('data') });
       failing = false;
     } catch (e) {
@@ -113,7 +116,7 @@ export async function stageRestore(db: Db, name: string, dbPath: string, dir = b
   const part = `${dbPath}.restore.part`;
   copyFileSync(file, part);
   try {
-    await backupNow(db, dir);
+    await backupNow(db, dir, new Date(), 'before-restore');
   } catch (e) {
     rmSync(part, { force: true });
     throw e;
@@ -125,7 +128,7 @@ export async function stageRestore(db: Db, name: string, dbPath: string, dir = b
 export function backupRoutes(db: Db, dir = backupDir, dbPath = dbFile, restart: () => void = () => process.exit(RESTART_CODE)) {
   return new Hono()
     .get('/api/backups', (c) => c.json(listBackups(dir())))
-    .post('/api/backups', async (c) => c.json(await backupNow(db, dir()), 201))
+    .post('/api/backups', async (c) => c.json(await backupNow(db, dir(), new Date(), 'manual'), 201))
     .post('/api/backups/:name/restore', async (c) => {
       const error = await stageRestore(db, c.req.param('name'), dbPath(), dir());
       if (error) return c.json({ error }, error === 'backup not found' ? 404 : 400);

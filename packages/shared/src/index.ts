@@ -1298,7 +1298,11 @@ export interface Backup {
   /** Bytes. */
   size: number;
   createdAt: string;
+  /** What made it, from its file name (settings ST-31); null for a snapshot made before kinds were recorded. */
+  kind?: BackupKind | null;
 }
+/** The daily check, Back up now, the undo copy a restore makes first, and openDb's copy before a migration. */
+export type BackupKind = 'daily' | 'manual' | 'before-restore' | 'before-update';
 
 export type ActionKind = 'ad_budget' | 'ad_pause' | 'product_create' | 'price_change' | 'product_page_publish' | 'page_publish' | 'theme_duplicate' | 'theme_files' | 'theme_publish' | 'theme_delete';
 
@@ -1325,6 +1329,13 @@ export interface Health {
   uptimeSec: number;
   /** The installed app's version, e.g. "0.1.3" (Settings shows it); "dev" when run from the repo. */
   version?: string;
+  /**
+   * Where the credentials key comes from (settings ST-31): the desktop app's safe storage (it passes the non-secret
+   * FRONTLINE_KEY_SOURCE hint with the key), FRONTLINE_SECRET_KEY set by hand, or `<dataDir>/secret.key`.
+   */
+  keyLocation?: 'safe-storage' | 'environment' | 'data-dir';
+  /** Where the data folder comes from: the desktop app's (`<userData>/data`), FRONTLINE_DATA_DIR, or the default `./.data`. */
+  dataDirSource?: 'desktop' | 'env' | 'default';
   connectors: { id: string; kind: IntegrationKind; storeId?: string; status: IntegrationStatus; error?: string; syncedAt?: string }[];
 }
 
@@ -1516,7 +1527,10 @@ export interface Settings {
   };
   /** ISO code that multi-store totals are converted to (default USD). */
   baseCurrency: string;
-  /** Read-only: where the local database and key live (plus logs/ and backups/). POST /api/settings/open-data-folder → 204 opens it in Explorer. */
+  /**
+   * Read-only: where the local database lives, with logs/ and backups/. The key is here too (secret.key) unless the
+   * desktop app keeps it in safe storage outside it (Health.keyLocation). POST /api/settings/open-data-folder → 204 opens it.
+   */
   dataDir: string;
   /** The `app` row's version (0 before the first save): PATCH sends it back (decision 6). */
   version?: number;

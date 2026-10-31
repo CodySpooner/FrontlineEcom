@@ -117,6 +117,8 @@ test('GET /api/health lists each connector state without secrets', async () => {
     ok: true,
     uptimeSec: expect.any(Number),
     version: 'dev',
+    keyLocation: expect.any(String), // settings ST-31: where the key and data folder come from (config/data.test.ts)
+    dataDirSource: expect.any(String),
     connectors: [
       { id: 'cj:global', kind: 'cj', status: 'connected', syncedAt: '2026-10-26T10:00:00.000Z' },
       { id: 'shopify:glow', kind: 'shopify', storeId: 'glow', status: 'error', error: 'Shopify rejected the access token' },

@@ -9,10 +9,10 @@ import { ScopeSwitch, useScope } from './kit';
 import { Account } from './sections/Account';
 import { Agents } from './sections/Agents';
 import { Appearance } from './sections/Appearance';
+import { Data } from './sections/Data';
 import { AutomationApprovals } from './sections/AutomationApprovals';
 import { General } from './sections/General';
 import { Knowledge } from './sections/Knowledge';
-import { YourData } from './sections/legacy';
 import { Notifications } from './sections/Notifications';
 import { ProductResearch } from './sections/ProductResearch';
 import { Stores } from './sections/Stores';
@@ -56,7 +56,7 @@ export const SECTIONS: SectionDef[] = [
   { slug: 'product-research', group: 'AI & Connections', label: 'Product Research', icon: Target, sub: "Each store's research profile: how products are ranked, flagged and found for it.", Page: ProductResearch, scoped: 'store' },
   { slug: 'automation', group: 'AI & Connections', label: 'Automation & Approvals', icon: Zap, sub: 'Pause or stop automation, every schedule, autopilot, and who approves what.', Page: AutomationApprovals, scoped: true },
   { slug: 'usage', group: 'Operations', label: 'Usage & Limits', icon: Gauge, sub: "Daily limits the agents can't cross, and what today has used.", Page: Usage, scoped: true },
-  { slug: 'data', group: 'Operations', label: 'Data & Backups', icon: Database, sub: 'Where your data lives on this computer, and its backups.', Page: () => <div data-legacy="ST-31"><YourData /></div> },
+  { slug: 'data', group: 'Operations', label: 'Data & Backups', icon: Database, sub: 'Where your data lives on this computer, and its backups.', Page: Data },
 ];
 
 function Scope({ variant }: { variant?: 'knowledge' | 'store' }) {

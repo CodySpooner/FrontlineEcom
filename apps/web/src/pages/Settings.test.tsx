@@ -5,7 +5,6 @@ import { settingsUrl, type Settings as SettingsT, type Store, type StoreCaps } f
 import { App } from '../App';
 import { budgetFix } from '../lib/usage';
 import { SECTIONS } from '../settings/Layout';
-import { Backups } from '../settings/sections/legacy';
 import { renderApp, stubApi } from '../test-utils';
 import { Settings } from './Settings';
 
@@ -115,41 +114,6 @@ describe('sidebar badges come from real data', () => {
     renderApp(<Settings />, '/settings/general');
     expect(await screen.findByRole('link', { name: 'Integrations1 issue' })).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Stores2' })).toBeTruthy();
-  });
-});
-
-describe('data and backups (moved, ST-31)', () => {
-  it('marks the copy taken before an update', async () => {
-    stubApi((url) =>
-      url === '/api/backups'
-        ? [
-            { name: 'frontline-2026-10-26T10-20-24.db', size: 2e6, createdAt: '2026-10-26T10:20:24Z' },
-            { name: 'frontline-2026-10-26T09-00-00-before-update.db', size: 2e6, createdAt: '2026-10-26T09:00:00Z' },
-          ]
-        : undefined,
-    );
-    renderApp(<Backups />);
-    expect(await screen.findAllByText('Before update')).toHaveLength(1);
-  });
-
-  it.each([
-    ['0.1.3', 'Version 0.1.3'],
-    ['dev', 'Development build'],
-  ])('shows the running version %s', async (version, text) => {
-    api((url) => (url === '/api/health' ? { ok: true, uptimeSec: 1, version, connectors: [] } : undefined));
-    renderApp(<Settings />, '/settings/data');
-    expect(await screen.findByText(text)).toBeTruthy();
-  });
-
-  it("opens the data folder through the desktop app when it's there, and shows Windows' error", async () => {
-    const fetch = api();
-    const openDataFolder = vi.fn(async () => 'The system cannot find the path specified.');
-    vi.stubGlobal('desktop', { openDataFolder });
-    renderApp(<Settings />, '/settings/data');
-    fireEvent.click(await screen.findByRole('button', { name: 'Open folder' }));
-    expect((await screen.findByRole('alert')).textContent).toContain('cannot find the path');
-    expect(openDataFolder).toHaveBeenCalledOnce();
-    expect(fetch.mock.calls.some(([url]) => String(url).includes('open-data-folder'))).toBe(false);
   });
 });
 

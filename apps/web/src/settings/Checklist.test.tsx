@@ -19,6 +19,7 @@ const server = (items: SetupItem[]) =>
     if (url === '/api/config/checklist') return items;
     if (url === '/api/config') return { values: { baseCurrency: 'USD', timezone: 'UTC' }, origins: {}, versions: { app: 1, workspace: 1 } };
     if (url === '/api/health') return { connectors: [] };
+    if (url === '/api/settings') return { profile: { name: 'Cody', plan: 'Pro' }, notifications: {}, baseCurrency: 'USD', dataDir: 'C:/data' }; // the backup step opens Data & Backups
   });
 const nav = () => screen.getByRole('navigation', { name: 'Settings' });
 

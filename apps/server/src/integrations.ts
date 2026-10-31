@@ -207,5 +207,9 @@ export function health(db: Db): Health {
       ...(r.error ? { error: String(r.error) } : {}),
       ...(r.synced_at ? { syncedAt: String(r.synced_at) } : {}),
     }));
-  return { ok: true, uptimeSec: Math.round(process.uptime()), version: process.env.FRONTLINE_VERSION ?? 'dev', connectors };
+  // Settings → Data & Backups (settings ST-31): names only, never the key. The desktop app sets both the key and the hint.
+  const desktop = !!process.env.FRONTLINE_SECRET_KEY && process.env.FRONTLINE_KEY_SOURCE === 'safe-storage';
+  const keyLocation = desktop ? 'safe-storage' : process.env.FRONTLINE_SECRET_KEY ? 'environment' : 'data-dir';
+  const dataDirSource = desktop ? 'desktop' : process.env.FRONTLINE_DATA_DIR ? 'env' : 'default';
+  return { ok: true, uptimeSec: Math.round(process.uptime()), version: process.env.FRONTLINE_VERSION ?? 'dev', keyLocation, dataDirSource, connectors };
 }

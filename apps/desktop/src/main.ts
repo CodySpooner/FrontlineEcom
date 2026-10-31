@@ -180,6 +180,7 @@ async function startApi() {
     FRONTLINE_WEB_DIR: WEB_DIR,
     FRONTLINE_VERSION: app.getVersion(),
     FRONTLINE_SECRET_KEY: loadKey(join(userData, 'secret.key.enc'), safeStorage, confirmKeyReset).toString('base64'),
+    FRONTLINE_KEY_SOURCE: 'safe-storage', // a non-secret hint: Settings → Data & Backups says where the key is (settings ST-31)
   };
   const url = `http://127.0.0.1:${port}`;
   const crashes: number[] = [];
