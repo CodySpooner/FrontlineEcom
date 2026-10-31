@@ -23,6 +23,7 @@ const api = (extra: (url: string) => unknown = () => undefined) =>
     if (url === '/api/settings') return settings;
     if (url === '/api/config' || url.startsWith('/api/config?')) return { values: { baseCurrency: 'EUR', timezone: 'UTC' }, origins: {}, versions: { app: 1, workspace: 1 } };
     if (url === '/api/stores') return [peak, glow];
+    if (url.startsWith('/api/kb/controls?')) return { autonomous: false, roles: {}, triggers: [], taskBudgetUsd: 1, dailyBudgetUsd: 3, depth: 'standard', approval: true, review: true, trustedDomains: [], blockedDomains: [], freshDays: {}, retentionDays: null, reservedUsd: 0, version: 0 };
     if (url.startsWith('/api/caps')) return [{ ...caps, storeId: new URL(url, 'http://x').searchParams.get('stores') ?? 'peak' }]; // GET /api/caps answers a list
     return extra(url) ?? (url === '/api/health' ? { ok: true, uptimeSec: 1, version: 'dev', connectors: [] } : undefined);
   });
@@ -47,7 +48,7 @@ describe('routes and deep links', () => {
     const nav = await screen.findByRole('navigation', { name: 'Settings' });
     await within(nav).findByRole('link', { name: 'Stores2' });
     expect(within(nav).queryByRole('link', { name: /History/ })).toBeNull();
-    expect(within(nav).getAllByRole('link').map((a) => a.textContent)).toEqual(['Account', 'Appearance', 'Notifications', 'General', 'Stores2', 'Agents & Providers', 'Integrations', 'Usage & Limits', 'Data & Backups']);
+    expect(within(nav).getAllByRole('link').map((a) => a.textContent)).toEqual(['Account', 'Appearance', 'Notifications', 'General', 'Stores2', 'Agents & Providers', 'Integrations', 'Knowledge', 'Usage & Limits', 'Data & Backups']);
   });
 
   it.each(SECTIONS.map((s) => [s.slug, s.label]))('/settings/%s renders its section', async (slug, label) => {

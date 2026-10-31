@@ -56,7 +56,6 @@ import type {
   IntegrationKind,
   KbAskAnswer,
   KbCampaign,
-  KbControls,
   KbControlsState,
   KbCard,
   KbCardBrief,
@@ -697,14 +696,6 @@ export const useKbCampaigns = (ws: string | undefined) => useQuery({ queryKey: [
 
 /** A workspace's research controls (KB-22), with what self-directed research reserved in the last 24 hours. */
 export const useKbControls = (ws: string | undefined) => useQuery({ queryKey: ['kb', 'controls', ws], queryFn: () => api<KbControlsState>(`/api/kb/controls?${wsq(ws!)}`), enabled: !!ws });
-export function useSaveKbControls() {
-  const qc = useQueryClient();
-  return useMutation({
-    /** `version`: the one read (0 before the first save), settings decision 6. */
-    mutationFn: ({ ws, ...c }: Partial<KbControls> & { ws: string; version: number }) => api<KbControlsState>(`/api/kb/controls?${wsq(ws)}`, json('PUT', c)),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['kb'] }),
-  });
-}
 
 /** Plans a test of a card (`plan`), or cancels a planned one (`cancel`: its id). */
 export function useKbTestWrite() {

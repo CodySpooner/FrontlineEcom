@@ -39,11 +39,12 @@ import {
 } from '@frontline/agents';
 import { AGENT_ROLES, type KbPromotion, KB_CARD_TYPES, KB_RESEARCH_DEPTHS, KB_LINK_TYPES, KB_SOURCE_RELIABILITY, KB_STAGES, type KbCardPatch, type KbEvidenceInput, type KbCardQuery, type KbCardStatus, type KbSourceBrief, type KbResearchDepth, type KbSourceReliability, type KbView, type KbWorkspace } from '@frontline/shared';
 import { getApproval } from '../approvals';
+import { trimCounts } from '../config/kb-trim';
 import { ConfigError, NO_VERSION, versionOf } from '../config/write';
 import { tx, type Db } from '../db';
 import { publish } from '../live';
 import { advanceKbResearch, runManager } from '../routes/agents';
-import { controlsState, parseControls, saveControls } from './autonomy';
+import { controlsState, dropStaleCategories, parseControls, saveControls } from './autonomy';
 import { listCampaigns, listExperiments, parseExperiment, planExperiment } from './experiments';
 import { readUpload } from './fetcher';
 import { kbOverview } from './overview';
@@ -322,6 +323,14 @@ export function kbRoutes(db: Db) {
       const ws = wsOf(db, c.req.query('ws'));
       return ws === undefined ? c.json({ error: WS_ERROR }, 400) : c.json(controlsState(db, ws));
     })
+    // Settings → Knowledge (ST-25): what the next hourly pass would trim at a shorter retention, before it's saved.
+    .get('/api/kb/controls/trim', (c) => {
+      const ws = wsOf(db, c.req.query('ws'));
+      const days = Number(c.req.query('days'));
+      if (ws === undefined) return c.json({ error: WS_ERROR }, 400);
+      if (!(Number.isInteger(days) && days >= 30 && days <= 3650)) return c.json({ error: 'days must be 30-3650' }, 400);
+      return c.json(trimCounts(db, ws, days));
+    })
     .put('/api/kb/controls', async (c) => {
       const ws = wsOf(db, c.req.query('ws'));
       if (ws === undefined) return c.json({ error: WS_ERROR }, 400);
@@ -444,6 +453,7 @@ export function kbRoutes(db: Db) {
         return c.json({ error: 'parentId must be a category of this workspace outside this one' }, 400);
       try {
         const moved = updateCategory(db, id, { name: b.name === undefined ? undefined : String(b.name).trim(), parentId: b.parentId as string | null | undefined, position: b.position as number | undefined });
+        dropStaleCategories(db, ws); // moved under another: no longer one the controls can name
         return c.json(listCategories(db, ws).find((x) => x.id === moved.id));
       } catch (e) {
         if (unique(e)) return c.json({ error: 'a category with that name is already there' }, 409);
@@ -458,6 +468,7 @@ export function kbRoutes(db: Db) {
       const n = cardsUnder(db, id);
       if (n) return c.json({ error: `${n} card${n === 1 ? ' is' : 's are'} filed here: move them first` }, 409);
       db.prepare('DELETE FROM kb_categories WHERE id = ?').run(id);
+      dropStaleCategories(db, ws);
       return c.body(null, 204);
     })
     .get('/api/kb/cards', (c) => {

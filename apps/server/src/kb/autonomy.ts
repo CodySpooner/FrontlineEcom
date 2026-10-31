@@ -33,6 +33,8 @@ export interface AutoDeps {
   advance: () => void;
 }
 export const autoDeps = (db: Db): AutoDeps => ({ engineAvailable: () => engineInfo(true).provider === 'claude', advance: () => advanceKbResearch(db) });
+/** What only a store's controls have: General has review, the sites, refresh ages and retention (settings decision 13). */
+const STORE_ONLY = ['autonomous', 'roles', 'triggers', 'taskBudgetUsd', 'dailyBudgetUsd', 'depth', 'approval'] as const;
 
 /** What self-directed research in the store reserved in the last 24 hours: its tasks' budgets and its recommendations waiting. */
 export function reservedUsd(db: Db, storeId: string, now = new Date()): number {
@@ -45,14 +47,39 @@ export function reservedUsd(db: Db, storeId: string, now = new Date()): number {
 }
 
 const row = (db: Db, ws: KbWorkspace) => db.prepare(`SELECT version FROM kb_controls WHERE coalesce(store_id, '') = ?`).get(ws ?? '');
+
+/**
+ * The controls without the ids of categories that were deleted or moved under another (settings decision 13): a role
+ * left with none of its categories stops researching rather than widening to its usual areas.
+ */
+function current(db: Db, ws: KbWorkspace): KbControls {
+  const c = kbControls(db, ws);
+  const top = new Set(db.prepare(`SELECT id FROM kb_categories WHERE coalesce(store_id, '') = ? AND parent_id IS NULL`).all(ws ?? '').map((r) => String(r.id)));
+  const roles = Object.entries(c.roles).flatMap(([r, ids]) => (ids.length && !ids.some((id) => top.has(id)) ? [] : [[r, ids.filter((id) => top.has(id))]]));
+  return { ...c, roles: Object.fromEntries(roles), freshDays: Object.fromEntries(Object.entries(c.freshDays).filter(([id]) => top.has(id))) };
+}
+
+/** After a category is deleted or moved under another: its id leaves the saved controls, and their version moves on. */
+export function dropStaleCategories(db: Db, ws: KbWorkspace) {
+  const c = current(db, ws);
+  if (!row(db, ws) || JSON.stringify(c) === JSON.stringify(kbControls(db, ws))) return;
+  db.prepare(`UPDATE kb_controls SET settings_json = ?, updated_at = ?, version = version + 1 WHERE coalesce(store_id, '') = ?`).run(JSON.stringify(c), new Date().toISOString(), ws ?? '');
+}
+
 /** With the row's version (0 before the first save): a PUT sends it back (settings decision 6). */
-export const controlsState = (db: Db, ws: KbWorkspace): KbControlsState => ({ ...kbControls(db, ws), reservedUsd: ws === null ? 0 : reservedUsd(db, ws), version: Number(row(db, ws)?.version ?? 0) });
+export const controlsState = (db: Db, ws: KbWorkspace): KbControlsState => ({
+  ...current(db, ws),
+  reservedUsd: ws === null ? 0 : reservedUsd(db, ws),
+  version: Number(row(db, ws)?.version ?? 0),
+});
 
 /** A PUT body over the workspace's controls now: the clean controls, or what's wrong (with its registry id, `kb.<key>`). */
 export function parseControls(db: Db, ws: KbWorkspace, body: unknown): KbControls | { error: string; field?: `kb.${keyof KbControls}` } {
   const bad = (error: string, field?: keyof KbControls) => (field ? { error, field: `kb.${field}` as const } : { error });
   if (!isObj(body)) return bad('body must be an object');
-  const b = { ...kbControls(db, ws), ...Object.fromEntries(Object.entries(body).filter(([k]) => Object.hasOwn(KB_CONTROLS, k))) } as Obj;
+  const own = ws === null && STORE_ONLY.find((k) => Object.hasOwn(body, k));
+  if (own) return bad(own === 'autonomous' ? 'Self-directed research runs on a store: its agents and AI budget. Turn it on for a store.' : `${own} is set per store: General has review, sites, refresh ages and retention`, own);
+  const b = { ...current(db, ws), ...Object.fromEntries(Object.entries(body).filter(([k]) => Object.hasOwn(KB_CONTROLS, k))) } as Obj;
   const flag = (['autonomous', 'approval', 'review'] as const).find((k) => typeof b[k] !== 'boolean');
   if (flag) return bad('autonomous, approval and review must be true or false', flag);
   if (!isObj(b.roles) || !Object.entries(b.roles).every(([r, ids]) => Object.hasOwn(AGENT_ROLES, r) && Array.isArray(ids) && ids.every((id) => typeof id === 'string')))

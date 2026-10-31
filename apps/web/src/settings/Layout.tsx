@@ -1,6 +1,6 @@
 // Settings frame (ST-02, board A1): the settings sidebar and a main column of at most 860 px under the page's Hero.
 import type { ComponentType } from 'react';
-import { Bell, Cpu, Database, Gauge, Palette, Plug, Settings as Gear, Store, User, type LucideIcon } from 'lucide-react';
+import { Bell, BookOpen, Cpu, Database, Gauge, Palette, Plug, Settings as Gear, Store, User, type LucideIcon } from 'lucide-react';
 import type { SettingsSection } from '@frontline/shared';
 import { Hero } from '../components/Hero';
 import { NAV } from '../nav';
@@ -10,6 +10,7 @@ import { Account } from './sections/Account';
 import { Agents } from './sections/Agents';
 import { Appearance } from './sections/Appearance';
 import { General } from './sections/General';
+import { Knowledge } from './sections/Knowledge';
 import { YourData } from './sections/legacy';
 import { Notifications } from './sections/Notifications';
 import { Stores } from './sections/Stores';
@@ -26,8 +27,8 @@ export interface SectionDef {
   /** The one line under the section title. */
   sub: string;
   Page: ComponentType;
-  /** Has store overrides: the header gets the "Editing" switch (`?store=`). */
-  scoped?: boolean;
+  /** Has store overrides: the header gets the "Editing" switch (`?store=`); `knowledge` names its sides General and a store. */
+  scoped?: boolean | 'knowledge';
 }
 
 /** The sections with content, in sidebar order. A section is listed in the same commit as its content (decision 1). */
@@ -46,16 +47,17 @@ export const SECTIONS: SectionDef[] = [
     sub: 'Connect store platforms, ad accounts, analytics, suppliers and creative tools.',
     Page: () => <div data-legacy="ST-37a"><Integrations /></div>,
   },
+  { slug: 'knowledge', group: 'AI & Connections', label: 'Knowledge', icon: BookOpen, sub: 'How agents research for the knowledge base, for General and each store.', Page: Knowledge, scoped: 'knowledge' },
   { slug: 'usage', group: 'Operations', label: 'Usage & Limits', icon: Gauge, sub: "Daily limits the agents can't cross, and what today has used.", Page: Usage, scoped: true },
   { slug: 'data', group: 'Operations', label: 'Data & Backups', icon: Database, sub: 'Where your data lives on this computer, and its backups.', Page: () => <div data-legacy="ST-31"><YourData /></div> },
 ];
 
-function Scope() {
+function Scope({ variant }: { variant?: 'knowledge' }) {
   const s = useScope();
   return (
     s.stores.length > 0 && (
       <div data-action="settings.scope">
-        <ScopeSwitch stores={s.stores} value={s.store?.id ?? null} onChange={s.set} />
+        <ScopeSwitch variant={variant} stores={s.stores} value={s.store?.id ?? null} onChange={s.set} />
       </div>
     )
   );
@@ -80,7 +82,7 @@ export function SettingsLayout({ section }: { section: SectionDef }) {
                 </h2>
                 <p className="mt-0.5 text-[12.5px] text-muted">{section.sub}</p>
               </div>
-              {section.scoped && <Scope />}
+              {section.scoped && <Scope variant={section.scoped === 'knowledge' ? 'knowledge' : undefined} />}
             </header>
             <section.Page />
           </div>

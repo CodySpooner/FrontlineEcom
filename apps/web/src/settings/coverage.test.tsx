@@ -15,7 +15,6 @@ import { SECTIONS } from './Layout';
 /** Editable entries with no row outside `data-legacy` yet. The item that renders a row removes its id; ST-48 empties it. */
 const ALLOWLIST = [
   'autopilot.ads.set_budget', 'autopilot.ads.pause_campaign', // ST-30
-  'kb.autonomous', 'kb.roles', 'kb.triggers', 'kb.taskBudgetUsd', 'kb.dailyBudgetUsd', 'kb.depth', 'kb.approval', 'kb.review', 'kb.trustedDomains', 'kb.blockedDomains', 'kb.freshDays', 'kb.retentionDays', // ST-25
   'pr.audience', 'pr.priceMax', 'pr.shipTo', 'pr.warehouses', 'pr.maxDeliveryDays', 'pr.includeCategories', 'pr.keywords', // ST-27
 ];
 
@@ -23,6 +22,7 @@ const ALLOWLIST = [
 const ACTIONS: Record<string, string> = {
   'settings.advanced': 'apps/web/src/settings/kit.test.tsx#the Advanced expander is a real button that shows and hides its rows',
   'settings.scope': 'apps/web/src/settings/sections/Agents.test.tsx#the scope switch edits one store: its values, under ?store=',
+  'kb.schedule': "apps/web/src/settings/sections/Knowledge.test.tsx#schedules: the store's research automations, to remove or add",
   'agents.claude.check': 'apps/web/src/settings/sections/Agents.test.tsx#Check again asks the Claude login again and shows what it says',
   'agents.codex.setup': "apps/web/src/settings/sections/Agents.test.tsx#Set up Codex starts the sign-in on the app's Codex folder, then Check again reads it",
   'agents.codex.check': "apps/web/src/settings/sections/Agents.test.tsx#Set up Codex starts the sign-in on the app's Codex folder, then Check again reads it",
@@ -44,8 +44,8 @@ afterEach(cleanup);
 afterAll(() => vi.unstubAllGlobals());
 
 describe('every control on a settings page is real', () => {
-  // Plus the pages under a section: a store's (ST-18).
-  it.each([...SECTIONS.map((s) => s.slug), 'stores/peak'].map((s) => [s]))('/settings/%s', async (slug) => {
+  // Plus the pages under a section: a store's (ST-18); and Knowledge in a store's scope, where its store-only rows are (ST-25).
+  it.each([...SECTIONS.map((s) => s.slug), 'stores/peak', 'knowledge?store=peak'].map((s) => [s]))('/settings/%s', async (slug) => {
     stubApi((url) => {
       if (url === '/api/settings') return settings;
       if (url === '/api/config') return { values: {}, origins: {}, versions: { app: 1 } };
@@ -53,6 +53,8 @@ describe('every control on a settings page is real', () => {
       if (url === '/api/stores/peak/impact') return { removes: [], keeps: [] };
       if (url.startsWith('/api/caps')) return [caps]; // GET /api/caps answers a list
       if (url === '/api/health') return { ok: true, uptimeSec: 1, version: 'dev', connectors: [] };
+      if (url.startsWith('/api/kb/controls?')) return { autonomous: false, roles: {}, triggers: ['gap'], taskBudgetUsd: 1, dailyBudgetUsd: 3, depth: 'standard', approval: true, review: true, trustedDomains: [], blockedDomains: [], freshDays: {}, retentionDays: null, reservedUsd: 0, version: 0 };
+      if (url.startsWith('/api/kb/categories?')) return [{ id: 'c1', storeId: url.includes('ws=peak') ? 'peak' : null, parentId: null, name: 'Advertising', position: 1, createdAt: '', cards: 0, freshDays: 45 }];
       if (url === '/api/ecosystem/stats') return { activeTasks: 0, completedTasks: 0, failedTasks: 0, successRate: null, activeTeams: 0, inputTokens: 0, outputTokens: 0, costUsd: 0 };
       if (url === '/api/runtimes') return ['claude', 'codex'].map((runtime) => ({ runtime, connected: runtime === 'claude', ...(runtime === 'codex' ? { reason: 'Set up Codex' } : {}), source: 'registry', checkedAt: '', models: [{ id: 'm', label: 'M', efforts: ['low', 'high'], default: true }] }));
     });
