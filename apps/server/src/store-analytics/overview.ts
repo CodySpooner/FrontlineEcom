@@ -1,16 +1,16 @@
 // SA-69: the Overview in one call (spec §6 Overview priorities): the six KPIs through computeMetricSet, the same set
-// /metrics gives for the scope, each sales channel's net sales and orders, and the annotation count. ponytail: the
-// attention count joins this response when its engine exists (SA-74).
+// /metrics gives for the scope, each sales channel's net sales and orders, and the annotation and attention counts.
 import { SA_OVERVIEW_KPIS, type SaFilters, type SaOverview } from '@frontline/shared';
 import type { Db } from '../db';
 import { annotations } from './annotations';
+import { insights } from './insights';
 import { computeMetricSet } from './metric-set';
 import type { StorePeriod } from './period';
 import type { Scope } from './routes';
 import { CANONICAL, type RefundBasis } from './sales';
 
 export function overview(db: Db, scope: Scope, sp: StorePeriod, filters: SaFilters = {}, basis: RefundBasis = 'refund_day'): SaOverview {
-  const set = { ...computeMetricSet(db, scope, SA_OVERVIEW_KPIS, sp, filters, basis), annotations: annotations(db, scope.storeId, sp).length };
+  const set = { ...computeMetricSet(db, scope, SA_OVERVIEW_KPIS, sp, filters, basis), annotations: annotations(db, scope.storeId, sp).length, attention: insights(db, scope.storeId, sp).insights.length };
   const store = db.prepare('SELECT platform, demo FROM stores WHERE id = ?').get(scope.storeId)!;
   if (store.demo) return { ...set, channels: [], channelsNote: "Demo data isn't split by channel" };
   // The channels the period's orders came through, as the channel filter names them (sliceSql's rule).

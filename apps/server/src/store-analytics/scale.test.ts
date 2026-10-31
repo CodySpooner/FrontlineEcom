@@ -9,6 +9,7 @@ import { listings } from './listings';
 import { computeMetricSet, computeSeries } from './metric-set';
 import { overview } from './overview';
 import { contributions } from './contributions';
+import { insights } from './insights';
 import { storePeriod, type StorePeriod } from './period';
 import { reconcile } from './reconcile';
 import { storeContext } from './routes';
@@ -79,6 +80,7 @@ function run(db: Db, storeId: string, now: number) {
   listings(db, storeId, {}, period({ period: 'last30' }));
   overview(db, { storeId }, period({ period: 'last30' }));
   contributions(db, { storeId }, period({ period: 'last30' }));
+  insights(db, storeId, period({ period: 'last30' }), now);
   contributions(db, { storeId }, period({ period: 'today' }), { channel: ['site'] }, 'order_day');
   listings(db, storeId, { sort: 'net_sales', page: '2' }, period({ period: 'last365' }), {}, 'order_day');
   listings(db, storeId, { sort: 'refunds', q: 'GH', status: 'all' }, period({ period: 'last30' }), { channel: ['site'], collection: ['c-best'] });

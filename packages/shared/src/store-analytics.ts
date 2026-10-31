@@ -908,6 +908,40 @@ export interface SaOverview extends SaMetricSet {
   channelsNote?: string;
   /** How many annotations the period has (GET /api/analytics/annotations). */
   annotations: number;
+  /** How many insights need attention (GET /api/analytics/insights). */
+  attention: number;
+}
+
+/** SA-74 (decision 28): one rule of the insight engine, as "How flags work" lists it. */
+export interface SaRule {
+  /** `name@version`, e.g. "stock_cover@1". */
+  id: string;
+  name: string;
+  /** When it flags, with its thresholds. */
+  when: string;
+  minSample: string;
+  datasets: SaDataset[];
+}
+
+/** What an insight's row opens. */
+export type SaInsightTarget = { kind: 'product'; id: string } | { kind: 'products'; ids: string[] } | { kind: 'listings'; channel: string } | { kind: 'sources' };
+
+/** A rule's finding: always Observed, never scored. A business rule whose inputs are stale or failed says so instead (`data_health`). */
+export interface SaInsight {
+  rule: string;
+  kind: 'business' | 'data_health';
+  tone: 'warn' | 'red' | 'info';
+  title: string;
+  detail: string;
+  /** The values the rule read, by name. */
+  evidence: Record<string, number | string>;
+  target: SaInsightTarget;
+}
+
+/** GET /api/analytics/insights: the store's insights now (period rules over the period), and every rule. */
+export interface SaInsights {
+  insights: SaInsight[];
+  rules: SaRule[];
 }
 
 /** One row of What moved: a product, the rest combined, or what no product line carries. */

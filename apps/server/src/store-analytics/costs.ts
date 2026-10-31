@@ -12,7 +12,7 @@ export type CostMetricId = 'contribution_before_ads' | 'cost_coverage' | 'fees';
  * Decision 15: a line's cost is the one recorded with it, else the unit cost (variant first, then product) effective on
  * its order's day, else unknown (NULL). Aliases: `l` the order line, `o` its order. Costs are in the store's currency.
  */
-const LINE_COST = `coalesce(l.cost, l.quantity * (SELECT u.cost FROM unit_costs u WHERE u.store_id = l.store_id AND u.product_id = l.product_id
+export const LINE_COST = `coalesce(l.cost, l.quantity * (SELECT u.cost FROM unit_costs u WHERE u.store_id = l.store_id AND u.product_id = l.product_id
   AND (u.variant_id IS NULL OR u.variant_id = l.variant_id) AND u.effective_from <= o.local_date ORDER BY u.variant_id IS NULL, u.effective_from DESC, u.recorded_at DESC LIMIT 1))`;
 
 /** With a product set, the share of order `o`'s sales in its matching lines (its per-product rows without lines); else 1. */
