@@ -249,3 +249,45 @@ Visual review: owner reference plus [Game Dev Story official screenshots](https:
 - [x] ECO-44 Hub presentation: keep the live ticker clear above crossing workers and add restrained projector framing around the owner logo.
 - [x] ECO-45 Character-led activity feed: show each deployed worker's actual customized portrait beside its live events.
 - [x] ECO-46 Workstation status lights: visible desk beacons reflect real worker states, with no invented task activity.
+
+## World upgrade — 2026-10-31 (owner)
+
+Brief: `docs/features/ecosystem-world-upgrade.md` (owner's words, verbatim; it wins over this list). Character style
+reference: `.agent/character-reference.png` in this worktree. Third-party art, not in git: style direction only
+(proportions, layered materials, shading, detail density). Never copy its characters, never commit or ship it.
+
+Rules for this run:
+- Same worker loop as CLAUDE.md: one item per commit, `pnpm check` green, before/after screenshots in `.agent/`, rebase,
+  push, vault log line. No questions. No releases (`pnpm release`) and no merges beyond pushing to main.
+- Repo rules still hold, above all **no gamification** (no XP, levels, ranks, achievements, trophies; CLAUDE.md), real
+  state only for anything that looks like activity or data, Demo Mode stays labeled and separate.
+- Keep what other lanes added since ECO-46: deploying an agent from AI Agents takes a desk (6dae8a34), Settings →
+  Appearance "Always reduce motion" (dabb6325), the leveling removal (3e605b20).
+- Image generation is allowed for sprites/textures (cut to a fixed grid, packed atlases, nearest-neighbour, offline,
+  reasonable size); procedural pixel work is fine where it holds up better. Say which you used.
+- Ports: `WEB_PORT=5203`, `API_PORT=8817`. Never connect a real store or use a real Claude run to test.
+
+Items (stages from brief §11):
+- [ ] ECO-47 Stage 1 — Audit and direction: read the brief, study the reference, audit characters/world/motion/
+  interaction code. Write the shared visual language (proportions, palette, light direction, materials, motion tiers,
+  one design concept per role) to `docs/features/ecosystem-art-direction.md`.
+- [ ] ECO-48 Stage 2 — Prove one character (e.g. Product Hunter) at target quality inside the real office: readable at
+  fit zoom, rewarding close up, every state animated, matches the lighting. Before/after.
+- [ ] ECO-49 Stage 3 — Full cast: all eight roles get original, role-coherent characters (silhouette, gear, posture,
+  role tools) with per-agent variation; old saved appearances still load; portraits match.
+- [ ] ECO-50 Stage 3 — World concept and composition: clear focal point, readable regions, pathways, foreground/main/
+  background depth; role spaces functional only where a real feature backs them.
+- [ ] ECO-51 Stage 3 — Detail at three scales (distance, normal, close-up), restrained Easter eggs, no invented numbers.
+- [ ] ECO-52 Stage 4 — Motion language: ambient, interaction and event tiers; role-specific idles; varied timing, no
+  shared bounce; quiet zones.
+- [ ] ECO-53 Stage 4 — Real-state behavior: idle / working / collaborating / waiting / completed / failed tied to real
+  events; inspectable real connections; decorative vs functional clearly told apart; loading/disconnected states;
+  store switching shows only that store's agents and activity.
+- [ ] ECO-54 Stage 4 — Interaction: selection focuses without chasing a moving character, agent locator, bounded pan/
+  zoom, easy return to overview, keyboard and touch, progressive detail; no click launches paid work or store changes.
+- [ ] ECO-55 Stage 5 — Quality levels and lifecycle: quality setting, pause/reduce ambient motion, reduced motion and
+  the app's "Always reduce motion", offscreen culling, no leaks or duplicate loops across mount/unmount and resize.
+- [ ] ECO-56 Stage 5 — Performance verification: realistic and larger populations, 10+ minutes of viewing, repeated
+  navigation, resizing, mixed states; record hardware and conditions here (no universal FPS claims).
+- [ ] ECO-57 Acceptance and handoff: walk brief §12 in the browser, in motion, fix gaps; screenshots plus a short
+  recording if capture works (say so if not); write the handoff (§13) under **Done**, push, create `.agent/STOP`, stop.
