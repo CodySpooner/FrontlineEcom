@@ -55,3 +55,8 @@
 @media(max-width:600px){.eco-locator{top:112px}.eco-locator select{max-width:170px;min-height:40px}.eco-locator button{min-height:40px}.eco-desk-access{top:160px}}
 
 @media(max-width:640px){.eco-toolbar{flex-wrap:wrap;justify-content:flex-end}.eco-toolbar [role=tablist]{flex-basis:100%;min-width:0}}
+
+.eco-scene-note strong{display:block;width:max-content;max-width:100%;padding:2px 6px;border-radius:3px;background:#10141eef;color:#e8d6af;font-size:10px;letter-spacing:.03em}
+.eco-scene-note span{display:block;overflow:hidden;text-overflow:ellipsis}
+.eco-worker-preview{bottom:86px}
+@media(max-width:640px){.eco-worker-preview{bottom:200px}}

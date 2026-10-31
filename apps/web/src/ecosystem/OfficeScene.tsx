@@ -15,7 +15,7 @@ import { kickoff } from './meetings';
 import type { DisplayOptions } from './display';
 import type { OfficeThemeId } from './themes';
 
-export function OfficeScene({ office, onSelect, focus, display, seats, persist = true, theme, activeTasks }: { office: OfficeState; onSelect: (agentId: string) => void; focus?: { id: string; at: number }; display: DisplayOptions; seats: OfficeSeat[]; persist?: boolean; theme: OfficeThemeId; activeTasks?: number }) {
+export function OfficeScene({ office, onSelect, focus, display, seats, persist = true, theme, activeTasks, sourceLabel = '' }: { sourceLabel?: string; office: OfficeState; onSelect: (agentId: string) => void; focus?: { id: string; at: number }; display: DisplayOptions; seats: OfficeSeat[]; persist?: boolean; theme: OfficeThemeId; activeTasks?: number }) {
   const host = useRef<HTMLDivElement>(null);
   const scene = useRef<OfficeRenderer>(undefined);
   const [desk, setDesk] = useState('');
@@ -58,7 +58,7 @@ export function OfficeScene({ office, onSelect, focus, display, seats, persist =
   const inspected = workers.find((w) => w.seat.agentId === performance?.inspectionId);
   const inspectedDepartment = ROOMS.find((r) => r.id === DESKS.find((d) => d.id === inspected?.seat.deskId)?.department);
   return <>
-    <span className="sr-only">Central hub today: {readout.revenue} revenue, {readout.orders} orders, {readout.tasks} active tasks. {readout.note}</span>
+    <span className="sr-only">Central hub today: {readout.revenue} revenue, {readout.orders} orders, {readout.tasks} active tasks. {readout.provenance} {readout.note}</span>
     <div className="eco-camera" aria-label="Office camera">
       <div className="eco-zoom-controls">
         <Button size="sm" onClick={()=>scene.current?.zoom(.8)} aria-label="Zoom out" title="Zoom out (-)"><Minus size={13} aria-hidden /></Button>
@@ -81,7 +81,7 @@ export function OfficeScene({ office, onSelect, focus, display, seats, persist =
     </div>}
     {performance && <small className="eco-fps">{Math.round(performance.scale * 100)}% · {Math.round(performance.fps)} FPS · {performance.mode}{performance.scale < .65 ? ' · Zoom in for worker labels' : ''}</small>}
     {error && <p role="alert" className="eco-scene-error">{error}</p>}
-    <div className="eco-scene-note" role="status">{occupant ? `${occupant.name} · ${occupant.status?.replaceAll('_', ' ')}${occupant.tool ? ` · ${occupant.tool}` : ''}` : selected ? `${ROOMS.find((r)=>r.id===selected.department)!.name} · Workstation ${selected.id.split('-').at(-1)}` : 'HEADQUARTERS · Select a workstation to inspect it'}</div>
+    <div className="eco-scene-note" role="status">{sourceLabel && <strong>{sourceLabel}</strong>}<span>{occupant ? `${occupant.name} · ${occupant.status?.replaceAll('_', ' ')}${occupant.tool ? ` · ${occupant.tool}` : ''}` : selected ? `${ROOMS.find((r)=>r.id===selected.department)!.name} · Workstation ${selected.id.split('-').at(-1)}` : 'HEADQUARTERS · Select a workstation to inspect it'}</span></div>
     <details className="eco-desk-access"><summary>Workstation directory</summary><div>{DESKS.map((d)=><button key={d.id} aria-describedby={inspected?.seat.deskId === d.id ? 'eco-worker-preview' : undefined} onFocus={()=>scene.current?.previewWorker(workers.find((w)=>w.seat.deskId===d.id)?.seat.agentId)} onBlur={()=>scene.current?.previewWorker()} onClick={()=>{choose(d.id);if(!workers.some(w=>w.seat.deskId===d.id))scene.current?.focus(d);}}>{d.id}</button>)}</div></details>
   </>;
 }

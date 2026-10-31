@@ -7,7 +7,10 @@ import { annotationScale } from './camera';
 export function hubReadout(office: OfficeState, activeTasks?: number, now = Date.now()) {
   const date = new Date(now - new Date(now).getTimezoneOffset() * 60000).toISOString().slice(0, 10);
   const today = office.analytics?.series.find((p) => p.date === date);
+  const demoStores=office.stores.filter(s=>!s.connected).length;
+  const provenance=today && demoStores ? demoStores===office.stores.length ? 'DEMO METRICS' : 'INCLUDES DEMO' : '';
   return {
+    provenance,
     revenue: today ? money(today.revenue, office.analytics?.currency ?? 'USD') : '—',
     orders: today ? today.orders.toLocaleString() : '—',
     tasks: activeTasks === undefined ? '—' : activeTasks.toLocaleString(),
@@ -37,7 +40,7 @@ export function hubTelemetry(world: Container) {
     update: (office: OfficeState, activeTasks?: number) => {
       const readout = hubReadout(office, activeTasks);
       value.text = `${readout.revenue} · ${readout.orders} ORDERS`; value.scale.set(1); if (value.width > 310) value.scale.set(310 / value.width);
-      meta.text = `TODAY · ${readout.tasks} ACTIVE TASKS${readout.note ? ' · PARTIAL FX' : ''}`;
+      meta.text = `TODAY · ${readout.tasks} ACTIVE TASKS${readout.provenance ? ' · '+readout.provenance : ''}${readout.note ? ' · PARTIAL FX' : ''}`; meta.scale.set(1);if(meta.width>310)meta.scale.set(310/meta.width);
     },
     tick: (elapsed: number, still: boolean) => particles.forEach((g, i) => { const point = orbitPoint(elapsed, i, still); g.position.set(point.x, point.y); }),
   };

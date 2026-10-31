@@ -24,3 +24,14 @@ test('orbit stays in its ring and is static with motion disabled', () => {
     expect((p.x / 172) ** 2 + ((p.y + 92) / 43) ** 2).toBeCloseTo(1);
   }
 });
+
+
+test('seeded and mixed store metrics are explicitly marked without changing execution totals',()=>{
+  const now=Date.now(),office=createDemo(now).state;
+  expect(hubReadout(office,2,now)).toMatchObject({provenance:'DEMO METRICS',tasks:'2'});
+  office.stores[0]!.connected=true;
+  expect(hubReadout(office,2,now).provenance).toBe('INCLUDES DEMO');
+  office.stores.forEach(s=>{s.connected=true;});
+  expect(hubReadout(office,2,now).provenance).toBe('');
+  expect(hubReadout(emptyOffice(),undefined,now).provenance).toBe('');
+});

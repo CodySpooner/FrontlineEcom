@@ -14,3 +14,17 @@ test('field specialist keeps every pose within its atlas cell and gives work a d
   }
   expect(poses.size).toBeGreaterThanOrEqual(7);
 });
+
+
+test('every role has distinct frames for its working tool',()=>{
+  const look=resolveAppearance(appearanceFor('work-proof'),'work-proof');
+  for(const role of FIELD_ROLES){
+    const frames=[0,1,2,3].map(frame=>{
+      const rects:number[][]=[];
+      const c={fillRect:(x:number,y:number,w:number,h:number)=>rects.push([x,y,w,h]),beginPath(){},moveTo(){},lineTo(){},closePath(){},fill(){},save(){},restore(){},translate(){}} as unknown as CanvasRenderingContext2D;
+      paintFieldSpecialist(c,look,'work',frame,false,role);
+      return JSON.stringify(rects);
+    });
+    expect(new Set(frames).size,role).toBeGreaterThan(1);
+  }
+});

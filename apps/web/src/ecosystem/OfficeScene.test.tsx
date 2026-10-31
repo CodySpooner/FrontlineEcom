@@ -15,11 +15,12 @@ afterEach(cleanup);
 test('worker inspection remains accessible when graphics cannot start', async () => {
   vi.mocked(createOffice).mockRejectedValue(new Error('WebGL unavailable'));
   const select = vi.fn();
-  renderApp(<OfficeScene office={emptyOffice()} onSelect={select} display={DEFAULT_DISPLAY} theme="frontline" seats={[{ agentId: 'glow:copywriter', deskId: 'copywriting-1', displayName: 'Nova', appearance: appearanceFor('Nova'), archived: false, position: null, updatedAt: '' }]} />);
+  renderApp(<OfficeScene office={emptyOffice()} sourceLabel="DEMO · Local simulation" onSelect={select} display={DEFAULT_DISPLAY} theme="frontline" seats={[{ agentId: 'glow:copywriter', deskId: 'copywriting-1', displayName: 'Nova', appearance: appearanceFor('Nova'), archived: false, position: null, updatedAt: '' }]} />);
   expect((await screen.findByRole('alert')).textContent).toContain('Use the workstation directory or Agent List');
   fireEvent.click(screen.getByText('Workstation directory'));
   fireEvent.click(screen.getByRole('button', { name: 'copywriting-1' }));
   expect(select).toHaveBeenCalledWith('glow:copywriter');
+  expect(screen.getByText('DEMO · Local simulation').closest('.eco-scene-note')).toBeTruthy();
 });
 
 test('keyboard directory focus previews the actual occupant and clears on blur', async () => {

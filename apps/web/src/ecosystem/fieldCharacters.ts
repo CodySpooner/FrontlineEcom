@@ -76,8 +76,8 @@ export function paintFieldSpecialist(c: CanvasRenderingContext2D, look: Required
   if(role==='copywriter') {plate(31,30+arm,13,12,leather);r(33,32+arm,4,8,'#e3d9bd');r(38,32+arm,working&&frame===2?2:4,8,'#c2b69d');r(35,34+arm,1,4,steel);r(39,35+arm,2,1,steel);r(11,32,1,10,pale);}
   if(role==='creative_studio') {plate(30,31+arm,14,11,'#253e4a');for(let j=0;j<3;j++)r(32+j*3,34+arm,2,4,[look.accent,'#e3b467','#91d8c7'][j]!);r(9,30+(working?frame%2:0),2,13,pale);r(9,29,2,3,look.accent);}
   if(role==='store_developer') {plate(32,32+arm,11,8,steel);r(34,34+arm,7,4,ink);r(35,35+arm,working?2+frame%3:4,1,look.accent);r(34,40+arm,7,2,leather);}
-  if(role==='ad_strategist') {plate(33,32+arm,10,11,dark);r(35,35+arm,6,1,look.accent);r(36,38+arm,4,2,pale);r(11,9,1,18,steel);plate(8,24,7,9,steel);r(9,26,4,2,look.accent);}
-  if(role==='operations') {plate(30,32+arm,14,13,leather);r(32,34+arm,10,4,'#e3d9bd');for(let j=0;j<4;j++)r(33+j*2,35+arm,1,2,ink);r(36,39+arm,2,5,pale);plate(8,25,8,6,steel);}
+  if(role==='ad_strategist') {plate(33,32+arm,10,11,dark);r(35,35+arm,working?3+frame:6,1,look.accent);r(36,38+arm,4,2,pale);r(11,9,1,18,steel);plate(8,24,7,9,steel);r(9,26,4,2,look.accent);}
+  if(role==='operations') {plate(30,32+arm,14,13,leather);r(32,34+arm,10,4,'#e3d9bd');for(let j=0;j<4;j++)r(33+j*2,35+arm,1,2,ink);if(working)r(32+frame*2,34+arm,1,4,look.accent);r(36,39+arm,2,5,pale);plate(8,25,8,6,steel);}
   if(role==='email_sms') {plate(31,35+arm,14,10,leather);r(34,33+arm,7,2,steel);r(32,38+arm,12,1,pale);r(37,38+arm,2,working&&frame===2?1:3,look.accent);plate(9,26,6,7,steel);}
   c.save();c.translate(resting && frame===2 ? 1 : 0,0);
   // Smaller three-quarter face, stepped hair masses and a quiet glass monocular.
