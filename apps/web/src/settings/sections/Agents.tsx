@@ -1,8 +1,10 @@
 // Agents & Providers (ST-21, board A1, decision 9): the runtimes every store shares, and the defaults new runs start
 // from (ST-20 wires them in), for the workspace or one store. One explicit save through PATCH /api/config.
+import { Link } from 'react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { CODEX_ULTRA, EFFORT_LABEL, type ConfigImpact, type ConfigView, type RuntimeCapabilities } from '@frontline/shared';
-import { api, json, useClaudeAccount, useConfig, useRefreshRuntimes, useRuntimes, useSetUpCodex, type ApiError } from '../../api/client';
+import { CODEX_ULTRA, EFFORT_LABEL, SETTINGS, type ConfigImpact, type ConfigView, type RuntimeCapabilities } from '@frontline/shared';
+import { agentsUrl } from '../../agents/urls';
+import { api, json, useAgents, useClaudeAccount, useConfig, useRefreshRuntimes, useRuntimes, useSetUpCodex, type ApiError } from '../../api/client';
 import { Badge, cx, ErrorState, flatButtonClass, inputClass, LoadingState, Segmented } from '../../components/ui';
 import { useSettingsForm } from '../form';
 import { SaveBar, SettingRow, SettingsSection, useScope, type Origin } from '../kit';
@@ -86,12 +88,15 @@ function Runtimes() {
   );
 }
 
-// The run limits (ST-22) are `runs.*` workspace entries, edited in the same form (one form per section).
-const KEYS = ['runtime', 'model', 'effort', 'stopAfterMin', 'knowledge', 'retries', 'atOnce', 'perStore'] as const;
+// The run limits (ST-22) are `runs.*` workspace entries and the AI usage cap (ST-23) is `caps.agentCostPerDay`, edited in
+// the same form (one form per section).
+const KEYS = ['runtime', 'model', 'effort', 'stopAfterMin', 'knowledge', 'retries', 'atOnce', 'perStore', 'agentCostPerDay'] as const;
 type Key = (typeof KEYS)[number];
-type Values = { runtime?: 'claude' | 'codex'; model?: string; effort?: string; stopAfterMin?: number; knowledge?: 'all' | 'store'; retries?: number; atOnce?: number; perStore?: number };
+type Values = { runtime?: 'claude' | 'codex'; model?: string; effort?: string; stopAfterMin?: number; knowledge?: 'all' | 'store'; retries?: number; atOnce?: number; perStore?: number; agentCostPerDay?: number };
 type Form = Values & { version: number };
-const id = (k: Key) => (k === 'retries' || k === 'atOnce' || k === 'perStore' ? `runs.${k}` : `agentDefaults.${k}`);
+const id = (k: Key) => (k === 'agentCostPerDay' ? 'caps.agentCostPerDay' : k === 'retries' || k === 'atOnce' || k === 'perStore' ? `runs.${k}` : `agentDefaults.${k}`);
+const CAP_DEFAULT = Number(SETTINGS.find((s) => s.id === 'caps.agentCostPerDay')!.default);
+const usd = (n: unknown) => `$${Number(n).toFixed(2)}`;
 
 /** The values set at this scope (the store's own, or the workspace's); an unset one is absent. */
 const own = (v: ConfigView, store?: string): Values => Object.fromEntries(KEYS.filter((k) => v.origins[id(k)] === (store ? 'store' : 'workspace')).map((k) => [k, v.values[id(k)]]));
@@ -129,7 +134,7 @@ function Defaults() {
   const f = useSettingsForm<Form>({
     key: `agents:${sid ?? 'workspace'}`,
     saved: q.data && toForm(q.data, sid),
-    labels: { runtime: 'Runtime', model: 'Model', effort: 'Effort', stopAfterMin: 'Stop a run after', knowledge: 'Knowledge', retries: 'Retries', atOnce: 'Runs at once', perStore: 'Runs at once per store' },
+    labels: { runtime: 'Runtime', model: 'Model', effort: 'Effort', stopAfterMin: 'Stop a run after', knowledge: 'Knowledge', retries: 'Retries', atOnce: 'Runs at once', perStore: 'Runs at once per store', agentCostPerDay: 'AI usage per day' },
     save: (changes, _version, base) =>
       api<ConfigView>('/api/config', json('PATCH', { documents: documentsOf(changes, base, sid) })).then(
         (v) => (qc.setQueryData(['config', 'view', sid ?? null], v), { ...toForm(v, sid), changes: v.changes }),
@@ -139,7 +144,7 @@ function Defaults() {
           throw e;
         },
       ),
-    onSaved: () => void qc.invalidateQueries({ queryKey: ['config'] }),
+    onSaved: () => void (qc.invalidateQueries({ queryKey: ['config'] }), qc.invalidateQueries({ queryKey: ['caps'] })),
   });
   const documents = q.data && f.dirty.length ? documentsOf(f.changes(), toForm(q.data, sid), sid) : [];
   const impact = useQuery({
@@ -148,6 +153,7 @@ function Defaults() {
     enabled: documents.length > 0,
   });
   const title = 'Defaults for new runs';
+  const agents = useAgents().data?.filter((a) => a.storeId === sid);
   if (!scope.ready || q.isPending || ws.isPending) return <SettingsSection title={title}><LoadingState rows={5} className="px-[18px] pb-4" /></SettingsSection>;
   if (q.isError || ws.isError) return <SettingsSection title={title}><ErrorState message="Couldn't load your settings." onRetry={() => (q.refetch(), ws.refetch())} /></SettingsSection>;
 
@@ -186,6 +192,7 @@ function Defaults() {
   const limit = (k: 'retries' | 'atOnce' | 'perStore') => Number(d[k] ?? q.data.values[id(k)]);
   const upTo = (n: number) => Array.from({ length: n }, (_, i) => i + 1);
   const texts = documents.length ? (impact.data?.impacts.map((i) => i.text) ?? []) : [];
+  const wsCap = ws.data.values['caps.agentCostPerDay'];
   return (
     <>
       <SettingsSection
@@ -299,6 +306,42 @@ function Defaults() {
         <p className="border-t border-line px-[18px] py-3 text-xs text-muted">
           Scheduled and background work runs on Claude on live stores and on the demo engine on demo stores (Knowledge research always runs on Claude); never on Codex. It takes the default model and effort when the default runtime is Claude.
         </p>
+      </SettingsSection>
+      {/* Decision 10: the store's AI cap here; ad budget changes and credits stay on Usage & Limits. */}
+      <SettingsSection title={store ? `${store.name} limits` : 'Workspace limits'} help={store ? 'Enforced before each step. An estimate from usage, not a cap set at the provider.' : 'For every store that uses the workspace default. Enforced before each step; an estimate from usage, not a cap set at the provider.'}>
+        <SettingRow
+          {...row('agentCostPerDay')}
+          label="AI usage per day"
+          htmlFor="agent-cap"
+          help={`A local estimate at list prices, enforced before each step and per run (one run gets at most the cap ÷ ${limit('perStore')}, the runs at once per store). It is not your Claude bill and not a cap at the provider. Codex and demo runs add nothing to it, but once it's used up no new run starts on the store, Codex and demo included.`}
+          origin={origin('agentCostPerDay', usd(wsCap))}
+        >
+          <span className="inline-flex items-center gap-1.5 text-[13px] text-muted">
+            $
+            <input
+              id="agent-cap"
+              data-setting="caps.agentCostPerDay"
+              type="number"
+              min={0}
+              max={1_000_000}
+              step="any"
+              value={d.agentCostPerDay ?? ''}
+              placeholder={Number(sid ? wsCap : CAP_DEFAULT).toFixed(2)}
+              onChange={(e) => f.set('agentCostPerDay', e.target.value === '' ? undefined : e.target.valueAsNumber)}
+              className={cx(inputClass, 'w-[110px] py-1.5')}
+            />
+          </span>
+        </SettingRow>
+        {store && (
+          <>
+            <SettingRow label="Spending, publishing, live-store edits" origin={{ kind: 'policy', text: 'always asks you first, except ad changes you put on autopilot' }} />
+            <SettingRow label="Per-agent budgets" help={agents ? `${agents.filter((a) => a.dailyBudgetUsd != null).length} of ${agents.length} ${store.name} agents have their own daily budget` : undefined}>
+              <Link to={agentsUrl({ store: store.id })} className="text-[13px] text-[#ff6b76] hover:underline">
+                Open in AI Agents
+              </Link>
+            </SettingRow>
+          </>
+        )}
       </SettingsSection>
       <SaveBar {...f.bar} scope={store?.name ?? 'Workspace defaults'} impact={texts.length ? texts.map((t) => <span key={t} className="mt-0.5 block text-xs">{t}</span>) : undefined} />
       {f.dialogs}

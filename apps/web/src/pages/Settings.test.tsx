@@ -74,7 +74,7 @@ describe('routes and deep links', () => {
   it('links into Settings point at the section that holds their content', () => {
     expect(settingsUrl('integrations', { id: 'x', setting: 'y' })).toBe('/settings/integrations/x#y');
     expect(settingsUrl('usage', { store: 'a b' })).toBe('/settings/usage?store=a%20b');
-    expect(budgetFix("Today's AI budget for this store ($5) is used up. Raise it in Settings.", 'glow:copywriter')?.to).toBe('/settings/usage?store=glow#caps.agentCostPerDay');
+    expect(budgetFix("Today's AI budget for this store ($5) is used up. Raise it in Settings.", 'glow:copywriter')?.to).toBe('/settings/agents?store=glow#caps.agentCostPerDay');
     expect(budgetFix("Claude isn't signed in on this computer.", 'glow:copywriter')?.to).toBe('/settings/agents');
   });
 
@@ -143,11 +143,13 @@ describe('caps form (moved, ST-24b)', () => {
   });
 
   it('sends only what changed, with the version read: untouched caps keep following the workspace', async () => {
-    const fetch = stubApi((_url, init) => (init?.method === 'PUT' ? { ...caps, agentCostPerDay: 2, version: 4 } : undefined));
+    const fetch = stubApi((_url, init) => (init?.method === 'PUT' ? { ...caps, higgsfieldCreditsPerDay: 150, version: 4 } : undefined));
     renderApp(<CapsForm caps={{ ...caps, version: 3 }} />);
-    fireEvent.change(screen.getByLabelText(/^AI usage/), { target: { value: '2' } });
+    // AI usage per day moved to Agents & Providers (ST-23): this form no longer has it.
+    expect(screen.queryByLabelText(/^AI usage/)).toBeNull();
+    fireEvent.change(screen.getByLabelText(/^Higgsfield credits/), { target: { value: '150' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save caps' }));
-    await vi.waitFor(() => expect(sent(fetch, 'PUT')).toEqual([['/api/caps/peak', { version: 3, agentCostPerDay: 2 }]]));
+    await vi.waitFor(() => expect(sent(fetch, 'PUT')).toEqual([['/api/caps/peak', { version: 3, higgsfieldCreditsPerDay: 150 }]]));
   });
 
   it('says caps come with a store instead of loading forever', async () => {

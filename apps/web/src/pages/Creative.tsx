@@ -9,6 +9,7 @@ import { Hero } from '../components/Hero';
 import { useStoreSelection } from '../components/StoreFilter';
 import { Badge, Button, buttonClass, ConfirmDelete, cx, EmptyState, ErrorState, LoadingState, Panel, StatusDot, Tabs } from '../components/ui';
 import { ago } from '../lib/format';
+import { capFrom } from '../lib/usage';
 import { NAV } from '../nav';
 
 const KIND_LABEL: Record<CreativeKind, string> = { image: 'image', video: 'video', ugc: 'UGC avatar video', copy: 'ad copy' };
@@ -150,7 +151,19 @@ export function Creative() {
                 <StatusDot tone={claude === 'connected' ? 'good' : claude === 'error' ? 'red' : 'idle'} />
                 Claude{claude && claude !== 'connected' && <span className="text-muted">{claude === 'error' ? ' · needs attention' : ' · demo copy'}</span>}
               </Link>
-              {cap && <span className="ml-auto">Daily cap {cap.higgsfieldCreditsPerDay} credits</span>}
+              {cap && (
+                <span className="ml-auto">
+                  Daily cap {cap.higgsfieldCreditsPerDay} credits
+                  {capFrom(cap, 'higgsfieldCreditsPerDay') && (
+                    <>
+                      {' · '}
+                      <Link to={capFrom(cap, 'higgsfieldCreditsPerDay')!.to} className="hover:text-white hover:underline">
+                        {capFrom(cap, 'higgsfieldCreditsPerDay')!.text}
+                      </Link>
+                    </>
+                  )}
+                </span>
+              )}
             </div>
           </div>
         </Panel>

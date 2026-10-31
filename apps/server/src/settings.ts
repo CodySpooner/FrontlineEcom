@@ -76,9 +76,10 @@ export function updateSettings(db: Db, body: unknown, version?: number): string 
 
 /** A store's effective caps: its overrides, else the workspace defaults, else the built-in ones (decision 4). */
 export function getCaps(db: Db, storeId: string): StoreCaps {
-  const { values } = effective(db, { storeId });
+  const { values, origins } = effective(db, { storeId });
   const row = readDoc(db, 'store_caps', storeId);
   const num = (k: string) => Number(values[`caps.${k}`]);
+  const keys = ['adSpendChangePerDay', 'higgsfieldCreditsPerDay', 'agentCostPerDay'] as const;
   return {
     storeId,
     adSpendChangePerDay: num('adSpendChangePerDay'),
@@ -86,6 +87,7 @@ export function getCaps(db: Db, storeId: string): StoreCaps {
     agentCostPerDay: num('agentCostPerDay'),
     autopilot: { ...(row.json.autopilot as StoreCaps['autopilot']) },
     version: row.version,
+    origins: Object.fromEntries(keys.map((k) => [k, origins[`caps.${k}`]])),
   };
 }
 

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { budgetFix, usedShare } from './usage';
+import type { StoreCaps } from '@frontline/shared';
+import { budgetFix, capFrom, usedShare } from './usage';
 
 describe('usedShare', () => {
   it('is used over cap, capped at 1', () => {
@@ -15,7 +16,7 @@ describe('usedShare', () => {
 describe('budgetFix', () => {
   it("points a budget refusal at the setting that lifts it", () => {
     expect(budgetFix("Today's budget for this agent ($0.3) is used up. Raise it in its settings.", 'glow:copywriter')).toEqual({ to: '/agents/glow%3Acopywriter?tab=settings', label: "Raise the agent's budget" });
-    expect(budgetFix("Stopped: today's AI budget for this store ($5) is used up. Raise it in Settings.", 'glow:copywriter')).toEqual({ to: '/settings/usage?store=glow#caps.agentCostPerDay', label: "Raise the store's AI cap" });
+    expect(budgetFix("Stopped: today's AI budget for this store ($5) is used up. Raise it in Settings.", 'glow:copywriter')).toEqual({ to: '/settings/agents?store=glow#caps.agentCostPerDay', label: "Raise the store's AI cap" });
     expect(budgetFix("Claude isn't signed in on this computer. Open a terminal, run `claude`, sign in with /login, then run the agent again.", 'glow:copywriter')).toEqual({
       to: '/settings/agents',
       label: 'Check your Claude login',
@@ -23,5 +24,15 @@ describe('budgetFix', () => {
     // Ask AI, AI Research and the briefs can reach an agent the owner switched off.
     expect(budgetFix('This agent is offline. Redeploy it first.', 'glow:market_analyst')).toEqual({ to: '/agents/glow%3Amarket_analyst?tab=settings', label: 'Redeploy it' });
     expect(budgetFix('Run ended without a result', 'glow:copywriter')).toBeUndefined();
+  });
+});
+
+describe('capFrom', () => {
+  it("says where each cap comes from and links to where it's edited", () => {
+    const caps = { storeId: 'glow', adSpendChangePerDay: 100, higgsfieldCreditsPerDay: 200, agentCostPerDay: 8, autopilot: {}, origins: { agentCostPerDay: 'store', higgsfieldCreditsPerDay: 'workspace', adSpendChangePerDay: 'default' } } as StoreCaps;
+    expect(capFrom(caps, 'agentCostPerDay')).toEqual({ text: 'Set for this store', to: '/settings/agents?store=glow#caps.agentCostPerDay' });
+    expect(capFrom(caps, 'higgsfieldCreditsPerDay')).toEqual({ text: 'Workspace default', to: '/settings/usage?store=glow#caps.higgsfieldCreditsPerDay' });
+    expect(capFrom(caps, 'adSpendChangePerDay')?.text).toBe('Built-in default');
+    expect(capFrom({ ...caps, origins: undefined }, 'agentCostPerDay')).toBeUndefined(); // nothing said rather than a guess
   });
 });

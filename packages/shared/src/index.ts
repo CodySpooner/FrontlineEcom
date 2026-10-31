@@ -1541,6 +1541,8 @@ export interface StoreCaps {
   autopilot: Record<string, { enabled: boolean; maxUsdPerDay: number }>;
   /** The store's override row version (0: no overrides yet, every cap from the workspace). PUT sends it back. */
   version?: number;
+  /** Where each cap comes from (decision 10): the store's own value, the workspace default, or the built-in one. */
+  origins?: Partial<Record<'adSpendChangePerDay' | 'higgsfieldCreditsPerDay' | 'agentCostPerDay', SettingOrigin>>;
 }
 
 /** Only the keys sent become store overrides; `version` as for SettingsUpdate. */
@@ -2462,4 +2464,5 @@ export * from './runtime-registry';
 export * from './research';
 export * from './store-analytics';
 export * from './settings';
+import type { SettingOrigin } from './settings';
 export * from './dates';

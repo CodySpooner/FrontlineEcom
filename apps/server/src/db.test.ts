@@ -205,7 +205,8 @@ test('settings (ST-05): an upgraded database keeps every saved setting and cap; 
     };
     const effective = (db: DatabaseSync) => {
       const { dataDir: _, version: __, ...app } = getSettings(db);
-      return { app, caps: ['a', 'b', 'c'].map((id) => (({ version: _, ...c }) => c)(getCaps(db, id))) };
+      // The values only: `origins` (ST-23) says where each comes from, which a legacy row can't.
+      return { app, caps: ['a', 'b', 'c'].map((id) => (({ version: _, origins: __, ...c }) => c)(getCaps(db, id))) };
     };
     const before = { caps: rows(old, 'SELECT store_id, value_json FROM store_caps ORDER BY store_id'), effective: legacy(old) };
     old.close();

@@ -46,11 +46,12 @@ test('settings have defaults, merge nested updates, and reject bad input', async
 test('caps default per store, merge autopilot per action kind, validate', async () => {
   const { app } = setup();
   const caps = (await (await app.request('/api/caps?stores=peak')).json()) as StoreCaps[];
-  expect(caps).toEqual([{ storeId: 'peak', adSpendChangePerDay: 100, higgsfieldCreditsPerDay: 200, agentCostPerDay: 5, autopilot: {}, version: 0 }]);
+  const inherited = { adSpendChangePerDay: 'default', higgsfieldCreditsPerDay: 'default', agentCostPerDay: 'default' };
+  expect(caps).toEqual([{ storeId: 'peak', adSpendChangePerDay: 100, higgsfieldCreditsPerDay: 200, agentCostPerDay: 5, autopilot: {}, version: 0, origins: inherited }]);
 
   await app.request('/api/caps/peak', send('PUT', { version: 0, autopilot: { 'ads.pause_adsets': { enabled: true, maxUsdPerDay: 200 } } }));
   const upd = (await (await app.request('/api/caps/peak', send('PUT', { version: 1, agentCostPerDay: 2.5, autopilot: { 'ads.set_budget': { enabled: false, maxUsdPerDay: 0 } } }))).json()) as StoreCaps;
-  expect(upd).toMatchObject({ agentCostPerDay: 2.5, autopilot: { 'ads.pause_adsets': { enabled: true, maxUsdPerDay: 200 }, 'ads.set_budget': { enabled: false, maxUsdPerDay: 0 } } });
+  expect(upd).toMatchObject({ agentCostPerDay: 2.5, origins: { ...inherited, agentCostPerDay: 'store' }, autopilot: { 'ads.pause_adsets': { enabled: true, maxUsdPerDay: 200 }, 'ads.set_budget': { enabled: false, maxUsdPerDay: 0 } } });
   // defaults are not shared between stores
   expect(((await (await app.request('/api/caps?stores=glow')).json()) as StoreCaps[])[0]!.autopilot).toEqual({});
 

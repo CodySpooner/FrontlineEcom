@@ -2,9 +2,11 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { Route, Routes } from 'react-router';
-import type { ConfigView, PrAgentRow, Store } from '@frontline/shared';
+import type { Agent, ConfigView, PrAgentRow, Store, StoreCaps } from '@frontline/shared';
 import { CreateTeam } from '../../agents/CreateTeam';
 import { Deploy } from '../../agents/Deploy';
+import { SettingsDrawer } from '../../agents/settings';
+import { Creative } from '../../pages/Creative';
 import { ResearchDialog } from '../../product-research/ResearchDialog';
 import { Settings } from '../../pages/Settings';
 import { renderApp, reply, stubApi } from '../../test-utils';
@@ -33,6 +35,10 @@ function view(ws: Values, own?: Values, storeId?: string): ConfigView {
     v.values[id] = value;
     v.origins[id] = origin as ConfigView['origins'][string];
   }
+  // The AI usage cap (ST-23): workspace default with store overrides, the built-in 5 under both.
+  const [cap, from] = own?.agentCostPerDay !== undefined ? [own.agentCostPerDay, 'store'] : ws.agentCostPerDay !== undefined ? [ws.agentCostPerDay, 'workspace'] : [5, 'default'];
+  v.values['caps.agentCostPerDay'] = cap;
+  v.origins['caps.agentCostPerDay'] = from as ConfigView['origins'][string];
   // The run limits: workspace only, with their registry defaults.
   for (const [k, d] of [['retries', 2], ['atOnce', 3], ['perStore', 2]] as const) {
     v.values[`runs.${k}`] = ws[k] ?? d;
@@ -50,7 +56,14 @@ function api({ ws = {} as Values, own = {} as Record<string, Values>, signedIn =
     calls.push({ method, url: `${u.pathname}${u.search}`, ...(init?.body ? { body: JSON.parse(String(init.body)) } : {}) });
     const s = u.searchParams.get('store') ?? undefined;
     if (u.pathname === '/api/config' && method === 'PATCH') return refuse ? reply(refuse, 400) : view(ws, s ? own[s] : undefined, s);
-    if (u.pathname === '/api/config/impact') return { impacts: [{ setting: 'agentDefaults.model', text: 'Applies to new runs on Glow Haus; 2 running runs keep their settings' }] };
+    if (u.pathname === '/api/config/impact') {
+      const docs = (calls.at(-1)!.body as { documents: { set?: Values }[] }).documents;
+      if (!docs.some((d) => d.set && 'caps.agentCostPerDay' in d.set)) return { impacts: [{ setting: 'agentDefaults.model', text: 'Applies to new runs on Glow Haus; 2 running runs keep their settings' }] };
+      // The server's sentence, counted from this fixture's stores (config/impact.ts `workspaceDefault`).
+      const kept = STORES.filter((x) => own[x.id]?.agentCostPerDay !== undefined).length;
+      const take = STORES.length - kept;
+      return { impacts: [{ setting: 'caps.agentCostPerDay', text: `Applies to ${take} store${take === 1 ? ' that uses' : 's that use'} the workspace default; ${kept} store${kept === 1 ? ' has its' : 's have their'} own value` }] };
+    }
     if (u.pathname === '/api/config') return view(ws, s ? own[s] : undefined, s);
     if (u.pathname === '/api/stores') return STORES;
     if (u.pathname === '/api/runtimes') return [CLAUDE, codexRow(u.searchParams.get('refresh') ? (codexNow = undefined) : codexNow)];
@@ -59,11 +72,14 @@ function api({ ws = {} as Values, own = {} as Record<string, Values>, signedIn =
       return forced
         ? { signedIn: false, forced: true, checkedAt: at, error: 'Agents are set to the demo engine here (FRONTLINE_AGENT_ENGINE), so Claude is never used.' }
         : { signedIn: signedIn || !!u.searchParams.get('refresh'), email: 'owner@example.test', checkedAt: at };
+    if (u.pathname === '/api/agents') return AGENTS;
     if (u.pathname === '/api/agent-types') return [{ id: 'copywriter', name: 'Copywriter', description: '', baseRole: 'copywriter', contract: { tools: [] } }];
     return undefined;
   });
   return calls;
 }
+const agent = (id: string, dailyBudgetUsd?: number) => ({ id, storeId: id.split(':')[0]!, role: id.split(':')[1], status: 'idle', enabled: true, autonomy: 'ask', engine: { provider: 'demo' }, ...(dailyBudgetUsd ? { dailyBudgetUsd } : {}) }) as Agent;
+const AGENTS = [agent('glow:copywriter', 0.5), agent('glow:ad_strategist'), agent('peak:copywriter', 1)];
 const row = (id: string) => document.getElementById(id)!;
 const select = (id: string) => within(row(id)).getByRole('combobox') as HTMLSelectElement;
 const checked = (id: string) => within(row(id)).getByRole('radio', { checked: true }).textContent;
@@ -243,4 +259,69 @@ it('Create team and Research a Product show the store runs at once from Settings
   });
   renderApp(<ResearchDialog stores={STORES} store="glow" onClose={() => undefined} onStarted={() => undefined} />, '/research?store=glow');
   expect(await screen.findByText('Working on “Research: Cat perch” · 0 queued in this conversation, then waits for a free store slot (1 per store)')).toBeTruthy();
+});
+
+it("a store's limits: its AI cap with origin and Use workspace default, the locked policy, and its agents with their own budget", async () => {
+  const calls = api({ ws: { agentCostPerDay: 5 }, own: { glow: { agentCostPerDay: 8 } } });
+  renderApp(<Settings />, '/settings/agents?store=glow');
+  expect(await screen.findByRole('heading', { name: 'Glow Haus limits' })).toBeTruthy();
+  const cap = within(row('caps.agentCostPerDay')).getByRole('spinbutton', { name: 'AI usage per day' }) as HTMLInputElement;
+  expect(cap.value).toBe('8');
+  expect(within(row('caps.agentCostPerDay')).getByText('Customized for this store · workspace default $5.00')).toBeTruthy();
+  expect(within(row('caps.agentCostPerDay')).getByText(/one run gets at most the cap ÷ 2, the runs at once per store\)\. .* Codex and demo included\.$/)).toBeTruthy();
+  expect(screen.getByText('Restricted by workspace policy · always asks you first, except ad changes you put on autopilot')).toBeTruthy();
+  expect(await screen.findByText('1 of 2 Glow Haus agents have their own daily budget')).toBeTruthy();
+  expect(screen.getByRole('link', { name: 'Open in AI Agents' }).getAttribute('href')).toBe('/agents?store=glow');
+
+  fireEvent.click(within(row('caps.agentCostPerDay')).getByRole('button', { name: 'Use workspace default' }));
+  expect([cap.value, cap.placeholder]).toEqual(['', '5.00']);
+  fireEvent.click(await screen.findByRole('button', { name: 'Save changes' }));
+  await waitFor(() => expect(saved(calls)).toEqual([{ documents: [{ doc: 'store_caps', storeId: 'glow', version: 7, unset: ['caps.agentCostPerDay'] }] }]));
+});
+
+it('Workspace limits edits the workspace default, with the impact counted from the stores', async () => {
+  const calls = api({ ws: { agentCostPerDay: 5 }, own: { glow: { agentCostPerDay: 8 } } });
+  renderApp(<Settings />, '/settings/agents');
+  expect(await screen.findByRole('heading', { name: 'Workspace limits' })).toBeTruthy();
+  expect(screen.queryByText(/have their own daily budget/)).toBeNull(); // a store's, in its scope
+  const cap = within(row('caps.agentCostPerDay')).getByRole('spinbutton', { name: 'AI usage per day' }) as HTMLInputElement;
+  expect(cap.value).toBe('5');
+  fireEvent.change(cap, { target: { value: '3' } });
+  expect(await screen.findByText('Applies to 1 store that uses the workspace default; 1 store has its own value')).toBeTruthy();
+  fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+  await waitFor(() => expect(saved(calls)).toEqual([{ documents: [{ doc: 'workspace', version: 3, set: { 'caps.agentCostPerDay': 3 } }] }]));
+});
+
+it('the cap readers say where each cap comes from, linked to where it is edited', async () => {
+  const caps: StoreCaps = { storeId: 'glow', adSpendChangePerDay: 100, higgsfieldCreditsPerDay: 200, agentCostPerDay: 8, autopilot: {}, version: 1, origins: { agentCostPerDay: 'store', higgsfieldCreditsPerDay: 'workspace', adSpendChangePerDay: 'default' } };
+  const scout: PrAgentRow = { type: 'scout', name: 'Travel gear scout', custom: true, runtime: 'claude', model: 'claude-opus-5-5', effort: 'high', budgetUsd: null, state: 'available', reason: null, busy: null };
+  stubApi((url) => {
+    const u = new URL(url, 'http://x');
+    if (u.pathname === '/api/stores') return STORES;
+    if (u.pathname === '/api/agents') return AGENTS;
+    if (u.pathname === '/api/caps') return [caps];
+    if (u.pathname === '/api/usage') return [{ storeId: 'glow', agentCostUsd: 1, credits: 0, adBudgetAddedUsd: 0 }];
+    if (u.pathname === '/api/pr/agents') return [scout];
+    if (u.pathname === '/api/pr/profile') return { storeId: 'glow', priceMin: null, priceMax: null, priceCurrency: 'USD' };
+    if (u.pathname === '/api/kb/cards') return { items: [], total: 0 };
+    if (u.pathname.startsWith('/api/claude-account')) return { signedIn: true, checkedAt: at };
+    return undefined;
+  });
+  // The agent drawer's Store caps: each cap's origin; Edit caps opens the AI cap on Agents & Providers.
+  renderApp(<SettingsDrawer storeId="glow" />, '/agents?store=glow&settings=copywriter');
+  const link = async (name: string) => (await screen.findByRole('link', { name })).getAttribute('href');
+  expect(await link('Set for this store')).toBe('/settings/agents?store=glow#caps.agentCostPerDay');
+  expect(await link('Workspace default')).toBe('/settings/usage?store=glow#caps.higgsfieldCreditsPerDay');
+  expect(await link('Built-in default')).toBe('/settings/usage?store=glow#caps.adSpendChangePerDay');
+  expect(await link('Edit caps')).toBe('/settings/agents?store=glow#caps.agentCostPerDay');
+  cleanup();
+
+  renderApp(<Creative />, '/creative?store=glow');
+  expect((await screen.findByText(/^Daily cap 200 credits/)).textContent).toBe('Daily cap 200 credits · Workspace default');
+  expect(await link('Workspace default')).toBe('/settings/usage?store=glow#caps.higgsfieldCreditsPerDay');
+  cleanup();
+
+  renderApp(<ResearchDialog stores={STORES} store="glow" onClose={() => undefined} onStarted={() => undefined} />, '/research?store=glow');
+  fireEvent.click(await screen.findByRole('radio', { name: /^Travel gear scout/ }));
+  expect(await link('Daily cap: set for this store')).toBe('/settings/agents?store=glow#caps.agentCostPerDay');
 });

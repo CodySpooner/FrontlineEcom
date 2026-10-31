@@ -12,6 +12,7 @@ import { nicheName } from '../components/StoreForm';
 import { Badge, Button, buttonClass, ConfirmDelete, cx, Dialog, EmptyState, ErrorState, inputClass, LoadingState, Panel, ProgressBar, MEMORY_KINDS, memoryAuthor, RUN_STATUS, Segmented, Switch, Table, Tabs, UsageMeter } from '../components/ui';
 import { describeTrigger, when } from '../lib/automation';
 import { ago, cents, money } from '../lib/format';
+import { capFrom } from '../lib/usage';
 import { withParams } from '../knowledge/url';
 import { agentsUrl } from './urls';
 
@@ -303,18 +304,18 @@ function AgentSettings({ agent }: { agent: Agent }) {
             </p>
           )}
         </Panel>
-        <Panel title="Store caps" sub="Hard limits every agent on this store respects." action={<Link to={settingsUrl('usage', { store: agent.storeId, setting: 'caps.agentCostPerDay' })} className={buttonClass('ghost', 'sm')}>Edit caps</Link>}>
+        <Panel title="Store caps" sub="Hard limits every agent on this store respects." action={<Link to={settingsUrl('agents', { store: agent.storeId, setting: 'caps.agentCostPerDay' })} className={buttonClass('ghost', 'sm')}>Edit caps</Link>}>
           {!caps ? (
             <LoadingState rows={3} />
           ) : (
             <dl className="grid gap-2.5 text-[13px]">
-              <Cap label="Ad budget changes" value={`${money(caps.adSpendChangePerDay)}/day`}>
+              <Cap label="Ad budget changes" value={`${money(caps.adSpendChangePerDay)}/day`} from={capFrom(caps, 'adSpendChangePerDay')}>
                 {usage && <UsageMeter label="Ad budget changes" used={usage.adBudgetAddedUsd} cap={caps.adSpendChangePerDay} fmt={(n) => money(n)} />}
               </Cap>
-              <Cap label="AI usage" value={`${money(caps.agentCostPerDay)}/day`}>
+              <Cap label="AI usage" value={`${money(caps.agentCostPerDay)}/day`} from={capFrom(caps, 'agentCostPerDay')}>
                 {usage && <UsageMeter label="AI usage" used={usage.agentCostUsd} cap={caps.agentCostPerDay} fmt={(n) => cents(n)} />}
               </Cap>
-              <Cap label="Higgsfield credits" value={`${caps.higgsfieldCreditsPerDay.toLocaleString('en-US')}/day`}>
+              <Cap label="Higgsfield credits" value={`${caps.higgsfieldCreditsPerDay.toLocaleString('en-US')}/day`} from={capFrom(caps, 'higgsfieldCreditsPerDay')}>
                 {usage && <UsageMeter label="Higgsfield credits" used={usage.credits} cap={caps.higgsfieldCreditsPerDay} fmt={(n) => n.toLocaleString('en-US')} />}
               </Cap>
               <Cap
@@ -431,10 +432,20 @@ function Schedule({ agent }: { agent: Agent }) {
   );
 }
 
-function Cap({ label, value, children }: { label: string; value: string; children?: ReactNode }) {
+function Cap({ label, value, from, children }: { label: string; value: string; from?: { text: string; to: string }; children?: ReactNode }) {
   return (
     <div className="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-4 gap-y-1.5 border-b border-line pb-2.5 last:border-b-0 last:pb-0">
-      <dt className="text-muted">{label}</dt>
+      <dt className="text-muted">
+        {label}
+        {from && (
+          <>
+            {' · '}
+            <Link to={from.to} className="text-xs hover:text-white hover:underline">
+              {from.text}
+            </Link>
+          </>
+        )}
+      </dt>
       <dd className="text-right font-semibold text-text-2 tabular-nums">{value}</dd>
       {children && <dd className="col-span-2">{children}</dd>}
     </div>

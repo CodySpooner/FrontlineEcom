@@ -1,6 +1,7 @@
 // Research a Product (PR-16, decision 6, the board's dialog): a product (a pasted link's preview, or the product it was
 // opened from), a store, an eligible agent, the owner's instructions, then Start. The draft is kept in this browser.
 import { useEffect, useState, type ReactNode } from 'react';
+import { Link } from 'react-router';
 import { Package } from 'lucide-react';
 import type { PrAgentRow, PrOwnerDetails, PrPreview, PrTask, Store } from '@frontline/shared';
 import { useCaps, useKbCards, useUsage } from '../api/client';
@@ -9,6 +10,7 @@ import { Deploy, type DeployChoice } from '../agents/Deploy';
 import { useStored } from '../agents/layout';
 import { Button, cx, Dialog, Field, inputClass, Segmented } from '../components/ui';
 import { cents } from '../lib/format';
+import { capFrom } from '../lib/usage';
 import { useProfile, usePrAgents, usePreview, useStartTask, type PrTaskStart } from './api';
 import { Pill } from './Card';
 import { fromMinor, minorMoney, toMinor } from './format';
@@ -169,6 +171,14 @@ export function ResearchDialog({
           {runtime === 'demo'
             ? 'Demo runtime: no AI cost.'
             : `Budget: ${runBudget ? `up to ${cents(runBudget)} for this run` : 'No budget set for this run'}${caps && left !== undefined ? ` · ${cents(left)} left of today's ${cents(caps.agentCostPerDay)} for ${store.name}'s agents` : ''}.`}
+          {runtime !== 'demo' && caps && capFrom(caps, 'agentCostPerDay') && (
+            <>
+              {' '}
+              <Link to={capFrom(caps, 'agentCostPerDay')!.to} className="hover:text-white hover:underline">
+                Daily cap: {capFrom(caps, 'agentCostPerDay')!.text.toLowerCase()}
+              </Link>
+            </>
+          )}
         </span>
         <Button onClick={onClose}>Cancel</Button>
         <Button variant="primary" disabled={!done.every(Boolean) || start.isPending} onClick={submit}>

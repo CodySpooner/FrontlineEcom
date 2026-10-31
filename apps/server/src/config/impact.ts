@@ -1,7 +1,7 @@
 // Impact previews (ST-10, spec §7): what a config save would touch, said only with counts from real queries. One
 // function per setting; ST-20 and later items add theirs. Nothing here writes.
 import { costToday, workspaceZone } from '@frontline/agents';
-import { startOfDay, type ConfigImpact, type ConfigWrite } from '@frontline/shared';
+import { SETTINGS, startOfDay, type ConfigImpact, type ConfigWrite } from '@frontline/shared';
 import { nextCronTime, parseCron } from '../cron';
 import type { Db } from '../db';
 import { getCaps } from '../settings';
@@ -30,6 +30,15 @@ const workspaceDefault: ImpactOf = (db, w, id) => {
   if (w.doc !== 'workspace') return [];
   const { own, inherit } = overrides(db, id);
   return [{ setting: id, text: `Applies to ${count(inherit.length, 'store')} that use${inherit.length === 1 ? 's' : ''} the workspace default; ${count(own.length, 'store')} ${own.length === 1 ? 'has its' : 'have their'} own value` }];
+};
+
+/** The AI usage cap moved (decision 10): which way, once a document. Unset falls back to the workspace's, or the built-in one. */
+const capMoved: ImpactOf = (db, w, id, value) => {
+  const was = capOf(db, id, w.doc === 'store_caps' ? w.storeId : undefined);
+  const now = value ?? (w.doc === 'store_caps' ? capOf(db, id) : SETTINGS.find((d) => d.id === id)!.default);
+  if (typeof was !== 'number' || typeof now !== 'number' || now === was) return [];
+  const text = now > was ? 'Raising it applies to runs that start after' : "Lowering it stops a running run at its next step once today's usage is over the new cap";
+  return [{ setting: id, ...(w.doc === 'store_caps' ? { storeId: w.storeId } : {}), text }];
 };
 
 /** The AI usage cap lowered: runs going now re-read it at each step (packages/agents/src/runs.ts, `spend`). */
@@ -113,7 +122,7 @@ const atOnce: ImpactOf = (db, w, id) => {
 export const IMPACTS: Record<string, ImpactOf[]> = {
   baseCurrency: [rerank],
   timezone: [zoneMoved],
-  'caps.agentCostPerDay': [runsStopping, workspaceDefault],
+  'caps.agentCostPerDay': [capMoved, runsStopping, workspaceDefault],
   'caps.adSpendChangePerDay': [workspaceDefault],
   'caps.higgsfieldCreditsPerDay': [workspaceDefault],
   ...Object.fromEntries(['runtime', 'model', 'effort', 'stopAfterMin', 'knowledge'].map((k) => [`agentDefaults.${k}`, [agentDefault]])),
