@@ -2,7 +2,7 @@
 import { ChevronRight } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
-import { changeOf, SA_COMPARES, SA_METRICS, type SaAnnotation, type SaContext, type SaInsightTarget, type SaMetricId, type SaOverview, type SaValue } from '@frontline/shared';
+import { changeOf, SA_COMPARES, SA_METRICS, SA_SALES_REPORT, type SaAnnotation, type SaContext, type SaInsightTarget, type SaMetricId, type SaOverview, type SaSeriesPoint, type SaValue } from '@frontline/shared';
 import { Button, cx, ErrorState, LoadingState, Panel, Segmented } from '../components/ui';
 import { fmtDay, money } from '../lib/format';
 import { useSaAnnotations, useSaContext, useSaContributions, useSaInsights, useSaListings, useSaOverview, useSaSeries } from './api';
@@ -10,6 +10,7 @@ import { FilterScope } from './FilterScope';
 import { FindingCard, RulesDialog, type Investigate } from './FindingCard';
 import { channelsOf } from './Filters';
 import { Change, KpiStrip } from './KpiStrip';
+import { ordersParam } from './SalesTab';
 import { periodParams, type AnalyticsPage, type AnalyticsState } from './state';
 import { TrendChart, type Mark } from './TrendChart';
 
@@ -22,7 +23,7 @@ const SEGMENTS = [
 const SWATCH = ['bg-red', 'bg-[#9db4d6]', 'bg-[#6f6f78]', 'bg-[#4a4a53]'];
 const SOURCE: Record<SaAnnotation['kind'], string> = { price_test: 'price test', app_change: 'approved in the app', data_health: 'data health, not a sales change' };
 
-function TrendPanel({ s, ctx, o, chart, onChart }: { s: AnalyticsState; ctx?: SaContext; o: SaOverview; chart: string; onChart: (k: string) => void }) {
+function TrendPanel({ s, ctx, o, chart, onChart, tabs }: { s: AnalyticsState; ctx?: SaContext; o: SaOverview; chart: string; onChart: (k: string) => void; tabs: string[] }) {
   const hasAds = o.metrics.find((m) => m.id === 'ad_spend')?.value != null;
   const metric = (chart === 'contribution' ? (hasAds ? 'contribution_after_ads' : 'contribution_before_ads') : chart) as SaMetricId;
   const series = useSaSeries(s, metric);
@@ -34,6 +35,18 @@ function TrendPanel({ s, ctx, o, chart, onChart }: { s: AnalyticsState; ctx?: Sa
   let k = 0; // derived markers are numbered in date order, data health is "!"
   const marks: Mark[] = (notes.data ?? []).map((a) => (a.kind === 'data_health' ? { date: a.date, label: '!', red: true } : { date: a.date, label: String(++k) }));
   const options = SEGMENTS.some((x) => x.value === chart) ? SEGMENTS : [...SEGMENTS, { value: chart, label }];
+  // SA-98: a sales metric's day opens its orders on the Sales tab
+  const [, setParams] = useSearchParams();
+  const pick =
+    tabs.includes('sales') && (SA_SALES_REPORT as readonly string[]).includes(metric)
+      ? (p: SaSeriesPoint) =>
+          setParams((prev) => {
+            const n = new URLSearchParams(prev);
+            n.set('tab', 'sales');
+            n.set('orders', ordersParam(p));
+            return n;
+          })
+      : undefined;
   return (
     // Panel's header, but wrapping: the segment drops under the title on a phone
     <section className="card min-w-0 p-4">
@@ -73,7 +86,7 @@ function TrendPanel({ s, ctx, o, chart, onChart }: { s: AnalyticsState; ctx?: Sa
         <LoadingState rows={3} />
       ) : (
         // the data's own label: the last metric's series stays up while the next one loads
-        <TrendChart series={d} label={SA_METRICS[d.metric].label} currency={ctx?.currency} table={table} marks={marks} />
+        <TrendChart series={d} label={SA_METRICS[d.metric].label} currency={ctx?.currency} table={table} marks={marks} onPick={pick} />
       )}
       {notes.isError ? (
         <p className="mt-1 text-xs text-muted">
@@ -332,7 +345,7 @@ export function Overview({ s, tabs }: { s: AnalyticsPage; tabs: string[] }) {
         <FilterScope scope={o.data.scope} />
       </section>
       <div className="grid items-stretch gap-3.5 min-[1180px]:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-        <TrendPanel s={s} ctx={ctx.data} o={o.data} chart={chart} onChart={setChart} />
+        <TrendPanel s={s} ctx={ctx.data} o={o.data} chart={chart} onChart={setChart} tabs={tabs} />
         <MovedPanel s={s} ctx={ctx.data} />
       </div>
       <div className="grid items-stretch gap-3.5 min-[1180px]:grid-cols-[minmax(0,1.1fr)_minmax(0,1.2fr)_minmax(0,1fr)]">

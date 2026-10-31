@@ -45,7 +45,7 @@ function line(m: SaMetricResult, ctx?: SaContext): { text: string; warn?: boolea
   return { text: SA_METRICS[m.id].line };
 }
 
-function Value({ m, currency }: { m: SaMetricResult; currency?: string }) {
+export function Value({ m, currency }: { m: SaMetricResult; currency?: string }) {
   if (m.value == null) return <Unavailable value={m} className="min-h-[26px] text-[12.5px]" />;
   return (
     <span className="flex items-baseline gap-1.5">

@@ -3,7 +3,7 @@
 // screen only while the store is the same, so a switch shows loading, never the last store's numbers.
 // ponytail: no definitions hook; the page reads the shared registry (SA_METRICS, SA_SOURCES) it is built from.
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { SaAnnotation, SaCollection, SaContext, SaListings, SaMetricId, SaMetricSet, SaInsights, SaMoved, SaOverview, SaProductCompare, SaProductDetail, SaReconcile, SaSeries, SaSourceRow, SaVariants } from '@frontline/shared';
+import type { SaAnnotation, SaBreakdownBy, SaCollection, SaContext, SaListings, SaMetricId, SaMetricSet, SaInsights, SaMoved, SaOrders, SaOverview, SaProductCompare, SaProductDetail, SaReconcile, SaSalesBreakdown, SaSalesReport, SaSeries, SaSourceRow, SaVariants } from '@frontline/shared';
 import { api, json } from '../api/client';
 import { periodParams, type AnalyticsState } from './state';
 
@@ -49,4 +49,9 @@ export const useSaAnnotations = (s: AnalyticsState) => useSa<SaAnnotation[]>(s.s
 export const useSaContributions = (s: AnalyticsState) => useSa<SaMoved>(s.store, 'contributions', periodParams(s));
 /** The rules read the whole store: a filter doesn't change them, so it doesn't refetch them. */
 export const useSaInsights = (s: AnalyticsState) => useSa<SaInsights>(s.store, 'insights', { ...periodParams(s), filters: undefined });
+/** SA-95, SA-96, SA-97: the Sales tab's report, a breakdown, and the orders behind [from, to] a page at a time. */
+export const useSaSales = (s: AnalyticsState, grain?: string) => useSa<SaSalesReport>(s.store, 'sales', { ...periodParams(s), grain });
+export const useSaBreakdown = (s: AnalyticsState, by: SaBreakdownBy) => useSa<SaSalesBreakdown>(s.store, 'sales/breakdown', { ...periodParams(s), compare: 'none', by });
+export const useSaOrders = (s: AnalyticsState, from: string, to: string, page: number) =>
+  useSa<SaOrders>(s.store, 'orders', { ...periodParams(s), period: 'custom', from, to, compare: 'none', page: String(page) });
 export const useSaReconcile = (s: AnalyticsState) => useSa<SaReconcile>(s.store, 'reconcile', { ...periodParams(s), filters: undefined });

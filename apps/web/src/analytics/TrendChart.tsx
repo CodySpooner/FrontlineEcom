@@ -2,9 +2,9 @@
 // nothing reported a gap (never 0), today dashed and labelled "so far" when the period holds it. A text summary names
 // the numbers for screen readers, and the Table toggle shows them. `marks` (SA-72) are dashed verticals topped by their
 // number, or a red "!" for data health.
-import { useEffect, useId, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
+import { useEffect, useId, useRef, useState, type KeyboardEvent, type MouseEvent, type PointerEvent } from 'react';
 import { SA_METRICS, type SaSeries, type SaSeriesPoint } from '@frontline/shared';
-import { Table } from '../components/ui';
+import { cx, Table } from '../components/ui';
 import { niceTicks } from '../lib/chart';
 import { fmtDay, shortMoney } from '../lib/format';
 import { fmtValue } from './KpiStrip';
@@ -51,7 +51,8 @@ export function summary(s: SaSeries, label: string, currency?: string) {
   ].join('');
 }
 
-export function TrendChart({ series: s, label, currency, table, marks = [] }: { series: SaSeries; label: string; currency?: string; table: boolean; marks?: Mark[] }) {
+/** `onPick` (SA-98): a click, Enter or the table's day opens that point (its orders). */
+export function TrendChart({ series: s, label, currency, table, marks = [], onPick }: { series: SaSeries; label: string; currency?: string; table: boolean; marks?: Mark[]; onPick?: (p: SaSeriesPoint) => void }) {
   const wrap = useRef<HTMLDivElement>(null);
   const [W, setW] = useState(740);
   const [hover, setHover] = useState<number | null>(null);
@@ -82,7 +83,13 @@ export function TrendChart({ series: s, label, currency, table, marks = [] }: { 
             return (
               <tr key={p.from}>
                 <td>
-                  {when(s, p)}
+                  {onPick ? (
+                    <button type="button" onClick={() => onPick(p)} className="cursor-pointer underline decoration-line-3 underline-offset-[3px] hover:text-white">
+                      {when(s, p)}
+                    </button>
+                  ) : (
+                    when(s, p)
+                  )}
                   {p.partial && <span className="text-muted"> · so far</span>}
                 </td>
                 <td className="text-right">{p.value == null ? <span className="text-muted">Not reported</span> : f(p.value)}</td>
@@ -119,8 +126,10 @@ export function TrendChart({ series: s, label, currency, table, marks = [] }: { 
   const tipX = i == null ? 0 : x(i);
   const shift = tipX < 110 ? '0%' : tipX > W - 110 ? '-100%' : '-50%';
 
-  const onMove = (e: PointerEvent<SVGSVGElement>) => setHover(Math.round(((e.clientX - e.currentTarget.getBoundingClientRect().left - PL) / (W - PL - PR)) * (n - 1)));
+  const at = (e: PointerEvent<SVGSVGElement> | MouseEvent<SVGSVGElement>) => Math.min(n - 1, Math.max(0, Math.round(((e.clientX - e.currentTarget.getBoundingClientRect().left - PL) / (W - PL - PR)) * (n - 1))));
+  const onMove = (e: PointerEvent<SVGSVGElement>) => setHover(at(e));
   const onKey = (e: KeyboardEvent) => {
+    if (e.key === 'Enter' && onPick && p) return onPick(p);
     const to = { ArrowLeft: (i ?? n) - 1, ArrowRight: (i ?? -1) + 1, Home: 0, End: n - 1 }[e.key];
     if (to === undefined) return;
     e.preventDefault();
@@ -129,7 +138,7 @@ export function TrendChart({ series: s, label, currency, table, marks = [] }: { 
 
   return (
     <div ref={wrap} className="relative">
-      <svg viewBox={`0 0 ${W} ${H}`} className="block h-[186px] w-full touch-pan-y" role="img" aria-label={summary(s, label, currency)} tabIndex={0} onPointerMove={onMove} onPointerLeave={() => setHover(null)} onKeyDown={onKey} onBlur={() => setHover(null)}>
+      <svg viewBox={`0 0 ${W} ${H}`} className={cx('block h-[186px] w-full touch-pan-y', onPick && 'cursor-pointer')} role="img" aria-label={summary(s, label, currency)} tabIndex={0} onPointerMove={onMove} onClick={onPick && ((e) => onPick(pts[at(e)]!))} onPointerLeave={() => setHover(null)} onKeyDown={onKey} onBlur={() => setHover(null)}>
         <defs>
           <linearGradient id={`ta${uid}`} x1="0" y1="0" x2="0" y2="1">
             <stop offset="0" stopColor="var(--color-red)" stopOpacity=".32" />
