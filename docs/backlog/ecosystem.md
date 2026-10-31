@@ -89,6 +89,9 @@ Anything else in another lane → append to that lane's backlog **Inbox** (`- [ 
 
 ## Done
 
+- 2026-10-31 ECO-52: Role-specific tool/glance gestures occupy under 10% of idle time with stable identity-based staggering; work frames vary instruments without a shared body bounce. Slower monitor/floor pulses, fewer particles and calmer rotors preserve quiet intervals. Production build and browser passed, motion captured in `.agent/motion/`; pnpm check 336 files / 2607 tests passed (1 skipped) after two unrelated contention timeouts cleared with six workers. Before/after: `.agent/eco-52-*.png`.
+
+
 - 2026-10-31 ECO-51: Added close-range lens controls, bindings, fasteners, vents and the story-library paper bird; clarified scenery versus execution data in Office Settings. Original procedural details preserve readable fit composition and real-data showpieces. Browser fit/research/library views and production build verified; pnpm check 336 files / 2601 tests passed (1 skipped). Before/after captures: `.agent/eco-51-*.png`.
 
 - 2026-10-31 ECO-50: Recomposed headquarters around a layered octagonal atrium and stepped projector base; differentiated technical/reading/industrial rooflines, upper glazing and structural cornices, with foreground braces outside the walk grid. Darker corridors and quieter skyline separate room, foreground and background. Existing desk IDs/routes and real equipment retained. Orca and 30-worker fit/close views (.agent/eco-50-*.png), web build and pnpm check green (336 files, 2595 passed, 1 skipped).
@@ -289,7 +292,7 @@ Items (stages from brief §11):
 - [x] ECO-50 Stage 3 — World concept and composition: clear focal point, readable regions, pathways, foreground/main/
   background depth; role spaces functional only where a real feature backs them.
 - [x] ECO-51 Stage 3 — Detail at three scales (distance, normal, close-up), restrained Easter eggs, no invented numbers.
-- [ ] ECO-52 Stage 4 — Motion language: ambient, interaction and event tiers; role-specific idles; varied timing, no
+- [x] ECO-52 Stage 4 — Motion language: ambient, interaction and event tiers; role-specific idles; varied timing, no
   shared bounce; quiet zones.
 - [ ] ECO-53 Stage 4 — Real-state behavior: idle / working / collaborating / waiting / completed / failed tied to real
   events; inspectable real connections; decorative vs functional clearly told apart; loading/disconnected states;

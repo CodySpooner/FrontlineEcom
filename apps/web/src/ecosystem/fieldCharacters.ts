@@ -18,7 +18,9 @@ export function paintFieldSpecialist(c: CanvasRenderingContext2D, look: Required
   const short = ['operations','store_developer','ad_strategist'].includes(role);
   const working = state === 'work' || state === 'collaborate';
   const seated = state === 'sit' || state === 'work';
-  const arm = state === 'complete' ? -8 + frame : state === 'talk' ? -frame : working ? -4 : state === 'think' ? -12 : 0;
+  const resting=state==='idle'||state==='sit';
+  const personal=role==='ad_strategist'?-11:role==='product_hunter'?-7:role==='creative_studio'?-4:role==='copywriter'?-2:role==='email_sms'?2:-5;
+  const arm = state === 'complete' ? -8 + frame : state === 'talk' ? -frame : working ? -4 : state === 'think' ? -12 : resting && frame ? personal+(frame===2?2:0) : 0;
   r(9,61,29,2,'#05081080');
   // Boots have heel blocks, articulated knees and separate shafts, not a single block leg.
   for (const [x, stride] of [[16,step],[27,-step]]) {
@@ -70,13 +72,14 @@ export function paintFieldSpecialist(c: CanvasRenderingContext2D, look: Required
   p([32,27,34,28,35,33+arm,37,37+arm,34,38+arm,32,32],mid);
   r(34,35+arm,4,3,look.gear === 'cyberarm' ? steel : leather);r(35,38+arm,3,3,skin);
   if(role==='product_hunter') {plate(35,33+arm,9,7,'#26394a');r(37,35+arm,5,3,look.accent);r(38+(working?frame%2:0),35+arm,1,2,pale);}
-  if(role==='market_analyst') {plate(32,31+arm,12,10,'#26394a');r(34,34+arm,8,1,pale);r(36,32+arm,1,6,look.accent);r(40,32+arm,1,6,steel);}
-  if(role==='copywriter') {plate(31,30+arm,13,12,leather);r(33,32+arm,4,8,'#e3d9bd');r(38,32+arm,4,8,'#c2b69d');r(35,34+arm,1,4,steel);r(39,35+arm,2,1,steel);r(11,32,1,10,pale);}
-  if(role==='creative_studio') {plate(30,31+arm,14,11,'#253e4a');for(let j=0;j<3;j++)r(32+j*3,34+arm,2,4,[look.accent,'#e3b467','#91d8c7'][j]!);r(9,30,2,13,pale);r(9,29,2,3,look.accent);}
-  if(role==='store_developer') {plate(32,32+arm,11,8,steel);r(34,34+arm,7,4,ink);r(35,35+arm,4,1,look.accent);r(34,40+arm,7,2,leather);}
+  if(role==='market_analyst') {plate(32,31+arm,12,10,'#26394a');r(34,34+arm,8,1,pale);r(35+(working?frame:1),32+arm,1,6,look.accent);r(40,32+arm,1,6,steel);}
+  if(role==='copywriter') {plate(31,30+arm,13,12,leather);r(33,32+arm,4,8,'#e3d9bd');r(38,32+arm,working&&frame===2?2:4,8,'#c2b69d');r(35,34+arm,1,4,steel);r(39,35+arm,2,1,steel);r(11,32,1,10,pale);}
+  if(role==='creative_studio') {plate(30,31+arm,14,11,'#253e4a');for(let j=0;j<3;j++)r(32+j*3,34+arm,2,4,[look.accent,'#e3b467','#91d8c7'][j]!);r(9,30+(working?frame%2:0),2,13,pale);r(9,29,2,3,look.accent);}
+  if(role==='store_developer') {plate(32,32+arm,11,8,steel);r(34,34+arm,7,4,ink);r(35,35+arm,working?2+frame%3:4,1,look.accent);r(34,40+arm,7,2,leather);}
   if(role==='ad_strategist') {plate(33,32+arm,10,11,dark);r(35,35+arm,6,1,look.accent);r(36,38+arm,4,2,pale);r(11,9,1,18,steel);plate(8,24,7,9,steel);r(9,26,4,2,look.accent);}
   if(role==='operations') {plate(30,32+arm,14,13,leather);r(32,34+arm,10,4,'#e3d9bd');for(let j=0;j<4;j++)r(33+j*2,35+arm,1,2,ink);r(36,39+arm,2,5,pale);plate(8,25,8,6,steel);}
-  if(role==='email_sms') {plate(31,35+arm,14,10,leather);r(34,33+arm,7,2,steel);r(32,38+arm,12,1,pale);r(37,38+arm,2,3,look.accent);plate(9,26,6,7,steel);}
+  if(role==='email_sms') {plate(31,35+arm,14,10,leather);r(34,33+arm,7,2,steel);r(32,38+arm,12,1,pale);r(37,38+arm,2,working&&frame===2?1:3,look.accent);plate(9,26,6,7,steel);}
+  c.save();c.translate(resting && frame===2 ? 1 : 0,0);
   // Smaller three-quarter face, stepped hair masses and a quiet glass monocular.
   p([20,4,28,4,31,7,31,15,27,20,22,19,18,14,18,8],ink);
   p([20,7,28,6,30,9,29,16,26,18,22,17,20,13],back ? hair : skin);
@@ -112,6 +115,7 @@ export function paintFieldSpecialist(c: CanvasRenderingContext2D, look: Required
   if (look.accessory === 'headset') {plate(17,10,4,6,steel);r(18,15,1,4,steel);r(19,18,4,1,steel);}
   if (look.outfit==='suit' && !back) {p([21,24,26,24,27,33,22,33],pale);r(24,25,1,7,look.accent);}
   if (look.variant % 2) { r(17,29,3,4,ink);r(18,30,1,2,pale); }
+  c.restore();
   c.restore();
   if (state === 'approval') {plate(38,4,7,10,'#f4bc53');r(41,6,1,4,ink);r(41,11,1,1,ink);}
   if (state === 'error') {r(38,4,7,7,ink);p([39,5,41,7,43,5,44,6,42,8,44,10,43,11,41,9,39,11,38,10,40,8,38,6],'#ff5265');}
