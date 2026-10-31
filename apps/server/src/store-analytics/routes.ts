@@ -3,6 +3,7 @@ import { Hono } from 'hono';
 import type { Db } from '../db';
 import { annotations } from './annotations';
 import { contributions } from './contributions';
+import { exportListings } from './exports';
 import { insights } from './insights';
 import { computeMetricSet, computeSeries, parseFilters } from './metric-set';
 import { listings, listingVariants } from './listings';
@@ -165,6 +166,20 @@ export function storeAnalyticsRoutes(db: Db) {
       if (basis !== 'refund_day' && basis !== 'order_day') return c.json({ error: 'refunds must be refund_day or order_day' }, 400);
       const out = listingVariants(db, s.storeId, c.req.param('id'), sp, filters, basis);
       return out ? c.json(out) : c.json({ error: 'No such product in this store' }, 404);
+    })
+    // SA-85 (decision 35): the Listings table as CSV, every matching row (to the cap) or the selected products.
+    .get('/api/analytics/export/listings', (c) => {
+      const s = scoped(c);
+      if ('error' in s) return c.json({ error: s.error }, s.status);
+      const sp = storePeriod(db, s.storeId, (k) => c.req.query(k));
+      if (typeof sp === 'string') return c.json({ error: sp }, 400);
+      const filters = parseFilters(c.req.query('filters'));
+      if (typeof filters === 'string') return c.json({ error: filters }, 400);
+      const basis = c.req.query('refunds') ?? 'refund_day';
+      if (basis !== 'refund_day' && basis !== 'order_day') return c.json({ error: 'refunds must be refund_day or order_day' }, 400);
+      const out = exportListings(db, s.storeId, c.req.query(), sp, filters, basis);
+      if ('error' in out) return c.json({ error: out.error }, out.status);
+      return c.body(out.csv, 200, { 'content-type': 'text/csv; charset=utf-8', 'content-disposition': `attachment; filename="${out.name}"` });
     })
     // SA-47: the store's collections for the filter (Shopify collections, WooCommerce categories, Etsy shop sections).
     .get('/api/analytics/collections', (c) => {

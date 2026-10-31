@@ -26,7 +26,7 @@ export const TABS: { value: string; label: string; datasets: SaDataset[]; render
       </>
     ),
   },
-  { value: 'listings', label: 'Listings & Products', datasets: ['catalog', 'inventory', 'orders', 'refunds'], render: (s) => <ListingsTab s={s} /> },
+  { value: 'listings', label: 'Listings & Products', datasets: ['catalog', 'inventory', 'orders', 'refunds'], render: (s) => <ListingsTab key={s.store} s={s} /> }, // a store's own selection and expanded rows
 ];
 
 export function Analytics() {

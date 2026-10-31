@@ -178,7 +178,7 @@ export function demoShares(db: Db, storeId: string) {
   return new Map(products.map((id, i) => [id, weights[i]! / total]));
 }
 
-export function listings(db: Db, storeId: string, query: Query, sp: StorePeriod, filters: SaFilters = {}, basis: RefundBasis = 'refund_day'): SaListings | string {
+export function listings(db: Db, storeId: string, query: Query, sp: StorePeriod, filters: SaFilters = {}, basis: RefundBasis = 'refund_day', pageSize = PAGE_SIZE): SaListings | string {
   const status = (query.status || 'active') as SaListingStatus;
   if (!SA_LISTING_STATUSES.includes(status)) return `status must be one of ${SA_LISTING_STATUSES.join(', ')}`;
   const [key, dir = key === 'title' ? 'asc' : 'desc'] = (query.sort || 'units').split(':') as [SaListingSort, string?];
@@ -260,7 +260,7 @@ export function listings(db: Db, storeId: string, query: Query, sp: StorePeriod,
       if (a.k !== b.k) return a.k == null ? 1 : b.k == null ? -1 : (a.k < b.k ? -1 : 1) * sign; // untracked stock last
       return String(a.r.title).localeCompare(String(b.r.title)) || String(a.r.id).localeCompare(String(b.r.id));
     });
-  const ids = sorted.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE).map((x) => String(x.r.id));
+  const ids = sorted.slice((page - 1) * pageSize, page * pageSize).map((x) => String(x.r.id));
 
   const product = db.prepare(
     `SELECT p.id, p.title, p.image, p.status, p.category, p.price, p.compare_at, iif(p.inventory_tracked, p.inventory, NULL) AS stock,
@@ -312,7 +312,7 @@ export function listings(db: Db, storeId: string, query: Query, sp: StorePeriod,
     status,
     sort: `${key}:${dir}`,
     page,
-    pageSize: PAGE_SIZE,
+    pageSize,
     total: all.length,
     counts,
     variants: all.reduce((a, r) => a + Math.max(1, Number(r.nv)), 0),

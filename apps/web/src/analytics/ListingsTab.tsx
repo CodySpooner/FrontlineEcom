@@ -2,15 +2,15 @@
 // and sorted over the whole matching set by the API (SA-66, SA-80). Status, search and the tab's own filters live in
 // the URL beside the page's; Channel and Collection are the page's filters. A row opens the product drawer through
 // `onOpen` (SA-88): without it rows aren't interactive (decision 33). A product with variants expands to them (SA-83);
-// Columns adds optional ones (SA-84).
+// Columns adds optional ones (SA-84). Export downloads the matching rows, or the checked ones (SA-85).
 import { Fragment, useDeferredValue, useState, type ReactNode } from 'react';
 import { useSearchParams } from 'react-router';
-import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, Columns3, Info, Plus, Search, TriangleAlert } from 'lucide-react';
-import { SA_LISTING_FILTERS, SA_LISTING_STATUSES, SA_REASONS, type SaListingRow, type SaListingStatus, type SaValue } from '@frontline/shared';
+import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, Columns3, Download, Info, Plus, Search, TriangleAlert } from 'lucide-react';
+import { SA_LISTING_STATUSES, SA_REASONS, SA_STOCK_LABELS as STOCK, SA_LISTING_FILTERS, type SaListingRow, type SaListingStatus, type SaValue } from '@frontline/shared';
 import { hidePopover, Popover, rove } from '../agents/Popover';
 import { Button, buttonClass, cx, ErrorState, LoadingState, Segmented } from '../components/ui';
 import { ago, cents, money, pct } from '../lib/format';
-import { useSaCollections, useSaContext, useSaListings, useSaVariants } from './api';
+import { saUrl, useSaCollections, useSaContext, useSaListings, useSaVariants } from './api';
 import { FilterScope } from './FilterScope';
 import { channelsOf, Option, useFilters } from './Filters';
 import { range } from './Pickers';
@@ -21,15 +21,6 @@ const STATUS: Record<SaListingStatus, [label: string, note: string]> = {
   draft: ['Draft', 'that are drafts now'],
   archived: ['Archived', 'that are archived now'],
   all: ['All', 'in every status'],
-};
-const STOCK: Record<(typeof SA_LISTING_FILTERS.stock)[number], string> = {
-  in_stock: 'In stock',
-  low: 'Low cover',
-  out: 'Out of stock',
-  variants_out: 'Some variants out',
-  not_tracked: 'Not tracked',
-  fba: 'Amazon FBA',
-  supplier: 'Supplier-managed',
 };
 const SALES: Record<string, string> = { with: 'With sales', none: 'No sales' };
 const MORE = [
@@ -43,6 +34,7 @@ const plural = (n: number, unit: string) => `${n.toLocaleString('en-US')} ${unit
 
 const TH = 'border-b border-line bg-[#111114] px-2.5 py-[7px] text-[11px] font-semibold whitespace-nowrap text-muted';
 const R = 'text-right';
+const CHECK = { width: 28, paddingRight: 0 }; // the board's checkbox column; inline, as the cell padding beats a class
 
 /** A filter chip opening its menu; `more` is the board's "+ More". */
 function Menu({ id, label, value, on, more, children }: { id: string; label: string; value?: string; on: boolean; more?: boolean; children: ReactNode }) {
@@ -111,6 +103,7 @@ function VariantRows({ s, id, currency, extra }: { s: AnalyticsPage & { store: s
   const q = useSaVariants(s.store, id, { ...periodParams(s), compare: 'none' });
   const line = (body: ReactNode) => (
     <tr className="bg-bg-2 text-xs text-muted">
+      <td />
       <td colSpan={10 + extra} style={INDENT}>
         {body}
       </td>
@@ -132,6 +125,7 @@ function VariantRows({ s, id, currency, extra }: { s: AnalyticsPage & { store: s
         const [text, tone, title] = stock(v);
         return (
           <tr key={v.id} className="bg-bg-2 text-xs text-text-2">
+            <td />
             <td style={INDENT}>
               {v.title ?? v.id}
               {v.sku && <span className="text-muted"> · {v.sku}</span>}
@@ -188,7 +182,13 @@ export function ListingsTab({ s, onOpen }: { s: AnalyticsPage & { store: string 
   const status = (SA_LISTING_STATUSES as readonly string[]).includes(get('status')) ? (get('status') as SaListingStatus) : 'active';
   const term = useDeferredValue(get('q').trim());
   // no comparison: the table has no change column
-  const q = useSaListings(s.store, { ...periodParams(s), compare: 'none', status, q: term, sort: s.sort, page: String(s.page), stock: get('stock'), sales: get('sales'), cost: get('cost'), sync: get('sync') });
+  const listing = { ...periodParams(s), compare: 'none', status, q: term, sort: s.sort, stock: get('stock'), sales: get('sales'), cost: get('cost'), sync: get('sync') };
+  const q = useSaListings(s.store, { ...listing, page: String(s.page) });
+  // The checked rows, across pages, until the matching set changes: then they're dropped, so an export of them is them.
+  const sig = JSON.stringify(listing);
+  const [sel, setSel] = useState<{ sig: string; ids: ReadonlySet<string> }>({ sig, ids: new Set() });
+  const picked = sel.sig === sig ? sel.ids : new Set<string>();
+  const pick = (ids: string[], on: boolean) => setSel({ sig, ids: on ? new Set([...picked, ...ids]) : new Set([...picked].filter((x) => !ids.includes(x))) });
   const d = q.data;
   const cur = ctx?.currency;
   const channels = ctx ? channelsOf(ctx) : [];
@@ -217,12 +217,16 @@ export function ListingsTab({ s, onOpen }: { s: AnalyticsPage & { store: string 
   else {
     const first = (d.page - 1) * d.pageSize + 1;
     const last = Math.min(d.page * d.pageSize, d.total);
+    const all = d.rows.every((r) => picked.has(r.id));
     body = (
       <>
         <div className="card overflow-x-auto p-0">
           <table aria-label="Listings" className="w-full border-collapse text-[12.5px] tabular-nums [&_td]:border-b [&_td]:border-[#1c1c21] [&_td]:px-2.5 [&_td]:py-[7px] [&_td]:whitespace-nowrap">
             <thead>
               <tr>
+                <th className={TH} style={CHECK}>
+                  <input type="checkbox" aria-label="Select the listings on this page" checked={all} onChange={() => pick(d.rows.map((r) => r.id), !all)} className="cursor-pointer accent-red" />
+                </th>
                 {sortable('title', 'Product')}
                 <th className={cx(TH, 'text-left')}>Channels</th>
                 <th className={cx(TH, 'text-left')}>Status</th>
@@ -255,6 +259,9 @@ export function ListingsTab({ s, onOpen }: { s: AnalyticsPage & { store: string 
                       onKeyDown={onOpen && ((e) => e.target === e.currentTarget && e.key === 'Enter' && onOpen(r.id))}
                       className={cx(onOpen && 'cursor-pointer outline-none hover:bg-white/2 focus-visible:bg-red-soft')}
                     >
+                      <td style={CHECK} onClick={(e) => e.stopPropagation()}>
+                        <input type="checkbox" aria-label={`Select ${r.title}`} checked={picked.has(r.id)} onChange={() => pick([r.id], !picked.has(r.id))} className="cursor-pointer accent-red" />
+                      </td>
                       <td className="max-w-[340px]">
                         <span className="flex min-w-0 items-center gap-2.5">
                           {r.variants > 1 && (
@@ -420,6 +427,10 @@ export function ListingsTab({ s, onOpen }: { s: AnalyticsPage & { store: string 
           <Columns3 aria-hidden className="size-3.5" />
           Columns
         </button>
+        <a href={saUrl('export/listings', s.store, listing)} download title="Every matching listing as a CSV file, with the store, period, filters and definitions in its header" className={buttonClass('ghost', 'sm')}>
+          <Download aria-hidden className="size-3.5" />
+          Export
+        </a>
         <Popover id="sa-listings-columns" label="Columns" align="end" className="w-[240px]">
           {[...cols, ...COLUMNS.filter((c) => !cols.includes(c))].map((c) => {
             const i = cols.indexOf(c);
@@ -451,6 +462,18 @@ export function ListingsTab({ s, onOpen }: { s: AnalyticsPage & { store: string 
           <Info aria-hidden className="size-3 shrink-0" />
           Listings {STATUS[status][1]}, with their sales from {range(d.period.from, d.period.to)}. Status and stock are current; sales, refunds and contribution are for the period.
         </p>
+      )}
+      {picked.size > 0 && (
+        <div role="toolbar" aria-label="Selected listings" className="flex flex-wrap items-center gap-1.5 rounded-lg border border-red/40 bg-red-soft px-3 py-1.5 text-xs">
+          <b className="mr-1 font-semibold text-white">{picked.size} selected</b>
+          <a href={saUrl('export/listings', s.store, { ...listing, products: [...picked].join(',') })} download className={buttonClass('ghost', 'sm')}>
+            <Download aria-hidden className="size-3.5" />
+            Export selected
+          </a>
+          <button type="button" onClick={() => setSel({ sig, ids: new Set() })} className={cx(buttonClass('ghost', 'sm'), 'ml-auto')}>
+            Clear selection
+          </button>
+        </div>
       )}
       {body}
       <FilterScope scope={d?.scope} />

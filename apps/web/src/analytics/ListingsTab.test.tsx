@@ -46,7 +46,8 @@ function Tab({ onOpen }: { onOpen: (id: string) => void }) {
   return s.store ? <ListingsTab s={{ ...s, store: s.store }} onOpen={onOpen} /> : null;
 }
 const bodyRows = async () => (await screen.findAllByRole('row')).slice(1);
-const cells = (tr: HTMLElement) => [...tr.querySelectorAll('td')].map((td) => td.textContent);
+/** A row's cells after the checkbox column (SA-85). */
+const cells = (tr: HTMLElement) => [...tr.querySelectorAll('td')].slice(1).map((td) => td.textContent);
 
 describe('Listings table (SA-82)', () => {
   it('every active listing is reachable by paging, and the footer counts them', async () => {
@@ -85,7 +86,7 @@ describe('Listings table (SA-82)', () => {
       ['DropshipSKU-6 · 1 variant', 'SH', 'Draft', '$10.00', 'Supplier-managed', '5', '$100', '$00.0%', '$40', '–'],
       ['RetinolSKU-7 · 1 variant', 'SH', 'Active', '$39.00', '100', '5', '$100', '$782.1%', 'No unit cost', '6 min'],
     ]);
-    const td = (r: number, c: number) => rows[r]!.querySelectorAll('td')[c]!;
+    const td = (r: number, c: number) => rows[r]!.querySelectorAll('td')[c + 1]!; // after the checkbox
     expect([td(0, 4).className, td(1, 4).className, td(2, 4).className]).toEqual(['text-right text-amber', 'text-right text-red', 'text-right text-amber']);
     expect(td(3, 9).querySelector('span')!.title).toBe('TikTok Shop: image under 600 px');
     expect(td(3, 1).querySelector('span span')!.getAttribute('title')).toBe('TikTok Shop · failed');
@@ -180,7 +181,7 @@ describe('Listings table (SA-82)', () => {
     const variant = { id: 'v1', title: 'Red', sku: 'X', price: 1, stock: 1, stockState: 'in_stock', units: V(1), netSales: V(1), refunds: V(0), contribution: V(1) };
     render(rows, '/analytics?store=a&tab=listings&page=2&cols=bogus,sku', undefined, () => ({ rows: [variant] }));
     const heads = () => screen.getAllByRole('columnheader').map((th) => th.textContent);
-    const DEFAULT = ['Product', 'Channels', 'Status', 'Price', 'Stock', 'Units ↓', 'Net sales', 'Refunds', 'Contribution'];
+    const DEFAULT = ['', 'Product', 'Channels', 'Status', 'Price', 'Stock', 'Units ↓', 'Net sales', 'Refunds', 'Contribution'];
     const menu = (role: 'menuitem' | 'menuitemcheckbox', name: string) => within(document.getElementById('sa-listings-columns')!).getByRole(role, { name, hidden: true }) as HTMLButtonElement;
     await screen.findByText(/^26–50 of 64/);
     expect(heads()).toEqual([...DEFAULT, 'SKU', 'Synced']); // an unknown id is dropped
@@ -198,6 +199,45 @@ describe('Listings table (SA-82)', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Show the variants of Combo' }));
     await screen.findByText('Red');
-    expect(cells((await bodyRows())[2]!)).toHaveLength(13); // the variant row lines up under the optional columns
+    expect(cells((await bodyRows())[2]!)).toHaveLength(13); // after the checkbox cell, the variant row lines up under the optional columns
+  });
+});
+
+describe('Listings export (SA-85)', () => {
+  it("Export downloads the table's query; checked rows, kept across pages, export on their own until the matching set changes", async () => {
+    const open = vi.fn();
+    const fetch = render(ALL, '/analytics?store=a&stock=low', <Tab onOpen={open} />);
+    await screen.findByText(/^1–25 of 64/);
+    const href = (name: string) => new URL(screen.getByRole('link', { name }).getAttribute('href')!, 'http://x');
+    const asked = new URL(fetch.mock.calls.map((c) => String(c[0])).find((u) => u.startsWith('/api/analytics/listings?'))!, 'http://x').searchParams;
+    asked.delete('page');
+    expect([href('Export').pathname, href('Export').searchParams.toString(), href('Export').searchParams.get('stock')]).toEqual(['/api/analytics/export/listings', asked.toString(), 'low']);
+    const picked = () => [...new Set(href('Export selected').searchParams.get('products')!.split(','))].sort();
+    const bar = () => screen.queryByRole('toolbar', { name: 'Selected listings' });
+    const page = () => screen.getByRole('checkbox', { name: 'Select the listings on this page' }) as HTMLInputElement;
+    expect(bar()).toBeNull();
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select Product 02' }));
+    expect(open).not.toHaveBeenCalled(); // a checkbox doesn't open its row
+    expect([bar()!.textContent, picked()]).toEqual([expect.stringContaining('1 selected'), ['p2']]);
+    expect(href('Export selected').searchParams.get('stock')).toBe('low');
+    fireEvent.click(page());
+    expect([page().checked, picked().length]).toEqual([true, 25]);
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+    await screen.findByText(/^26–50 of 64/);
+    expect(page().checked).toBe(false);
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select Product 30' }));
+    expect(picked()).toHaveLength(26);
+    expect(picked()).toContain('p30');
+    fireEvent.click(page());
+    fireEvent.click(page()); // every row of this page off again: page 1's stay
+    expect(picked()).toEqual(ALL.slice(0, 25).map((r) => r.id).sort());
+    fireEvent.click(screen.getByRole('button', { name: 'Clear selection' }));
+    expect(bar()).toBeNull();
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select Product 30' }));
+    fireEvent.click(item('stock', 'menuitemradio', 'Out of stock'));
+    await screen.findByText(/^1–25 of 64/);
+    expect(bar()).toBeNull(); // another matching set: the checks are dropped
   });
 });

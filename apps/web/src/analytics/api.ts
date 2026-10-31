@@ -9,11 +9,14 @@ import { periodParams, type AnalyticsState } from './state';
 
 type Params = Record<string, string | undefined>;
 
+/** `/api/analytics/<endpoint>?store=…`, empty params left out: the hooks' requests and SA-85's export links. */
+export const saUrl = (endpoint: string, store: string | undefined, params: Params = {}) =>
+  `/api/analytics/${endpoint}?${new URLSearchParams(Object.entries({ store, ...params }).filter((e): e is [string, string] => e[1] !== undefined && e[1] !== ''))}`;
+
 function useSa<T>(store: string | undefined, endpoint: string, params: Params = {}) {
-  const query = new URLSearchParams(Object.entries({ store, ...params }).filter((e): e is [string, string] => e[1] !== undefined && e[1] !== ''));
   return useQuery({
     queryKey: ['sa', store, endpoint, params],
-    queryFn: ({ signal }) => api<T>(`/api/analytics/${endpoint}?${query}`, { signal }),
+    queryFn: ({ signal }) => api<T>(saUrl(endpoint, store, params), { signal }),
     enabled: Boolean(store),
     placeholderData: (prev, prevQuery) => (prevQuery?.queryKey[1] === store ? prev : undefined),
   });

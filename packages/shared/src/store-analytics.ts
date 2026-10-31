@@ -861,6 +861,16 @@ export const SA_STOCK_STATES = ['in_stock', 'low', 'out', 'not_tracked', 'fba', 
 export type SaStockState = (typeof SA_STOCK_STATES)[number];
 /** SA-80: the Listings API's own filters, beside the page's global ones (channel, product, collection). */
 export const SA_LISTING_FILTERS = { stock: [...SA_STOCK_STATES, 'variants_out'], sales: ['any', 'with', 'none'], cost: ['missing'], sync: ['failed'] } as const;
+/** SA-85: the stock filter's and each stock state's words, on the page and in exports. */
+export const SA_STOCK_LABELS: Record<(typeof SA_LISTING_FILTERS.stock)[number], string> = {
+  in_stock: 'In stock',
+  low: 'Low cover',
+  out: 'Out of stock',
+  variants_out: 'Some variants out',
+  not_tracked: 'Not tracked',
+  fba: 'Amazon FBA',
+  supplier: 'Supplier-managed',
+};
 
 /** One product on the Listings tab: its state now, and its sales over the period (the v1 functions, product-sliced). */
 export interface SaListingRow {
