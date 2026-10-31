@@ -1,6 +1,6 @@
 export { runAgent, defaultEngine, engineInfo, type Engine, type RunInput } from './engine';
 export { fakeEngine, echoScript, type FakeScript, type FakeStep } from './fake-engine';
-export { agentModel, claudeAccount, claudeEngine, claudeModels, claudeRuntime, estimate, isAccountError, isReadOnly, movesSpend, toAgentEvents, type ClaudeEngineOptions } from './claude-engine';
+export { agentModel, claudeAccount, claudeEngine, claudeModels, claudeRuntime, defaultModelGone, estimate, isAccountError, isDefaultModelGone, isReadOnly, movesSpend, toAgentEvents, type ClaudeEngineOptions } from './claude-engine';
 export { CODEX_FEATURES_OFF, codexEngine, codexError, codexEvents, codexMcp, codexModels, codexSetup, codexStatus, codexWork, featuresChanged, killTree, spawnCodex, type CodexEngineOptions } from './codex';
 export { CODEX_TURN, fakeCodex, type FakeCodexChild } from './fake-codex';
 export { BUILTIN_TYPES, CHECKS_LAST, contractOf, contractText, ROLES, SQUAD_RULES, WORKFLOW_FIRST, type RoleSpec, type ToolName } from './roles';
@@ -25,7 +25,7 @@ export {
 } from './memory';
 export { APP_TOOLS, OUTLIVE_RUN, RESEARCH_TOOLS, allows, autopilotUsedToday, budgetAddedToday, cash, defaultTools, toolsFor, runTools, callTool, requestApproval, smsSegments, type AppTool, type ExternalMcp, type ToolEnv, type ToolContext } from './tools';
 export { nicheSlug, customNichePack, saveNichePack, draftNichePackTask } from './niche';
-export { agentTypes, archiveCustomRole, createCustomRole, customRole, getConfig, getCustomRole, listPresets, resolveType, saveConfig, savePreset, seatDefault, toolGroups, validateConfig, validateCustomRole, type AgentType, type ConfigDraft } from './configs';
+export { agentDefaults, agentTypes, archiveCustomRole, createCustomRole, customRole, getConfig, getCustomRole, listPresets, resolveType, saveConfig, savePreset, seatDefault, toolGroups, validateConfig, validateCustomRole, type AgentDefaults, type AgentType, type ConfigDraft } from './configs';
 export { conversationCounts, conversationFindings, conversationKnowledge, conversationPreface, conversationQuery, conversationThread, runDeliverables, setConversationConfig, createConversation, discardConversation, getConversation, indexConversation, listConversations, recap, stateOf, touchConversation, updateConversation, type ConversationQuery } from './conversations';
 export { createRunManager, getRun, hasEffects, listRuns, replyBlocks, runGist, teamCost, type RunManager, type RunManagerOptions, type StartOptions } from './runs';
 export { addNote, addParticipant, createTeam, getTeam, parseContribution, parsePlan, resumeStep, TEAM_PLAN, TEAM_SYNTHESIS, TEAM_TASK, validateTeam } from './teams';

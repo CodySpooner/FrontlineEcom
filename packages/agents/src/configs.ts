@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import { AGENT_ROLES, appearanceFor, CODEX_ULTRA, defaultEffort, EFFORT_LABEL, INTEGRATION_KINDS, OFFICE_DEPARTMENTS, OFFICE_DESKS, type AgentConfig, type AgentPreset, type AgentRole, type AgentTypeInfo, type CustomRole, type IntegrationKind, type RoleContract, type RuntimeCapabilities, type RuntimeId, type Store, type ToolGroup } from '@frontline/shared';
-import { agentModel } from './claude-engine';
+import { agentModel, defaultModelGone } from './claude-engine';
 import { engineInfo } from './engine';
 import { BUILTIN_TYPES, contractOf, ROLES } from './roles';
 import { defaultTools } from './tools';
@@ -164,38 +164,59 @@ export function toolGroups(db: DatabaseSync, config: Pick<AgentConfig, 'storeId'
 
 export type ConfigDraft = Omit<AgentConfig, 'id' | 'storeId' | 'agentId' | 'createdAt'>;
 
+/** Settings → Agents & Providers (settings decision 9). Each unset part is the runtime's own default, as before. */
+export interface AgentDefaults {
+  runtime?: 'claude' | 'codex';
+  model?: string;
+  effort?: string;
+  /** New conversations only. */
+  stopAfterMin?: number;
+  knowledge?: AgentConfig['knowledge'];
+}
+
+/** A store's agent defaults: its own value for each, else the workspace's (the config documents, as `effective` reads them). */
+export function agentDefaults(db: DatabaseSync, storeId: string): AgentDefaults {
+  const doc = (r: Record<string, unknown> | undefined) => (r ? (JSON.parse(String(r.value_json)) as Record<string, unknown>) : {});
+  const [own, workspace] = [doc(db.prepare('SELECT value_json FROM store_caps WHERE store_id = ?').get(storeId)), doc(db.prepare("SELECT value_json FROM settings WHERE key = 'workspace'").get())];
+  const d = Object.fromEntries(['runtime', 'model', 'effort', 'stopAfterMin', 'knowledge'].map((k) => [k, own[`agentDefaults.${k}`] ?? workspace[`agentDefaults.${k}`]]).filter(([, v]) => v != null));
+  return { ...d, ...(d.knowledge && { knowledge: d.knowledge === 'store' ? ['store'] : ['store', 'general'] }) } as AgentDefaults;
+}
+
 /**
  * The seat default (decision 9), for a conversation started without the Deploy dialog: the type's tools with every
- * draft on and compare_stores off, Store + General knowledge, save findings off, no limits of its own (the store and seat
- * caps apply), and what the store's agents run on: Demo on a demo store, else Claude's default model on this login
- * (`claude`: the discovered list) at its default effort.
+ * draft on and compare_stores off, save findings off, no budget of its own (the store and seat caps apply), and what
+ * the store's agents run on: Demo on a demo store, else the default runtime (`defaults`; Claude when unset) at the
+ * default model, else Claude's default model on this login (`claude`: the discovered list) at its default effort.
+ * Knowledge and "stop after" come from the defaults too (else Store + General, and none).
  */
-export function seatDefault(store: Store, type: AgentType, claude?: RuntimeCapabilities): ConfigDraft {
-  const onClaude = engineInfo(store.connected).provider === 'claude';
-  const pick = claude?.models.find((m) => m.default);
-  const model = pick?.id ?? agentModel();
-  const effort = pick ? pick.defaultEffort : defaultEffort(model);
+export function seatDefault(store: Store, type: AgentType, claude?: RuntimeCapabilities, defaults: AgentDefaults = {}): ConfigDraft {
+  // A demo store stays on Demo whatever the defaults say.
+  const runtime = engineInfo(store.connected).provider === 'claude' ? (defaults.runtime ?? 'claude') : 'demo';
+  const pick = runtime === 'claude' ? claude?.models.find((m) => (defaults.model ? m.id === defaults.model : m.default)) : undefined;
+  // Codex without a default model: validateConfig takes its login's default.
+  const model = runtime === 'demo' ? undefined : (defaults.model ?? pick?.id ?? (runtime === 'claude' ? agentModel() : undefined));
+  const effort = model && (defaults.effort ?? (pick ? pick.defaultEffort : defaultEffort(model)));
   return {
     ...(type.customRoleId ? { customRoleId: type.customRoleId } : {}),
-    runtime: onClaude ? 'claude' : 'demo',
-    ...(onClaude ? { model, ...(effort ? { effort } : {}) } : {}),
+    runtime,
+    ...(model ? { model, ...(effort ? { effort } : {}) } : {}),
     tools: type.tools.filter((t) => t !== 'compare_stores'),
-    knowledge: ['store', 'general'],
-    permissions: { saveFindings: 'off' },
+    knowledge: defaults.knowledge ?? ['store', 'general'],
+    permissions: { ...(defaults.stopAfterMin ? { stopAfterMin: defaults.stopAfterMin } : {}), saveFindings: 'off' },
   };
 }
 
 /**
  * Checks what the Deploy dialog (or an API caller) chose against the type, the store and what the runtimes can run here
- * (`runtimes`: GET /api/runtimes), before anything is queued (decision 9). Left-out parts come from the seat default. A
- * failure names the field the dialog shows it on.
+ * (`runtimes`: GET /api/runtimes), before anything is queued (decision 9). Left-out parts come from the seat default,
+ * with the store's agent `defaults`. A failure names the field the dialog shows it on.
  */
-export function validateConfig(store: Store, type: AgentType, input: unknown, runtimes: RuntimeCapabilities[]): ConfigDraft | { field: string; error: string } {
+export function validateConfig(store: Store, type: AgentType, input: unknown, runtimes: RuntimeCapabilities[], defaults: AgentDefaults = {}): ConfigDraft | { field: string; error: string } {
   input ??= {};
   if (typeof input !== 'object' || Array.isArray(input)) return { field: 'config', error: 'config must be an object.' };
   const i = input as Record<string, unknown>;
   const claude = runtimes.find((r) => r.runtime === 'claude');
-  const base = seatDefault(store, type, claude);
+  const base = seatDefault(store, type, claude, defaults);
   const runtime = i.runtime ?? base.runtime;
   let model: string | undefined;
   let effort: string | undefined;
@@ -207,15 +228,18 @@ export function validateConfig(store: Store, type: AgentType, input: unknown, ru
     const r = runtimes.find((x) => x.runtime === runtime);
     const name = runtime === 'claude' ? 'Claude' : 'Codex';
     if (!r || r.reason) return { field: 'runtime', error: r?.reason ?? `${name} isn't available here.` };
-    model = (i.model ?? (base.runtime === runtime ? base.model : r.models.find((m) => m.default)?.id)) as string | undefined;
+    // The default model and effort prefill only the default runtime, on a demo store too; another takes its own defaults.
+    const preset = runtime === (defaults.runtime ?? 'claude') ? defaults : {};
+    model = (i.model ?? preset.model ?? (base.runtime === runtime ? base.model : undefined) ?? r.models.find((m) => m.default)?.id) as string | undefined;
     // The login's discovered list, or the registry when discovery is down (the dialog says so).
     const m = r.models.find((x) => x.id === model);
-    if (!m) return { field: 'model', error: model === undefined ? 'Choose a model.' : `"${String(model)}" isn't on your ${name} login's model list.` };
-    if (runtime === 'codex' && i.effort === 'ultra') return { field: 'effort', error: CODEX_ULTRA };
-    if (i.effort != null && !m.efforts.includes(i.effort as string)) {
+    if (!m) return { field: 'model', error: model === undefined ? 'Choose a model.' : i.model == null && model === preset.model ? defaultModelGone(model, name) : `"${String(model)}" isn't on your ${name} login's model list.` };
+    const asked = i.effort ?? (i.model == null || i.model === preset.model ? preset.effort : undefined);
+    if (runtime === 'codex' && asked === 'ultra') return { field: 'effort', error: CODEX_ULTRA };
+    if (asked != null && !m.efforts.includes(asked as string)) {
       return { field: 'effort', error: m.efforts.length ? `${m.label} runs at ${m.efforts.map((e) => EFFORT_LABEL[e] ?? e).join(', ')}.` : `${m.label} takes no effort level: leave it out.` };
     }
-    effort = (i.effort as string | undefined) ?? (m.defaultEffort === 'ultra' ? undefined : m.defaultEffort);
+    effort = (asked as string | undefined) ?? (m.defaultEffort === 'ultra' ? undefined : m.defaultEffort);
   } else {
     return { field: 'runtime', error: 'runtime must be claude, codex or demo.' };
   }
@@ -225,7 +249,7 @@ export function validateConfig(store: Store, type: AgentType, input: unknown, ru
   if (extra) return { field: 'tools', error: extra === 'compare_stores' ? '"Compare with my other stores" is only for the Analytics Specialist.' : `"${extra}" isn't one of this agent type's tools.` };
   const knowledge = i.knowledge ?? base.knowledge;
   if (!Array.isArray(knowledge) || knowledge.some((k) => k !== 'store' && k !== 'general')) return { field: 'knowledge', error: "Knowledge can be this store's and General only." };
-  const p = i.permissions ?? {};
+  const p = i.permissions ?? base.permissions;
   if (typeof p !== 'object' || p === null || Array.isArray(p)) return { field: 'permissions', error: 'permissions must be an object.' };
   const { budgetUsd, stopAfterMin, saveFindings = 'off' } = p as Record<string, unknown>;
   const positive = (n: unknown): n is number => typeof n === 'number' && Number.isFinite(n) && n > 0;

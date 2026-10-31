@@ -26,6 +26,8 @@ export interface RunInput {
   mode?: 'research';
   /** What the run's conversation or team participant is configured with; none: the role's tools. */
   config?: AgentConfig;
+  /** A run without a config: Settings' default model and effort, when the default runtime is Claude (settings ST-20). */
+  defaults?: { model?: string; effort?: string };
   /** Told what the run asks for (runtime, model, effort) and, as the engine learns it, what actually ran. */
   onRuntime?: (r: { runtime?: RuntimeId; model?: string; effort?: string; actualModel?: string; effortApplied?: string; runtimeVersion?: string }) => void;
 }

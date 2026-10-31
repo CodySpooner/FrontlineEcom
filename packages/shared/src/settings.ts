@@ -196,6 +196,9 @@ const USAGE = 'apps/server/src/config/usage-alerts.test.ts';
 const GENERAL = 'apps/server/src/config/general.test.ts';
 const PROMPT = 'packages/agents/src/prompt.test.ts';
 const COMMON = 'apps/server/src/connectors/common.test.ts';
+const DEFAULTS = 'apps/server/src/config/agent-defaults.test.ts';
+const agentDefault = (key: string, d: Without<SettingDef, 'id' | 'section' | 'scopes' | 'inherits' | 'default' | 'owner' | 'applies' | 'export'>) =>
+  ({ id: `agentDefaults.${key}`, section: 'agents', scopes: ['workspace', 'store'], inherits: 'workspace', default: undefined, owner: 'apps/server/src/config/agent-defaults.ts#checkAgentDefaults', applies: 'new runs', export: true, ...d }) as SettingDef;
 
 export const SETTINGS: SettingDef[] = [
   { id: 'profile.name', section: 'account', type: 'string', maxLength: 40, label: 'Display name', help: 'Shown on the profile chip.', scopes: ['personal'], default: 'Cody', owner: 'apps/server/src/settings.ts#updateSettings', applies: 'now', export: true, consumers: ['apps/web/src/components/Hero.tsx#HeroControls'], proof: 'apps/web/src/settings/sections/Account.test.tsx#a rename persists across a refetch and shows on the chip' },
@@ -222,6 +225,13 @@ export const SETTINGS: SettingDef[] = [
   cap('agentCostPerDay', 'AI usage per day', "A store's agents stop for the day past it. An estimate from usage.", { section: 'agents', default: 5, consumers: ['packages/agents/src/runs.ts#budgetFor'], proof: "apps/server/src/routes/agents-runs.test.ts#the store's daily AI budget blocks new runs once spent" }),
   cap('adSpendChangePerDay', 'Ad budget changes per day', 'Most an agent may add or move per day, in dollars.', { section: 'usage', default: 100, consumers: ['packages/agents/src/tools.ts#adSpendChangePerDay'], proof: "apps/server/src/routes/agents-ads.test.ts#the owner's cap on added spend and bad input stop a proposal before asking" }),
   cap('higgsfieldCreditsPerDay', 'Higgsfield credits per day', 'For image and video generation.', { section: 'usage', default: 200, consumers: ['packages/agents/src/tools.ts#higgsfieldCreditsPerDay'], proof: "apps/server/src/routes/agents-creatives.test.ts#the store's daily credit cap stops generation before asking" }),
+
+  // Agent defaults (decision 9): no default of their own (undefined); unset is the runtime's, as before.
+  agentDefault('runtime', { type: 'string', enum: ['claude', 'codex'], label: 'Default runtime', help: 'What new conversations run on. Scheduled and background work runs on Claude on live stores and on the demo engine on demo stores, never on Codex.', consumers: ['packages/agents/src/configs.ts#seatDefault', 'packages/agents/src/runs.ts#defaults.runtime'], proof: `${DEFAULTS}#a demo store's conversation stays on the demo engine; picking Claude there takes the default model` }),
+  agentDefault('model', { type: 'string', maxLength: 100, label: 'Default model', help: 'For new conversations on the default runtime, and for scheduled and background work when that runtime is Claude.', consumers: ['packages/agents/src/configs.ts#seatDefault', 'packages/agents/src/claude-engine.ts#input.defaults?.model'], proof: `${DEFAULTS}#the workspace model reaches a new conversation and a run without a config; a store's own wins there only` }),
+  agentDefault('effort', { type: 'string', maxLength: 20, label: 'Default effort', help: "The default model's effort level.", consumers: ['packages/agents/src/configs.ts#seatDefault', 'packages/agents/src/claude-engine.ts#input.defaults?.effort'], proof: `${DEFAULTS}#the workspace model reaches a new conversation and a run without a config; a store's own wins there only` }),
+  agentDefault('stopAfterMin', { type: 'number', min: 1, max: 1440, integer: true, label: 'Stop a run after', help: 'Minutes of work. New conversations only; Codex needs it.', consumers: ['packages/agents/src/configs.ts#seatDefault'], proof: `${DEFAULTS}#"stop after" reaches new conversations only` }),
+  agentDefault('knowledge', { type: 'string', enum: ['all', 'store'], label: 'Knowledge', help: "This store's and General, or this store's only.", consumers: ['packages/agents/src/configs.ts#seatDefault', 'packages/agents/src/runs.ts#defaults?.knowledge'], proof: `${DEFAULTS}#store only leaves General out of retrieval, for a run without a config and a new conversation` }),
 
   autopilot('ads.set_budget', 'Change ad budgets', 'apps/server/src/routes/agents-approvals.test.ts#approves on its own within the store cap for that kind, then asks'),
   autopilot('ads.pause_campaign', 'Pause campaigns', 'apps/server/src/routes/agents-approvals.test.ts#pauses and cuts count the budget they touch against their autopilot cap; only raises count as added spend'),

@@ -3,7 +3,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { z } from 'zod';
 import { AGENT_ROLES, gist, INTERRUPTED, type AgentRole, type AgentRun, type CreateTeamInput, type RuntimeCapabilities, type SquadMission, type SquadMissionStep, type Store, type TeamContribution, type TeamNoteInput, type TeamParticipantInput } from '@frontline/shared';
 import { isAccountError } from './claude-engine';
-import { customRole, getConfig, resolveType, saveConfig, validateConfig } from './configs';
+import { agentDefaults, customRole, getConfig, resolveType, saveConfig, validateConfig } from './configs';
 import { conversationPreface, getConversation, indexConversation } from './conversations';
 import { untrustedBlock } from './kb-sources';
 import { finalText, getRun, teamCost, turnedDown, type StartOptions } from './runs';
@@ -116,7 +116,7 @@ function participant(db: DatabaseSync, store: Store, p: TeamParticipantInput | u
   }
   // A borrowed config is checked as it is now (the runtime may have gone); changing any of it writes a new config.
   const lent = from && p.config === undefined ? getConfig(db, from.configId) : undefined;
-  const draft = validateConfig(store, type, lent ? { runtime: lent.runtime, model: lent.model, effort: lent.effort, tools: lent.tools, knowledge: lent.knowledge, permissions: lent.permissions } : p.config, caps);
+  const draft = validateConfig(store, type, lent ? { runtime: lent.runtime, model: lent.model, effort: lent.effort, tools: lent.tools, knowledge: lent.knowledge, permissions: lent.permissions } : p.config, caps, agentDefaults(db, store.id));
   if ('field' in draft) return { status: 400, error: draft.error, field: `${field}.${draft.field}` };
   return { configId: lent ? lent.id : saveConfig(db, store, type, draft).id, ...(from ? { fromConversationId: from.id } : {}) };
 }

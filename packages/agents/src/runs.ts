@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import { AGENT_ROLES, gist, hasEffects, INTERRUPTED, type AgentEvent, type AgentRole, type AgentRun, type AgentRunDetail, type RunAttachment, type RunStatus, type RunUsage, type RuntimeId, type Store } from '@frontline/shared';
-import { customRole, getConfig } from './configs';
+import { agentDefaults, customRole, getConfig } from './configs';
 import { conversationPreface, conversationQuery } from './conversations';
 import { defaultEngine, runAgent, type Engine, type RunInput } from './engine';
 import { researchContext } from './kb-research';
@@ -239,6 +239,8 @@ export function createRunManager(opts: RunManagerOptions) {
     const run = getRun(db, queued.id)!;
     opts.onRun?.(run);
     const config = run.configId ? getConfig(db, run.configId) : undefined;
+    // A run without a config reads Settings' agent defaults as it starts (settings decision 9).
+    const defaults = config ? undefined : agentDefaults(db, run.storeId);
     const { budgetUsd: runBudget, stopAfterMin } = config?.permissions ?? {};
     // Stop after N minutes of work: the clock stops while the run waits on the owner.
     let overTime = false;
@@ -331,7 +333,7 @@ export function createRunManager(opts: RunManagerOptions) {
         // A research stage has its own prompt and searches the knowledge base itself. A conversation's turn searches by its
         // title, objective and message (decision 11).
         const query = run.conversationId ? conversationQuery(db, run.conversationId, run.task) : run.task;
-        const knowledge = research ? [] : withConflicts(db, retrieveKnowledge(db, { ws: store.id, role: agent.role, query, limit: 8 }).filter(inScope(config?.knowledge)));
+        const knowledge = research ? [] : withConflicts(db, retrieveKnowledge(db, { ws: store.id, role: agent.role, query, limit: 8 }).filter(inScope(config?.knowledge ?? defaults?.knowledge)));
         const layers = {
           agent, store, memories: searchMemory(db, store.id, run.task, 12), nicheLearnings: listNicheLearnings(db, nicheKey(store), 20), waiting: waitingFor(store.id), scheduled: scheduledFor(store.id), knowledge,
           ...(config ? { tools: config.tools } : {}),
@@ -358,6 +360,8 @@ export function createRunManager(opts: RunManagerOptions) {
           systemPrompt,
           ...(research ? { mode: 'research' as const } : {}),
           ...(config ? { config } : {}),
+          // The default model and effort go only when the default runtime is Claude; FRONTLINE_AGENT_MODEL still wins.
+          ...(defaults && (defaults.runtime ?? 'claude') === 'claude' && !process.env.FRONTLINE_AGENT_MODEL ? { defaults: { model: defaults.model, effort: defaults.effort } } : {}),
           signal,
           env: { ...env, runId: run.id },
           ...(resume ? { resume: String(resume), sessionCostUsd: sessionCost(String(resume)) } : {}),

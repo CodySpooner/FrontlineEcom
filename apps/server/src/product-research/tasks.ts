@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { costToday, getAgent, getConfig, getConversation, getRun, resolveType, seatDefault, stateOf, type RunManager } from '@frontline/agents';
+import { agentDefaults, costToday, getAgent, getConfig, getConversation, getRun, resolveType, seatDefault, stateOf, type RunManager } from '@frontline/agents';
 import {
   AGENT_ROLES,
   INTERRUPTED,
@@ -68,7 +68,7 @@ export function agentRows(db: Db, store: Store, caps: RuntimeCapabilities[]): Pr
     const latest = db
       .prepare(`SELECT runtime, model, effort, json_extract(permissions_json, '$.budgetUsd') AS budget FROM agent_configs WHERE store_id = ? AND agent_id = ? AND custom_role_id IS ? ORDER BY created_at DESC, rowid DESC LIMIT 1`)
       .get(store.id, `${store.id}:${SEAT}`, custom ? type : null);
-    const fallback = latest ? undefined : seatDefault(store, resolveType(db, store.id, type)!, caps.find((c) => c.runtime === 'claude'));
+    const fallback = latest ? undefined : seatDefault(store, resolveType(db, store.id, type)!, caps.find((c) => c.runtime === 'claude'), agentDefaults(db, store.id));
     const runtime = (latest ? String(latest.runtime) : fallback!.runtime) as RuntimeId;
     const cap = caps.find((c) => c.runtime === runtime);
     const reason = seat ?? (runtime !== 'demo' && cap && !cap.connected ? (cap.reason ?? `${runtime === 'claude' ? 'Claude' : 'Codex'} isn't connected: set it up in Integrations.`) : null);

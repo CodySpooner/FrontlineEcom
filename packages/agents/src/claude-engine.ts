@@ -127,8 +127,13 @@ export function claudeRuntime(account: ClaudeAccount, reason?: string): RuntimeC
 const modelLabel = (id: string) => RUNTIME_REGISTRY.claude.models[id]?.label ?? id;
 const effortLabel = (e: string) => EFFORT_LABEL[e] ?? e;
 
+const CHANGE_DEFAULT = 'Change the default in Settings → Agents & Providers.';
+/** A default model the login no longer offers (settings decision 9): new runs that rely on it fail, nothing else is tried. */
+export const defaultModelGone = (model: string, who = 'Claude') => `${modelLabel(model)} isn't available on your ${who} login. ${CHANGE_DEFAULT}`;
+export const isDefaultModelGone = (message: string) => message.endsWith(CHANGE_DEFAULT);
+
 /** True for an account problem (signed out, usage limit…): every run fails the same way until the owner fixes it. */
-export const isAccountError = (message: string) => ACCOUNT.some((code) => ERRORS[code] === message) || CODEX_ACCOUNT.includes(message);
+export const isAccountError = (message: string) => ACCOUNT.some((code) => ERRORS[code] === message) || CODEX_ACCOUNT.includes(message) || isDefaultModelGone(message);
 
 /** Runs on the owner's local Claude Code login (no API key needed). */
 export function claudeEngine(opts: ClaudeEngineOptions = {}): Engine {
@@ -156,10 +161,11 @@ export function claudeEngine(opts: ClaudeEngineOptions = {}): Engine {
     });
     const abortController = new AbortController();
     input.signal?.addEventListener('abort', () => abortController.abort(), { once: true });
-    // What the conversation picked, else the role's model at its default effort. Effort always goes explicitly: the API
-    // and Claude Code default differently. Never a fallbackModel: a run doesn't move models silently.
-    const model = input.config?.model ?? opts.model ?? agentModel();
-    const effort = input.config?.effort ?? defaultEffort(model);
+    // What the conversation picked, else Settings' default, else the role's model at its default effort. Effort always goes
+    // explicitly: the API and Claude Code default differently. Never a fallbackModel: a run doesn't move models silently.
+    const model = input.config?.model ?? opts.model ?? input.defaults?.model ?? agentModel();
+    const effort = input.config?.effort ?? input.defaults?.effort ?? defaultEffort(model);
+    const said = (e: AgentEvent): AgentEvent => (e.type === 'error' && e.code === 'model_not_found' && !input.config && !opts.model && model === input.defaults?.model ? { ...e, message: defaultModelGone(model) } : e);
     input.onRuntime?.({ runtime: 'claude', model, ...(effort ? { effort } : {}) });
     // The effort that ran, after any silent downgrade: hook inputs carry it (absent: unconfirmed).
     let applied: string | undefined;
@@ -233,7 +239,7 @@ export function claudeEngine(opts: ClaudeEngineOptions = {}): Engine {
           input.onSpend?.([...spent.values()].reduce((a, b) => a + b, 0));
         }
         if (message.type === 'assistant' && message.parent_tool_use_id === null && message.error) flagged = message.error;
-        for (const event of toAgentEvents(message, input.mode, flagged)) events.push(own(event));
+        for (const event of toAgentEvents(message, input.mode, flagged)) events.push(own(said(event)));
       }
     })().then(() => events.end(), events.end);
     yield* events.drain();

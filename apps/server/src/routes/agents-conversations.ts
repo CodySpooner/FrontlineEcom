@@ -1,5 +1,5 @@
 import {
-  agentTypes, archiveCustomRole, captureFinding, conversationCounts, conversationFindings, conversationKnowledge, conversationThread, createConversation, createCustomRole, discardConversation, getConfig, getConversation, getCustomRole, getRun, toolGroups, listConversations, listPresets,
+  agentDefaults, agentTypes, archiveCustomRole, captureFinding, conversationCounts, conversationFindings, conversationKnowledge, conversationThread, createConversation, createCustomRole, discardConversation, getConfig, getConversation, getCustomRole, getRun, toolGroups, listConversations, listPresets,
   recap, replyBlocks, resolveType, saveConfig, savePreset, setConversationConfig, updateConversation, validateConfig, validateCustomRole, type RunManager,
 } from '@frontline/agents';
 import { ATTACHMENT_TEXT, blockFinding, INTERRUPTED, type AgentRun, type FindingSaved, type SaveFindingInput, type Conversation, type ConversationContext, type CreateConversationInput, type RunAttachment, type RuntimeCapabilities, type SendMessageInput, type Store } from '@frontline/shared';
@@ -77,7 +77,7 @@ export function openConversation(db: Db, runs: RunManager, store: Store, input: 
   }
   const type = typeId ? resolveType(db, store.id, typeId) : undefined;
   if (!type) return { status: 404, error: 'Agent type not found' };
-  const draft = validateConfig(store, type, input.config, caps);
+  const draft = validateConfig(store, type, input.config, caps, agentDefaults(db, store.id));
   if ('field' in draft) return { status: 400, ...draft };
   const conversation = createConversation(db, store, type, draft, { title: title?.trim() || firstLine(input.message), ...(context ? { context } : {}), clientRequestId: input.clientRequestId });
   const run = runs.start(conversation.agentId, input.message.trim(), undefined, undefined, { conversationId: conversation.id, clientRequestId: input.clientRequestId, attachments });
@@ -188,7 +188,7 @@ export function conversationRoutes(db: Db, runs: RunManager) {
       // the Stop after it requires.
       const kept = b.runtime === 'claude' && budgetUsd ? { ...limits, budgetUsd } : limits;
       const input = { runtime: b.runtime, model: b.model, effort: b.effort, tools: old.tools, knowledge: old.knowledge, permissions: b.stopAfterMin === undefined ? kept : { ...kept, stopAfterMin: b.stopAfterMin } };
-      const draft = validateConfig(store, type, input, await runtimes());
+      const draft = validateConfig(store, type, input, await runtimes(), agentDefaults(db, store.id));
       if ('field' in draft) return c.json({ error: draft.error, field: draft.field }, 400);
       setConversationConfig(db, conversation.id, saveConfig(db, store, type, draft).id);
       const changed = getConversation(db, conversation.id)!;

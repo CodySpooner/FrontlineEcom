@@ -5,6 +5,7 @@ import {
   defaultEngine,
   engineInfo,
   isAccountError,
+  isDefaultModelGone,
   costToday,
   creditsToday,
   ADS_JOB,
@@ -59,7 +60,7 @@ import {
   type RunManagerOptions,
   type ToolEnv,
 } from '@frontline/agents';
-import { AGENT_ROLES, AUTONOMY_LEVELS, KB_RESEARCH_DEPTHS, type AdSnapshotData, type KbResearchBrief, type AgentRole, type AgentUpdate, type MemoryInput, type MemoryKind, type Page, type Platform, type ResearchProduct, type SquadMission, type StartRunInput, type Store, type StoreUsage } from '@frontline/shared';
+import { AGENT_ROLES, AUTONOMY_LEVELS, KB_RESEARCH_DEPTHS, settingsUrl, type AdSnapshotData, type KbResearchBrief, type AgentRole, type AgentUpdate, type MemoryInput, type MemoryKind, type Page, type Platform, type ResearchProduct, type SquadMission, type StartRunInput, type Store, type StoreUsage } from '@frontline/shared';
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { Hono } from 'hono';
@@ -309,7 +310,8 @@ export const runHooks = (db: Db): Pick<RunManagerOptions, 'onRun' | 'onEvent' | 
     if (run.status === 'done') notify(db, { kind: 'agent_done', title: `${name} finished`, body: runGist(getRun(db, run.id)?.transcript ?? []) ?? run.task, storeId: run.storeId, link });
     // An account problem fails every queued and scheduled run alike: the owner hears it once a day, not once per run.
     const told = run.status === 'error' && isAccountError(run.error ?? '') && !once(db, `account-error:${localDate()}:${run.error}`);
-    if (run.status === 'error' && !told) notify(db, { kind: 'error', title: `${name} hit an error`, body: run.error ?? run.task, storeId: run.storeId, link });
+    const fix = isDefaultModelGone(run.error ?? '') ? settingsUrl('agents', { setting: 'agentDefaults.model' }) : link; // settings ST-20
+    if (run.status === 'error' && !told) notify(db, { kind: 'error', title: `${name} hit an error`, body: run.error ?? run.task, storeId: run.storeId, link: fix });
   },
 });
 

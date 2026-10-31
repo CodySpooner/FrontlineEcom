@@ -18,7 +18,8 @@ const capOf = (db: Db, id: string, storeId?: string) => effective(db, { storeId 
 
 /** Stores that keep their own value for a store_caps entry (any key there, as effective() reads it), and the rest. */
 function overrides(db: Db, id: string) {
-  const path = `$.${pathIn('store_caps', id).join('.')}`;
+  // Each key quoted: `agentDefaults.model` is one key there, not a nested one.
+  const path = `$.${pathIn('store_caps', id).map((k) => JSON.stringify(k)).join('.')}`;
   const own = db.prepare('SELECT s.id, s.name FROM stores s JOIN store_caps c ON c.store_id = s.id WHERE json_type(c.value_json, ?) IS NOT NULL ORDER BY s.name').all(path);
   const inherit = db.prepare('SELECT id, name FROM stores WHERE id NOT IN (SELECT store_id FROM store_caps WHERE json_type(value_json, ?) IS NOT NULL) ORDER BY name').all(path);
   return { own, inherit };
@@ -55,6 +56,26 @@ const rerank: ImpactOf = (db, w, id, value) => {
   return w.doc === 'app' && value !== undefined && n ? [{ setting: id, text: `Re-ranks All-stores facts for ${count(n, 'product')}` }] : [];
 };
 
+/**
+ * An agent default moved (ST-20, decision 9): runs going and queued runs with a config keep theirs; queued runs without
+ * one read the defaults when they start. Said once per store for the whole save, under its first agent default.
+ */
+const agentDefault: ImpactOf = (db, w, id) => {
+  const ids = [...Object.keys(w.set ?? {}), ...(w.unset ?? [])].filter((k) => k.startsWith('agentDefaults.'));
+  if (id !== ids[0]) return [];
+  const stores = w.doc === 'store_caps' ? db.prepare('SELECT id, name FROM stores WHERE id = ?').all(w.storeId!) : w.doc === 'workspace' ? overrides(db, id).inherit : [];
+  const runs = (storeId: string, where: string) => Number(db.prepare(`SELECT count(*) AS n FROM agent_runs WHERE store_id = ? AND ${where}`).get(storeId)!.n);
+  // "Stop after" is for new conversations only: a run without a config never reads it.
+  const queuedRead = ids.some((k) => k !== 'agentDefaults.stopAfterMin');
+  return stores.flatMap((s) => {
+    const [keep, take] = [runs(String(s.id), "(status = 'running' OR (status = 'queued' AND config_id IS NOT NULL))"), queuedRead ? runs(String(s.id), "status = 'queued' AND config_id IS NULL") : 0];
+    return [
+      { setting: id, storeId: String(s.id), text: `Applies to new runs on ${s.name}${keep ? `; ${count(keep, 'running run')} keep${keep === 1 ? 's its' : ' their'} settings` : ''}` },
+      ...(take ? [{ setting: id, storeId: String(s.id), text: `${count(take, 'queued run')} on ${s.name} will use the new default` }] : []),
+    ];
+  });
+};
+
 // Times on screen are this computer's clock (decision 8).
 const here = (d: Date) => d.toLocaleString('en-GB', { weekday: 'short', hour: '2-digit', minute: '2-digit' });
 const usd = (n: number) => `$${n.toFixed(2)}`;
@@ -88,6 +109,7 @@ export const IMPACTS: Record<string, ImpactOf[]> = {
   'caps.agentCostPerDay': [runsStopping, workspaceDefault],
   'caps.adSpendChangePerDay': [workspaceDefault],
   'caps.higgsfieldCreditsPerDay': [workspaceDefault],
+  ...Object.fromEntries(['runtime', 'model', 'effort', 'stopAfterMin', 'knowledge'].map((k) => [`agentDefaults.${k}`, [agentDefault]])),
 };
 
 /** Every sentence a save of `documents` would earn, before it's made. */
