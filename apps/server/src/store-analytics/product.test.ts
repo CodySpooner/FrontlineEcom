@@ -4,6 +4,7 @@ import { createApp } from '../app';
 import { openDb, type Db } from '../db';
 import { setProductCost } from '../catalog';
 import { seedDemo } from '../demo';
+import { insertStore } from '../stores';
 import { costMetrics } from './costs';
 import { LEDGER_NOW, LEDGER_PERIODS, LEDGER_STORE, seedLedgerStore } from './fixture';
 import { listings, listingVariants } from './listings';
@@ -149,6 +150,32 @@ describe('Costs and Refunds tabs (SA-92)', () => {
     // the refusal the Costs tab shows for a Shopify product
     const shopify = await createApp(db).request(`/api/products/${LEDGER_STORE}/8003`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ cost: 5 }) });
     expect([shopify.status, ((await shopify.json()) as { error: string }).error]).toEqual([400, 'Shopify keeps unit costs: set "Cost per item" on the product in Shopify and the next sync brings it here']);
+  });
+});
+
+describe('Platform link ids (SA-93)', () => {
+  it("its stored handle and the store integration's shop, normalized; a malformed or missing one gives none", () => {
+    const db = openDb();
+    seedLedgerStore(db);
+    const sp = p1(db, 'none');
+    const ids = (store: string, id: string) => productDetail(db, store, id, sp, {}, 'refund_day', LEDGER_NOW)!.platformIds;
+    db.prepare("UPDATE products SET handle = 'vitamin-c-glow-serum' WHERE store_id = ? AND id = '8001'").run(LEDGER_STORE);
+    expect(ids(LEDGER_STORE, '8001')).toEqual({ handle: 'vitamin-c-glow-serum', shopHost: 'ledger-test.myshopify.com', siteUrl: null, marketplaceId: null });
+    const settings = (id: string, v: Record<string, string>) => db.prepare('UPDATE integrations SET settings_json = ? WHERE id = ?').run(JSON.stringify(v), id);
+    settings(`shopify:${LEDGER_STORE}`, { shopDomain: 'admin.shopify.com/store/ledger-test' });
+    expect(ids(LEDGER_STORE, '8002')).toEqual({ handle: null, shopHost: 'ledger-test.myshopify.com', siteUrl: null, marketplaceId: null });
+    settings(`shopify:${LEDGER_STORE}`, { shopDomain: 'ledger.example.com' });
+    expect(ids(LEDGER_STORE, '8002').shopHost).toBeNull();
+
+    const store = (id: string, platform: 'woocommerce' | 'amazon', v: Record<string, string>) => {
+      insertStore(db, { id, name: id, platform, niche: 'beauty', currency: 'USD', timezone: 'America/New_York', color: '#ff2a3a', connected: true });
+      db.prepare("INSERT INTO integrations (id, kind, store_id, status, settings_json, encrypted_credentials, updated_at) VALUES (?, ?, ?, 'connected', ?, '', 'x')").run(`${platform}:${id}`, platform, id, JSON.stringify(v));
+      db.prepare("INSERT INTO products (store_id, id, title, price) VALUES (?, 'p', 'P', 10)").run(id);
+    };
+    store('woo', 'woocommerce', { siteUrl: 'https://shop.example.com/store/' });
+    store('woo-http', 'woocommerce', { siteUrl: 'http://shop.example.com' });
+    store('amz', 'amazon', { sellerId: 'A2SELLER', marketplaceId: ' atvpdkikx0der ' });
+    expect([ids('woo', 'p').siteUrl, ids('woo-http', 'p').siteUrl, ids('amz', 'p').marketplaceId, ids('amz', 'p').shopHost]).toEqual(['https://shop.example.com/store', null, 'ATVPDKIKX0DER', null]);
   });
 });
 

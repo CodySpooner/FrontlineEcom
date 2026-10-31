@@ -1008,6 +1008,8 @@ export interface SaProductDetail {
   links: SaProductLink[];
   /** SA-92: the refund lines in the period (by the refunds basis); `note` says why there are none to list. */
   refundLines: { rows: SaRefundLine[]; note?: string };
+  /** SA-93: what its platform links are built from: its stored handle and the store integration's shop (never a secret). */
+  platformIds: { handle: string | null; shopHost: string | null; siteUrl: string | null; marketplaceId: string | null };
   scope: SaFilterScope;
 }
 

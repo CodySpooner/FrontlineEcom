@@ -154,7 +154,7 @@ function MovedPanel({ s, ctx }: { s: AnalyticsState; ctx?: SaContext }) {
   );
 }
 
-const DOT = { warn: 'bg-amber', red: 'bg-red', info: 'bg-[#7fb2ff]' };
+export const DOT = { warn: 'bg-amber', red: 'bg-red', info: 'bg-[#7fb2ff]' };
 const ROW = 'flex w-full items-center gap-2.5 border-t border-line px-4 py-[9px] text-left text-[12.5px]';
 
 /** Where a flag's target is looked into. One with no screen yet (Listings, SA-82) has none: no dead link (decision 33). */

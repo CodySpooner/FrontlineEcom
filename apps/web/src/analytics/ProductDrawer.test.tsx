@@ -33,6 +33,7 @@ const detail = (r: SaListingRow, more: Partial<SaProductDetail> = {}): SaProduct
   rules: [{ id: 'stock_cover@1', name: 'Low stock cover', when: 'Stock lasts under 10 days', minSample: '5 units', datasets: ['orders', 'inventory'], metrics: [] }],
   links: [],
   refundLines: { rows: [] },
+  platformIds: { handle: null, shopHost: null, siteUrl: null, marketplaceId: null },
   scope: { applied: [], ignored: [{ key: 'collection', reason: 'The drawer shows the one product' }] },
   ...more,
 });
@@ -280,6 +281,47 @@ describe('Costs and Refunds tabs (SA-92)', () => {
     cleanup();
     render('/analytics?store=a&tab=listings&product=p1', { refundLines: { rows: [], note: 'Demo data has no refund lines' } });
     expect((await tab('Refunds')).getByText('Demo data has no refund lines.')).toBeTruthy();
+  });
+});
+
+describe('Insights tab and platform links (SA-93)', () => {
+  it('each flag with the rule behind it; none says so', async () => {
+    render('/analytics?store=a&tab=listings&product=p1', {
+      insights: [
+        { rule: 'stock_cover@1', kind: 'business', tone: 'warn', title: 'About 5 days of stock', detail: '38 left · 7.4 sold a day', evidence: {}, target: { kind: 'product', id: 'p1' } },
+        { rule: 'unit_cost@1', kind: 'data_health', tone: 'info', title: 'No unit cost', detail: 'Contribution leaves it out', evidence: {}, target: { kind: 'product', id: 'p1' } },
+      ],
+      rules: [{ id: 'stock_cover@1', name: 'Low stock cover', when: 'Stock lasts under 10 days', minSample: '5 units sold', datasets: ['orders', 'inventory'], metrics: [] }],
+    });
+    const d = await screen.findByRole('dialog', { name: 'Product 1' });
+    expect(within(d).getByRole('tab', { name: /^Insights/ }).textContent).toBe('Insights 2');
+    fireEvent.click(within(d).getByRole('tab', { name: /^Insights/ }));
+    const items = within(within(d).getByRole('tabpanel', { name: 'Insights' })).getAllByRole('listitem');
+    expect(items.map((li) => li.textContent)).toEqual([
+      'RuleAbout 5 days of stock38 left · 7.4 sold a day.Low stock cover: flags when stock lasts under 10 days. Needs 5 units sold; reads orders, inventory.',
+      'Data healthNo unit costContribution leaves it out.',
+    ]);
+    expect(items[0]!.querySelector('i')!.className).toContain('bg-amber');
+    cleanup();
+    render('/analytics?store=a&tab=listings&product=p1', { insights: [], rules: [] });
+    const e = await screen.findByRole('dialog', { name: 'Product 1' });
+    fireEvent.click(within(e).getByRole('tab', { name: /^Insights/ }));
+    expect(within(e).getByText('No flags on this product in this period.')).toBeTruthy();
+  });
+
+  it("the footer's admin and store page links open the platform; none without an id to build them from", async () => {
+    render('/analytics?store=a&tab=listings&product=p1', { row: row(1, { id: '8820417' }), platformIds: { handle: 'glow', shopHost: 'glow-haus.myshopify.com', siteUrl: null, marketplaceId: null } });
+    const d = await screen.findByRole('dialog', { name: 'Product 1' });
+    const a = within(d).getAllByRole('link').map((l) => [l.textContent, l.getAttribute('href'), l.getAttribute('target')]);
+    expect(a).toEqual([
+      ['Shopify admin', 'https://glow-haus.myshopify.com/admin/products/8820417', '_blank'],
+      ['Store page', 'https://glow-haus.myshopify.com/products/glow', '_blank'],
+    ]);
+    cleanup();
+    render('/analytics?store=a&tab=listings&product=p1');
+    const e = await screen.findByRole('dialog', { name: 'Product 1' });
+    expect(within(e).queryByRole('link')).toBeNull();
+    expect(e.querySelector('footer')).toBeNull();
   });
 });
 

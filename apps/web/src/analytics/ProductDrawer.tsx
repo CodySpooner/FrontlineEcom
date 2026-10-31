@@ -1,19 +1,21 @@
 // SA-88 (the Listings board): the product drawer, opened by `product=` in the URL from a Listings row or a Needs
 // attention flag. Its header facts and pills come from the product endpoint (SA-87); its tabs render as their content
 // ships (decision 33): Performance (SA-89), Variants and Channels (SA-90) with its product links (SA-91), Costs and
-// Refunds (SA-92). Closed, it hands focus back to what opened it.
+// Refunds (SA-92), Insights and the platform links (SA-93). Closed, it hands focus back to what opened it.
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { Info } from 'lucide-react';
+import { ExternalLink, Info } from 'lucide-react';
 import { SA_METRICS, type Platform, type SaListingRow, type SaMetricId, type SaMetricResult, type SaProductDetail } from '@frontline/shared';
 import { useSetCost } from '../api/client';
 import { PLATFORM_NAME } from '../components/StoreForm';
-import { Button, cx, Dialog, ErrorState, LoadingState, Tabs } from '../components/ui';
+import { Button, buttonClass, cx, Dialog, ErrorState, LoadingState, Tabs } from '../components/ui';
 import { ago, cents, fmtDay, money, pct } from '../lib/format';
 import { useSaContext, useSaLink, useSaListings, useSaProduct } from './api';
 import { BarChart } from './BarChart';
 import { FilterScope } from './FilterScope';
 import { channelsOf } from './Filters';
+import { ADMIN_LABEL, platformLinks } from './links';
+import { DOT } from './Overview';
 import { Change, fmtValue } from './KpiStrip';
 import { ChannelMark, dash, lone, stock, val } from './ListingsTab';
 import { periodParams, type AnalyticsPage } from './state';
@@ -414,13 +416,41 @@ function Refunds({ d, currency }: { d: SaProductDetail; currency?: string }) {
   );
 }
 
+/** SA-93 (spec §7 Listing health): each flag on the product with the rule behind it and what it reads. */
+function Insights({ d }: { d: SaProductDetail }) {
+  if (!d.insights.length) return <p className="text-[12px] text-muted">No flags on this product in this period.</p>;
+  return (
+    <ul className="flex flex-col gap-2.5">
+      {d.insights.map((f, i) => {
+        const rule = d.rules.find((r) => r.id === f.rule);
+        return (
+          <li key={i} className="flex flex-col gap-1 rounded-xl border border-line-2 bg-[#121216] px-3.5 py-3">
+            <div className="flex items-center gap-2">
+              <i aria-hidden className={cx('size-[7px] shrink-0 rounded-full', DOT[f.tone])} />
+              <span className="rounded-[5px] bg-[#24242a] px-1.5 py-0.5 text-[9.5px] font-bold tracking-[.08em] text-text-2 uppercase">{f.kind === 'data_health' ? 'Data health' : 'Rule'}</span>
+              <b className="text-[13px] font-semibold">{f.title}</b>
+            </div>
+            <p className="text-[11.5px] leading-normal text-text-2">{f.detail}.</p>
+            {rule && (
+              <p className="text-[11px] text-muted">
+                {rule.name}: flags when {rule.when.charAt(0).toLowerCase()}
+                {rule.when.slice(1)}. Needs {rule.minSample}; reads {rule.datasets.join(', ')}.
+              </p>
+            )}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
 export function ProductDrawer({ s, id }: { s: AnalyticsPage & { store: string }; id: string }) {
   const ctx = useSaContext(s.store).data;
   const q = useSaProduct(s.store, id, periodParams(s));
   // what opened it (a row, a flag): focus goes back there once the drawer is gone
   const opener = useRef(document.activeElement as HTMLElement | null);
   useEffect(() => () => opener.current?.focus(), []);
-  const [tab, setTab] = useState<'performance' | 'variants' | 'channels' | 'costs' | 'refunds'>('performance');
+  const [tab, setTab] = useState<'performance' | 'variants' | 'channels' | 'costs' | 'refunds' | 'insights'>('performance');
   const d = q.data;
   const r = d?.row;
   const label = (c: string) => (c === 'site' ? 'site' : ((ctx && channelsOf(ctx).find((x) => x.id === c)?.label) ?? PLATFORM_NAME[c as Platform] ?? c));
@@ -431,7 +461,15 @@ export function ProductDrawer({ s, id }: { s: AnalyticsPage & { store: string };
     { value: 'channels' as const, label: 'Channels', count: d.channels.length },
     { value: 'costs' as const, label: 'Costs' },
     { value: 'refunds' as const, label: 'Refunds' },
+    { value: 'insights' as const, label: 'Insights', count: d.insights.length },
   ];
+  const links = d && ctx ? platformLinks(ctx.platform, d.row.id, d.platformIds) : {};
+  const out = (href: string, label: string, className?: string) => (
+    <a href={href} target="_blank" rel="noreferrer" className={cx(buttonClass('ghost', 'sm'), className)}>
+      <ExternalLink aria-hidden className="size-3.5" />
+      {label}
+    </a>
+  );
   const pill = (text: string, tone: keyof typeof TONE, title?: string) => (
     <span key={text} title={title} className={cx('inline-flex items-center rounded-full border px-2 py-px text-[11px] font-semibold whitespace-nowrap', TONE[tone])}>
       {text}
@@ -443,6 +481,14 @@ export function ProductDrawer({ s, id }: { s: AnalyticsPage & { store: string };
       side="right"
       width={560}
       onClose={() => s.set({ product: undefined })}
+      footer={
+        (links.admin || links.page) && (
+          <div className="flex items-center gap-2">
+            {links.admin && out(links.admin, ADMIN_LABEL[ctx!.platform]!)}
+            {links.page && out(links.page, 'Store page', 'ml-auto')}
+          </div>
+        )
+      }
       title={r?.title ?? 'Product'}
       subtitle={r && [r.sku, r.category, ctx && `${PLATFORM_NAME[ctx.platform as Platform] ?? ctx.platform} product ${r.id}`].filter(Boolean).join(' · ')}
       lead={r && (r.image ? <img src={r.image} alt="" className="size-14 shrink-0 rounded-[10px] object-cover" /> : <span aria-hidden className="size-14 shrink-0 rounded-[10px] border border-[#2e2e35] bg-[linear-gradient(140deg,#2b2b31,#1b1b20)]" />)}
@@ -473,6 +519,7 @@ export function ProductDrawer({ s, id }: { s: AnalyticsPage & { store: string };
             )}
             {tab === 'costs' && <Costs s={s} d={d} currency={ctx?.currency} />}
             {tab === 'refunds' && <Refunds d={d} currency={ctx?.currency} />}
+            {tab === 'insights' && <Insights d={d} />}
           </div>
           <FilterScope scope={d.scope} />
         </div>

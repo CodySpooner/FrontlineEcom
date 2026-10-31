@@ -1,8 +1,11 @@
 // SA-87 (spec §7 Product detail view): the product drawer's data in one call. Its row is its Listings row and its
 // numbers come from the same functions (a demo store's by its fixed share), so the drawer and the table agree
 // (consistency row). A linked channel product (SA-91) opens its store product, whose numbers and channels include it.
-// SA-92: its unit cost history and the refund lines its Refunds number adds up.
+// SA-92: its unit cost history and the refund lines its Refunds number adds up. SA-93: what its platform links are
+// built from.
 import { changeOf, SA_METRICS, saDef, type SaFilters, type SaFilterScope, type SaListings, type SaMetricId, type SaMetricResult, type SaProductChannel, type SaProductDetail, type SaRefundLine, type SaValue } from '@frontline/shared';
+import { shopHost } from '../connectors/shopify';
+import { wooSite } from '../connectors/woocommerce';
 import type { Db } from '../db';
 import { costMetrics } from './costs';
 import { storeConverter } from './fx';
@@ -123,6 +126,22 @@ export function productDetail(db: Db, storeId: string, id: string, sp: StorePeri
           return [{ id: String(r.id), orderId: String(r.o), date: String(r.day), variant: r.variant == null ? null : String(r.variant), quantity: r.q == null ? null : Number(r.q), amount, restocked: r.back == null ? null : !!r.back }];
         });
 
+  // The integration's non-secret shop settings (a malformed one gives no link).
+  const set = JSON.parse(String(db.prepare('SELECT settings_json FROM integrations WHERE id = ?').get(`${store.platform}:${storeId}`)?.settings_json ?? '{}')) as Record<string, string | undefined>;
+  const tryOr = (f: () => string) => {
+    try {
+      return f();
+    } catch {
+      return null;
+    }
+  };
+  const platformIds = {
+    handle: (db.prepare('SELECT handle FROM products WHERE store_id = ? AND id = ?').get(storeId, id)?.handle as string | null | undefined) ?? null,
+    shopHost: store.platform === 'shopify' && set.shopDomain ? tryOr(() => shopHost(set.shopDomain!)) : null,
+    siteUrl: store.platform === 'woocommerce' && set.siteUrl ? tryOr(() => wooSite(set.siteUrl!)) : null,
+    marketplaceId: (store.platform === 'amazon' && set.marketplaceId?.trim().toUpperCase()) || null,
+  };
+
   const failedOn = new Set(row.channels.filter((c) => c.status === 'failed').map((c) => c.channel));
   const flags = insights(db, storeId, sp, now);
   const mine = flags.insights.filter(({ target: t }) => (t.kind === 'product' && ids.includes(t.id)) || (t.kind === 'products' && t.ids.some((x) => ids.includes(x))) || (t.kind === 'listings' && failedOn.has(t.channel)));
@@ -145,6 +164,7 @@ export function productDetail(db: Db, storeId: string, id: string, sp: StorePeri
     rules: flags.rules.filter((r) => mine.some((i) => i.rule === r.id)),
     links: productLinks(db, storeId, id),
     refundLines: demo ? { rows: [], note: 'Demo data has no refund lines' } : { rows: refundLines },
+    platformIds,
     scope,
   };
 }
