@@ -89,6 +89,24 @@ Anything else in another lane → append to that lane's backlog **Inbox** (`- [ 
 
 ## Done
 
+- 2026-10-31 ECO-56: Completed a 657.389-second continuous 30-agent soak, a 60-second six-seat view, five viewport stages, ten Office View/Agent List remounts, and explicit reduced-effects checks. Every visible sample had one canvas; every intermediate list view had zero; no page errors. Build passed; pnpm check passed: 341 files / 2628 tests (1 skipped).
+
+  Conditions: Windows dev workstation, Ryzen 7 7700 (8 cores/16 threads), 31.1 GiB visible RAM, RTX 5060 Ti driver 32.0.16.1088. Vite development app, DPR 1; CPU load was 86% at the start, other lanes active, with no concurrent ecosystem builds/tests during the soak. Chromium 156.0.8078.4 headless actually used ANGLE Vulkan **SwiftShader software rendering**. Its sampled FPS medians (ranges) were:
+
+  | Population / viewport | Mode | FPS median (range) |
+  |---|---|---|
+  | 6 saved seats / 1600×1100 | Standard | 41 (39–44) |
+  | 30 demo seats / 1600×1100 | Standard | 37 (33–40) |
+  | 30 demo seats / 1280×1100 | Standard | 54 (52–58) |
+  | 30 demo seats / 1920×1100 | Automatic low power | 26 (25–27) |
+  | 30 demo seats / 390×844 | Low power retained | 30 (29–30) |
+  | 30 demo seats / return to 1600×1100 | Low power retained | 29 (28–30) |
+  | 30 demo seats / 1600×1100 | Explicit reduced effects | 30 (30–30) |
+
+  Separate **Orca / NVIDIA Direct3D11** spot checks at 799×1761 averaged 58.7 FPS with six saved seats and 58.2 FPS with 30 demo seats over 20 seconds each. These are hardware-specific spot checks, not universal frame-rate claims. Garbage-collected JS heap was 34.91 → 40.99 MiB across the soak and 42.88 MiB after navigation; backing storage was 20.85 → 20.86 MiB. Demo history accumulated during viewing; GPU memory and longer sessions on other machines were not measured. Raw samples/hardware: `.agent/eco-56-measurements.json`, `.agent/eco-56-hardware.json`, `.agent/eco-56-orca-*.json`; screenshots: `.agent/eco-56-*.png`.
+
+
+
 - 2026-10-31 ECO-55: Added persisted ambient pause and explicit full/reduced-effects quality controls; system reduced motion and Settings Always reduce remain authoritative and are reported in the scene. Offscreen/hidden scenes stop the ticker, culled workers skip texture-frame work, and teardown removes input/visibility/resize/intersection listeners. Browser verified preferences, both motion paths, mobile controls and frame suspension/resumption (97 ? 97 offscreen ? 157 visible); late initialization after unmount has a regression test. Build and pnpm check passed: 341 files / 2623 tests (1 skipped). Captures: `.agent/eco-55-*.png`.
 
 
@@ -310,7 +328,7 @@ Items (stages from brief §11):
   zoom, easy return to overview, keyboard and touch, progressive detail; no click launches paid work or store changes.
 - [x] ECO-55 Stage 5 — Quality levels and lifecycle: quality setting, pause/reduce ambient motion, reduced motion and
   the app's "Always reduce motion", offscreen culling, no leaks or duplicate loops across mount/unmount and resize.
-- [ ] ECO-56 Stage 5 — Performance verification: realistic and larger populations, 10+ minutes of viewing, repeated
+- [x] ECO-56 Stage 5 — Performance verification: realistic and larger populations, 10+ minutes of viewing, repeated
   navigation, resizing, mixed states; record hardware and conditions here (no universal FPS claims).
 - [ ] ECO-57 Acceptance and handoff: walk brief §12 in the browser, in motion, fix gaps; screenshots plus a short
   recording if capture works (say so if not); write the handoff (§13) under **Done**, push, create `.agent/STOP`, stop.
