@@ -35,7 +35,7 @@ export function OfficeScene({ office, onSelect, focus, display, seats, persist =
   const latestFocus = useRef(focus); latestFocus.current = focus;
   const latestDisplay = useRef(display); latestDisplay.current = display;
   const latestTheme = useRef(theme); latestTheme.current = theme;
-  const choose = (deskId: string) => { setDesk(deskId); const worker = latestWorkers.current.find((w) => w.seat.deskId === deskId); if (worker) select.current(worker.seat.agentId); };
+  const choose = (deskId: string) => { setDesk(deskId); const worker = latestWorkers.current.find((w) => w.seat.deskId === deskId); if (worker) {scene.current?.focusWorker(worker.seat.agentId);select.current(worker.seat.agentId);} };
   useEffect(() => { scene.current?.setWorkers(workers); scene.current?.setBusiness(office, activeTasks); }, [seats, office, activeTasks]);
   useEffect(() => { if (focus) scene.current?.focusWorker(focus.id); }, [focus]);
   useEffect(() => { scene.current?.setDisplay(display); }, [display]);
@@ -72,6 +72,7 @@ export function OfficeScene({ office, onSelect, focus, display, seats, persist =
       </select>
       <Button size="sm" aria-label={fullscreen?'Exit fullscreen':'Fullscreen'} title={fullscreen?'Exit fullscreen':'Fullscreen'} onClick={()=>{const action=fullscreen?document.exitFullscreen():host.current!.parentElement!.requestFullscreen();action.catch(()=>setError('Fullscreen could not be opened.'));}}>{fullscreen?<Minimize size={13} aria-hidden />:<Maximize size={13} aria-hidden />}<span className="eco-camera-label">{fullscreen?'Exit fullscreen':'Fullscreen'}</span></Button>
     </div>
+    <div className="eco-locator"><select aria-label="Find agent" value="" onChange={(e)=>{const worker=workers.find(w=>w.seat.agentId===e.target.value);if(worker){setDesk(worker.seat.deskId);scene.current?.focusWorker(worker.seat.agentId);}}}><option value="" disabled>Find an agent…</option>{workers.map(w=><option key={w.seat.agentId} value={w.seat.agentId}>{w.name} · {office.agents.find(a=>a.id===w.seat.agentId)?.storeId}</option>)}</select>{occupant && <Button size="sm" onClick={()=>choose(occupant.seat.deskId)}>Inspect agent</Button>}</div>
     <div ref={host} className="eco-canvas" data-frames={performance?.frames} data-elapsed-ms={performance?.elapsedMs} data-scale={performance?.scale} />
     <Minimap viewport={performance?.viewport} onFocus={(tile) => scene.current?.focus(tile)} />
     {inspected && <div className="eco-worker-preview" id="eco-worker-preview" role="tooltip" style={{ borderColor: inspectedDepartment?.color }}>
@@ -81,6 +82,6 @@ export function OfficeScene({ office, onSelect, focus, display, seats, persist =
     {performance && <small className="eco-fps">{Math.round(performance.scale * 100)}% · {Math.round(performance.fps)} FPS · {performance.mode}{performance.scale < .65 ? ' · Zoom in for worker labels' : ''}</small>}
     {error && <p role="alert" className="eco-scene-error">{error}</p>}
     <div className="eco-scene-note" role="status">{occupant ? `${occupant.name} · ${occupant.status?.replaceAll('_', ' ')}${occupant.tool ? ` · ${occupant.tool}` : ''}` : selected ? `${ROOMS.find((r)=>r.id===selected.department)!.name} · Workstation ${selected.id.split('-').at(-1)}` : 'HEADQUARTERS · Select a workstation to inspect it'}</div>
-    <details className="eco-desk-access"><summary>Workstation directory</summary><div>{DESKS.map((d)=><button key={d.id} aria-describedby={inspected?.seat.deskId === d.id ? 'eco-worker-preview' : undefined} onFocus={()=>scene.current?.previewWorker(workers.find((w)=>w.seat.deskId===d.id)?.seat.agentId)} onBlur={()=>scene.current?.previewWorker()} onClick={()=>{choose(d.id);scene.current?.focus(d);}}>{d.id}</button>)}</div></details>
+    <details className="eco-desk-access"><summary>Workstation directory</summary><div>{DESKS.map((d)=><button key={d.id} aria-describedby={inspected?.seat.deskId === d.id ? 'eco-worker-preview' : undefined} onFocus={()=>scene.current?.previewWorker(workers.find((w)=>w.seat.deskId===d.id)?.seat.agentId)} onBlur={()=>scene.current?.previewWorker()} onClick={()=>{choose(d.id);if(!workers.some(w=>w.seat.deskId===d.id))scene.current?.focus(d);}}>{d.id}</button>)}</div></details>
   </>;
 }

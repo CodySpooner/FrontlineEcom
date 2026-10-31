@@ -19,3 +19,10 @@ export function zoomAt(camera: Camera, factor: number, point: Tile): Camera {
   const scale = Math.max(.1, Math.min(3, camera.scale * factor));
   return { scale, x: point.x - (point.x - camera.x) * scale / camera.scale, y: point.y - (point.y - camera.y) * scale / camera.scale };
 }
+
+
+/** Keep the office reachable; small maps are centered and larger maps retain an edge margin. */
+export function boundCamera(camera: Camera, width: number, height: number): Camera {
+  const axis=(position:number,size:number,view:number)=>size<=view-64 ? (view-size)/2 : Math.max(view-size-32,Math.min(32,position));
+  return {...camera,x:axis(camera.x,MAP_SIZE.width*camera.scale,width),y:axis(camera.y,MAP_SIZE.height*camera.scale,height)};
+}

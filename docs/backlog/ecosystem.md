@@ -89,6 +89,9 @@ Anything else in another lane → append to that lane's backlog **Inbox** (`- [ 
 
 ## Done
 
+- 2026-10-31 ECO-54: Added a stationary agent locator and Inspect control; occupied-desk selection focuses the actual worker, including while travelling. Camera pan/focus/zoom stay inside map bounds, overview remains one action away, and the zoom readout follows camera motion. Keyboard navigation and 390px touch controls/profile access verified without POSTs; mobile controls do not overlap. Production build, browser and pnpm check passed: 341 files / 2621 tests (1 skipped), including extreme camera-bound cases. Captures: `.agent/eco-54-*.png`.
+
+
 - 2026-10-31 ECO-53: Global store selection now scopes office identities, seats, task/approval/handoff activity, missions, analytics and execution totals. Switching clears the previous scene and inspector; stale REST/socket results cannot refill it. Loading/disconnection copy and truthful department counts added, global seat reservations retained for deployment, cross-store parent links rejected. Browser verified Pawsome/Glow isolation and saved waiting/failed states; new hook/projection/API tests and Demo isolation pass. Production build and pnpm check: 339 files / 2614 tests passed (1 skipped). Captures: `.agent/eco-53-*.png`.
 
 
@@ -300,7 +303,7 @@ Items (stages from brief §11):
 - [x] ECO-53 Stage 4 — Real-state behavior: idle / working / collaborating / waiting / completed / failed tied to real
   events; inspectable real connections; decorative vs functional clearly told apart; loading/disconnected states;
   store switching shows only that store's agents and activity.
-- [ ] ECO-54 Stage 4 — Interaction: selection focuses without chasing a moving character, agent locator, bounded pan/
+- [x] ECO-54 Stage 4 — Interaction: selection focuses without chasing a moving character, agent locator, bounded pan/
   zoom, easy return to overview, keyboard and touch, progressive detail; no click launches paid work or store changes.
 - [ ] ECO-55 Stage 5 — Quality levels and lifecycle: quality setting, pause/reduce ambient motion, reduced motion and
   the app's "Always reduce motion", offscreen culling, no leaks or duplicate loops across mount/unmount and resize.
