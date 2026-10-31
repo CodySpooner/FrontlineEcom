@@ -1,7 +1,7 @@
 // SA-69: one number, one value everywhere. Each surface that shows a v1 number has a row here holding it equal to
 // /metrics (or to the surface it's drawn from) for the same scope, on the ledger fixture and on a demo store. Later
 // surfaces add a row.
-import type { SaMetricSet, SaOverview } from '@frontline/shared';
+import type { SaListings, SaMetricSet, SaOverview, SaProductDetail } from '@frontline/shared';
 import { SA_OVERVIEW_KPIS } from '@frontline/shared';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../app';
@@ -41,6 +41,19 @@ for (const scope of SCOPES) {
         expect(o.metrics.map((x) => x.id)).toEqual(SA_OVERVIEW_KPIS);
         expect(o.metrics).toEqual(m.metrics);
         expect([o.period, o.compare, o.scope]).toEqual([m.period, m.compare, m.scope]);
+      }
+    });
+
+    it('the product drawer = its Listings row for the same scope (SA-87)', async () => {
+      const a = app();
+      for (const v of VARIANTS.filter((x) => !x.includes('product'))) {
+        const q = `store=${scope.store}&${scope.period}${v}`;
+        for (const row of (await get<SaListings>(a, `listings?${q}&status=all`)).rows.slice(0, 3)) {
+          const d = await get<SaProductDetail>(a, `products/${encodeURIComponent(row.id)}?${q}`);
+          const net = d.metrics.find((m) => m.id === 'net_sales')!;
+          expect(d.row).toEqual(row);
+          expect([net.value, net.previous]).toEqual([row.netSales.value, row.previousNetSales ?? null]);
+        }
       }
     });
   });

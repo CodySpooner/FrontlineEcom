@@ -109,7 +109,7 @@ export function totals(db: Db, storeId: string, from: string, to: string, basis:
   return t;
 }
 
-type Sales = Record<'net_sales' | 'units' | 'refunds' | 'refund_rate' | 'contribution' | 'cost_coverage', SaValue>;
+export type Sales = Record<'net_sales' | 'units' | 'refunds' | 'refund_rate' | 'contribution' | 'cost_coverage' | 'fees', SaValue>;
 const cents = (n: number) => Math.round(n * 100) / 100;
 
 /**
@@ -117,14 +117,14 @@ const cents = (n: number) => Math.round(n * 100) / 100;
  * products by Dashboard's fixed per-product weights (`demoTopProducts`), so the rows add up to the store's numbers and
  * don't move between loads. Every value is `demo`; a draft or archived product sold nothing.
  */
-function demoSplit(db: Db, storeId: string, from: string, to: string, basis: RefundBasis, slice: Slice = {}) {
+export function demoSplit(db: Db, storeId: string, from: string, to: string, basis: RefundBasis, slice: Slice = {}) {
   const s = salesMetrics(db, storeId, from, to, basis, slice);
   const c = costMetrics(db, storeId, from, to, basis, slice);
   const part = (k: number): Sales => {
     const of = (v: SaValue, round: (n: number) => number): SaValue => (v.value == null ? v : { ...v, value: round(v.value * k) });
     // a share doesn't change a rate or a share; a product that sold nothing has none
     const rate = (v: SaValue) => (k ? v : { ...v, value: null });
-    return { net_sales: of(s.net_sales, cents), units: of(s.units, Math.round), refunds: of(s.refunds, cents), refund_rate: rate(s.refund_rate), contribution: of(c.contribution_before_ads, cents), cost_coverage: rate(c.cost_coverage) };
+    return { net_sales: of(s.net_sales, cents), units: of(s.units, Math.round), refunds: of(s.refunds, cents), refund_rate: rate(s.refund_rate), contribution: of(c.contribution_before_ads, cents), cost_coverage: rate(c.cost_coverage), fees: of(c.fees, cents) };
   };
   const rows = new Map([...demoShares(db, storeId)].map(([id, k]) => [id, part(k)]));
   return (id: string) => rows.get(id) ?? part(0);
@@ -283,7 +283,7 @@ export function listings(db: Db, storeId: string, query: Query, sp: StorePeriod,
     const slice = { ...(channels && { channels }), products: [id] };
     const sales = demoSales ? undefined : salesMetrics(db, storeId, sp.period.from, sp.period.to, basis, slice);
     const costs = demoSales ? undefined : costMetrics(db, storeId, sp.period.from, sp.period.to, basis, slice);
-    const d = demoSales?.(id) ?? { ...sales!, contribution: costs!.contribution_before_ads, cost_coverage: costs!.cost_coverage };
+    const d = demoSales?.(id) ?? { ...sales!, contribution: costs!.contribution_before_ads, cost_coverage: costs!.cost_coverage, fees: costs!.fees };
     const cover = coverOf(byId.get(id)!, sold.get(id) ?? 0);
     const before = compare && (demoBefore?.(id).net_sales ?? salesMetrics(db, storeId, compare.from, compare.to, basis, { ...slice, ...(cut && { cut }) }).net_sales);
     return {

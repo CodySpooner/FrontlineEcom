@@ -9,6 +9,7 @@ import { insights } from './insights';
 import { computeMetricSet, computeSeries, parseFilters } from './metric-set';
 import { listings, listingVariants } from './listings';
 import { overview } from './overview';
+import { productDetail } from './product';
 import { historyStart, storePeriod, zoneInfo } from './period';
 import { reconcile } from './reconcile';
 import { datasetFreshness, markVerified, sourceRows } from './sources';
@@ -166,6 +167,19 @@ export function storeAnalyticsRoutes(db: Db) {
       const basis = c.req.query('refunds') ?? 'refund_day';
       if (basis !== 'refund_day' && basis !== 'order_day') return c.json({ error: 'refunds must be refund_day or order_day' }, 400);
       const out = listingVariants(db, s.storeId, c.req.param('id'), sp, filters, basis);
+      return out ? c.json(out) : c.json({ error: 'No such product in this store' }, 404);
+    })
+    // SA-87: the product drawer's data.
+    .get('/api/analytics/products/:id', (c) => {
+      const s = scoped(c);
+      if ('error' in s) return c.json({ error: s.error }, s.status);
+      const sp = storePeriod(db, s.storeId, (k) => c.req.query(k));
+      if (typeof sp === 'string') return c.json({ error: sp }, 400);
+      const filters = parseFilters(c.req.query('filters'));
+      if (typeof filters === 'string') return c.json({ error: filters }, 400);
+      const basis = c.req.query('refunds') ?? 'refund_day';
+      if (basis !== 'refund_day' && basis !== 'order_day') return c.json({ error: 'refunds must be refund_day or order_day' }, 400);
+      const out = productDetail(db, s.storeId, c.req.param('id'), sp, filters, basis);
       return out ? c.json(out) : c.json({ error: 'No such product in this store' }, 404);
     })
     // SA-86: products side by side, each number its Listings row's.

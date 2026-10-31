@@ -932,6 +932,40 @@ export interface SaVariants {
   note?: string;
 }
 
+/** SA-87: one channel of a product in its drawer: its listings' state and its period sales there. */
+export interface SaProductChannel {
+  channel: string;
+  /** Its listings' status (a failed one wins); null: it sold there with no listing synced. */
+  status: string | null;
+  error: string | null;
+  syncedAt: string | null;
+  /** The platform's own publish date, where it gives one (never a first sync). */
+  publishedAt: string | null;
+  units: SaValue;
+  netSales: SaValue;
+  refunds: SaValue;
+}
+
+/** SA-87: `GET /api/analytics/products/:id`, the product drawer's data for the period. */
+export interface SaProductDetail {
+  period: SaPeriod;
+  compare: SaComparePeriod | null;
+  /** Its Listings row: the header's facts and pills, and the table's numbers. */
+  row: SaListingRow;
+  /** The row's numbers with their comparison: units, net sales, refunds, refund rate, contribution, cost coverage. */
+  metrics: SaMetricResult[];
+  /** Units sold a day (a week past 120 days) over the period. */
+  units: { grain: 'day' | 'week'; points: SaSeriesPoint[] };
+  channels: SaProductChannel[];
+  /** Why the channels have no sales (a demo store). */
+  channelsNote?: string;
+  /** The price, cost and fee line: its unit cost now (with its source), the period's fees and the store's fee rule. */
+  costs: { unitCost: { value: number; source: string; since: string | null } | null; fees: SaValue; feeRule: { percent: number; perOrder: number } };
+  variants: SaVariants;
+  insights: SaInsight[];
+  scope: SaFilterScope;
+}
+
 /** SA-86: `GET /api/analytics/compare`, 2 to 4 products side by side as their Listings rows, in the order asked. */
 export interface SaProductCompare {
   period: SaPeriod;
