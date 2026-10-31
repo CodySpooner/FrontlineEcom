@@ -10,6 +10,7 @@ import { ListingsTab } from '../analytics/ListingsTab';
 import { Overview } from '../analytics/Overview';
 import { ProductDrawer } from '../analytics/ProductDrawer';
 import { SalesTab } from '../analytics/SalesTab';
+import { TrafficTab } from '../analytics/TrafficTab';
 import { useAnalyticsState, type AnalyticsPage } from '../analytics/state';
 import { Hero } from '../components/Hero';
 import { buttonClass, EmptyState, ErrorState, LoadingState, Tabs } from '../components/ui';
@@ -25,6 +26,7 @@ export const TABS: { value: string; label: string; datasets: SaDataset[]; render
   },
   { value: 'listings', label: 'Listings & Products', datasets: ['catalog', 'inventory', 'orders', 'refunds'], render: (s) => <ListingsTab key={s.store} s={s} onOpen={(id) => s.set({ product: id })} /> }, // a store's own selection and expanded rows
   { value: 'sales', label: 'Sales', datasets: ['orders', 'refunds'], render: (s) => <SalesTab s={s} /> },
+  { value: 'traffic', label: 'Traffic & Conversion', datasets: ['traffic', 'purchase_sessions', 'traffic_breakdowns'], render: (s) => <TrafficTab s={s} /> },
 ];
 
 export function Analytics() {
