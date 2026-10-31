@@ -89,6 +89,9 @@ Anything else in another lane → append to that lane's backlog **Inbox** (`- [ 
 
 ## Done
 
+- 2026-10-31 ECO-53: Global store selection now scopes office identities, seats, task/approval/handoff activity, missions, analytics and execution totals. Switching clears the previous scene and inspector; stale REST/socket results cannot refill it. Loading/disconnection copy and truthful department counts added, global seat reservations retained for deployment, cross-store parent links rejected. Browser verified Pawsome/Glow isolation and saved waiting/failed states; new hook/projection/API tests and Demo isolation pass. Production build and pnpm check: 339 files / 2614 tests passed (1 skipped). Captures: `.agent/eco-53-*.png`.
+
+
 - 2026-10-31 ECO-52: Role-specific tool/glance gestures occupy under 10% of idle time with stable identity-based staggering; work frames vary instruments without a shared body bounce. Slower monitor/floor pulses, fewer particles and calmer rotors preserve quiet intervals. Production build and browser passed, motion captured in `.agent/motion/`; pnpm check 336 files / 2607 tests passed (1 skipped) after two unrelated contention timeouts cleared with six workers. Before/after: `.agent/eco-52-*.png`.
 
 
@@ -294,7 +297,7 @@ Items (stages from brief §11):
 - [x] ECO-51 Stage 3 — Detail at three scales (distance, normal, close-up), restrained Easter eggs, no invented numbers.
 - [x] ECO-52 Stage 4 — Motion language: ambient, interaction and event tiers; role-specific idles; varied timing, no
   shared bounce; quiet zones.
-- [ ] ECO-53 Stage 4 — Real-state behavior: idle / working / collaborating / waiting / completed / failed tied to real
+- [x] ECO-53 Stage 4 — Real-state behavior: idle / working / collaborating / waiting / completed / failed tied to real
   events; inspectable real connections; decorative vs functional clearly told apart; loading/disconnected states;
   store switching shows only that store's agents and activity.
 - [ ] ECO-54 Stage 4 — Interaction: selection focuses without chasing a moving character, agent locator, bounded pan/

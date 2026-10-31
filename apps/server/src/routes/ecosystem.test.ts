@@ -71,3 +71,14 @@ test('statistics count durable runs beyond the recent feed and exclude cancellat
   expect(stats).toMatchObject({ activeTasks: 2, completedTasks: 210, failedTasks: 1, successRate: 210 / 211, activeTeams: 1, inputTokens: 2140, outputTokens: 1070 });
   expect(stats.costUsd).toBeCloseTo(21.4);
 });
+
+
+test('statistics honor selected stores without mixing spend or outcomes',async()=>{
+  for(const [id,store,status,cost] of [['scoped-one','one','done',2],['scoped-two','two','error',7]])
+    db.prepare('INSERT INTO agent_runs (id,store_id,agent_id,task,status,created_at,cost_usd) VALUES (?,?,?,?,?,?,?)').run(id!,store!,String(store)+':copywriter','Scoped task',status!,'2026-10-31T00:00:00Z',cost!);
+  const get=async(scope:string)=> (await app.request('/api/ecosystem/stats?stores='+encodeURIComponent(scope))).json();
+  expect(await get('one')).toMatchObject({completedTasks:1,failedTasks:0,costUsd:2,successRate:1});
+  expect(await get('two')).toMatchObject({completedTasks:0,failedTasks:1,costUsd:7,successRate:0});
+  expect(await get('one,two')).toMatchObject({completedTasks:1,failedTasks:1,costUsd:9,successRate:.5});
+  expect(await get("missing' OR 1=1 --")).toMatchObject({completedTasks:0,failedTasks:0,costUsd:0,successRate:null});
+});

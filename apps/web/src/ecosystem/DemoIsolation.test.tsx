@@ -16,7 +16,7 @@ test('switching to demo stops office subscriptions and saves; simulated commands
   const fetch = stubApi(() => []);
   renderApp(<Ecosystem />);
   fireEvent.click(screen.getByRole('switch', { name: 'Demo Mode' }));
-  expect(useOffice).toHaveBeenLastCalledWith(false);
+  expect(useOffice).toHaveBeenLastCalledWith(false, []);
   expect(useSeats).toHaveBeenLastCalledWith(false);
   expect(screen.getByText('Position saving: false')).toBeTruthy();
   expect(screen.getByText('30 / 30')).toBeTruthy();
@@ -29,6 +29,6 @@ test('switching to demo stops office subscriptions and saves; simulated commands
   expect(fetch.mock.calls.some(([, init]) => init?.method && init.method !== 'GET')).toBe(false);
   fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Close' }));
   fireEvent.click(screen.getByRole('switch', { name: 'Demo Mode' }));
-  expect(useOffice).toHaveBeenLastCalledWith(true);
+  expect(useOffice).toHaveBeenLastCalledWith(true, []);
   expect(screen.getByText('Position saving: true')).toBeTruthy();
 });

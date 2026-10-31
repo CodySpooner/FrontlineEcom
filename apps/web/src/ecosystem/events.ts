@@ -51,7 +51,7 @@ function approvalEvent(state: OfficeState, approval: ApprovalRequest): OfficeSta
 function handoffs(state: OfficeState): OfficeState {
   for (const run of Object.values(state.runs)) {
     const parent = run.parentRunId && state.runs[run.parentRunId];
-    if (parent) state = event(state, { id: `handoff:${run.id}`, type: 'handoff', agentId: parent.agentId, toAgentId: run.agentId, runId: run.id, at: run.createdAt, summary: run.task });
+    if (parent && parent.storeId === run.storeId) state = event(state, { id: `handoff:${run.id}`, type: 'handoff', agentId: parent.agentId, toAgentId: run.agentId, runId: run.id, at: run.createdAt, summary: run.task });
   }
   return state;
 }

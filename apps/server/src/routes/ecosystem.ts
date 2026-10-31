@@ -19,13 +19,15 @@ export function ecosystemRoutes(db: Db) {
   const get = (id: string) => { const r = db.prepare('SELECT * FROM ecosystem_seats WHERE agent_id = ?').get(id); return r && seat(r); };
   return new Hono()
     .get('/api/ecosystem/stats', (c) => {
+      const stores=c.req.query('stores')?.split(',').filter(Boolean) ?? [];
+      const where=stores.length ? ` WHERE store_id IN (${stores.map(()=>'?').join(',')})` : '';
       const r = db.prepare(`SELECT coalesce(sum(status IN ('queued','running')),0) AS active,
         coalesce(sum(status = 'done'),0) AS completed, coalesce(sum(status = 'error'),0) AS failed,
-        coalesce(sum(input_tokens),0) AS input, coalesce(sum(output_tokens),0) AS output, coalesce(sum(cost_usd),0) AS cost FROM agent_runs`).get()!;
+        coalesce(sum(input_tokens),0) AS input, coalesce(sum(output_tokens),0) AS output, coalesce(sum(cost_usd),0) AS cost FROM agent_runs${where}`).get(...stores)!;
       const completed = Number(r.completed), failed = Number(r.failed);
       return c.json({ activeTasks: Number(r.active), completedTasks: completed, failedTasks: failed,
         successRate: completed + failed ? completed / (completed + failed) : null,
-        activeTeams: Number(db.prepare('SELECT count(*) AS n FROM squad_missions WHERE ended_at IS NULL').get()!.n),
+        activeTeams: Number(db.prepare(`SELECT count(*) AS n FROM squad_missions WHERE ended_at IS NULL${stores.length ? ' AND store_id IN ('+stores.map(()=>'?').join(',')+')' : ''}`).get(...stores)!.n),
         inputTokens: Number(r.input), outputTokens: Number(r.output), costUsd: Number(r.cost),
       } satisfies OfficeStats);
     })
