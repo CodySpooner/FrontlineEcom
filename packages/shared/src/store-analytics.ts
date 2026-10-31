@@ -902,6 +902,28 @@ export interface SaCustomers {
   /** SA-103: why there's no customer to follow, and the fix. */
   missing?: Pick<SaValue, 'reason' | 'note' | 'fix'>;
   scope: SaFilterScope;
+  /** SA-105: customers by the month of their first counted order in the period, followed through its end. */
+  cohorts: SaCohort[];
+  /** SA-105: net sales (the Sales tab's) and customers by country. */
+  countries: { rows: SaCustomerCountry[]; reason?: SaReason; note?: string };
+}
+/** Q22: a cohort cell under 5 customers is null (hidden), and so is every cell of a cohort under 5. */
+export interface SaCohort {
+  /** YYYY-MM. */
+  month: string;
+  customers: number | null;
+  /** Customers ordering again in each following month, through the period's end. */
+  months: (number | null)[];
+  /** Customers with 2 or more counted orders through the period's end. */
+  repeat: number | null;
+}
+/** Q22: countries under 10 customers merge into one `other` row; `unknown` is the orders with no country. */
+export interface SaCustomerCountry {
+  id: string | null;
+  label: string;
+  customers: number;
+  net_sales: number | null;
+  kind?: 'other' | 'unknown';
 }
 
 /** SA-96: what `GET /api/analytics/sales/breakdown?by=` splits net sales and units by. */

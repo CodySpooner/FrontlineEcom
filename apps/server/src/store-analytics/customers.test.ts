@@ -5,7 +5,7 @@ import { createApp } from '../app';
 import { openDb } from '../db';
 import { seedDemo } from '../demo';
 import { insertStore } from '../stores';
-import { customersMissing, customersReport } from './customers';
+import { customerCohorts, customersMissing, customersReport } from './customers';
 import { LEDGER_NOW, LEDGER_PERIODS, LEDGER_STORE, seedLedgerStore } from './fixture';
 
 const { P1, P2 } = LEDGER_PERIODS;
@@ -130,6 +130,78 @@ describe('customersReport (SA-104)', () => {
       expect([r.period.from, r.period.to, r.customers.value]).toEqual([P1.from, P1.to, 4]);
       expect(r.scope).toEqual({ applied: [], ignored: [{ key: 'channel', reason: 'Customers are counted store-wide' }] });
     });
+  });
+});
+
+/**
+ * SA-105's store, built for Q22's thresholds ($10 orders). US: u1-u10, exactly 10 customers; CA c1-c3, GB g1-g2,
+ * MX m1-m2 (7 together, each under 10); one guest order with no country. August's cohort is u1-u6, 5 of whom
+ * (exactly 5) buy again in September and 2 in October; September's is 4 (CA and g1); October's 7.
+ */
+function cohortStore(twiceInAugust = false) {
+  const db = openDb();
+  insertStore(db, { id: 'cust', name: 'Cust', platform: 'shopify', niche: 'home', currency: 'USD', timezone: 'America/New_York', color: '#ff2a3a', connected: true });
+  const ins = db.prepare(
+    `INSERT INTO orders (store_id, id, created_at, total, status, fulfillment_status, cogs, local_date, tax, source_kind, channel, currency, gross_sales, discounts, shipping, paid_at, breakdown_at, customer_ref, customer_state, country)
+     VALUES ('cust', ?, ?, 10, 'paid', 'fulfilled', 0, ?, 0, 'shopify', 'site', 'USD', 10, 0, 0, ?, ?, ?, ?, ?)`,
+  );
+  let n = 0;
+  const buy = (day: string, ref: string | null, country: string | null) => {
+    const at = `${day}T15:00:00Z`;
+    ins.run(`#${++n}`, at, day, at, at, ref, ref ? 'identified' : 'guest', country);
+  };
+  const us = (i: number) => `u${i}`;
+  for (let i = 1; i <= 6; i++) buy('2026-08-05', us(i), 'US');
+  if (twiceInAugust) buy('2026-08-20', 'u6', 'US');
+  for (let i = 1; i <= 5; i++) buy('2026-09-05', us(i), 'US');
+  for (const r of ['c1', 'c2', 'c3']) buy('2026-09-10', r, 'CA');
+  buy('2026-09-10', 'g1', 'GB');
+  for (const i of [1, 2]) buy('2026-10-05', us(i), 'US');
+  for (let i = 7; i <= 10; i++) buy('2026-10-10', us(i), 'US');
+  buy('2026-10-10', 'g2', 'GB');
+  for (const r of ['m1', 'm2']) buy('2026-10-10', r, 'MX');
+  buy('2026-10-12', null, null);
+  return db;
+}
+
+describe('cohorts and countries (SA-105, Q22)', () => {
+  afterEach(() => vi.useRealTimers());
+
+  it('monthly first-order cohorts followed to the period end; a cell under 5 and a cohort under 5 hidden, exactly 5 shown', () => {
+    expect(customerCohorts(cohortStore(), 'cust', '2026-08-01', '2026-10-31')).toEqual([
+      { month: '2026-08', customers: 6, months: [5, null], repeat: 5 },
+      { month: '2026-09', customers: null, months: [null], repeat: null },
+      { month: '2026-10', customers: 7, months: [], repeat: null },
+    ]);
+    // u6 buying twice in August repeats, without a later month's order
+    expect(customerCohorts(cohortStore(true), 'cust', '2026-08-01', '2026-10-31')[0]).toEqual({ month: '2026-08', customers: 6, months: [5, null], repeat: 6 });
+    // a period from September: August's buyers aren't a cohort of it, and u1-u5's September orders aren't first orders
+    expect(customerCohorts(cohortStore(), 'cust', '2026-09-01', '2026-10-31').map((c) => [c.month, c.customers])).toEqual([['2026-09', null], ['2026-10', 7]]);
+  });
+
+  it("countries: the Sales tab's net sales with customers; under 10 merge into Other, exactly 10 shown; Unknown apart", async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(Date.parse('2026-11-09T17:00:00Z'));
+    const app = createApp(cohortStore());
+    const q = 'store=cust&period=custom&from=2026-08-01&to=2026-10-31';
+    const r = (await (await app.request(`/api/analytics/customers?${q}`)).json()) as SaCustomers;
+    expect(r.countries).toEqual({
+      rows: [
+        { id: 'US', label: 'US', customers: 10, net_sales: 170 },
+        { id: null, label: 'Other (3 countries)', customers: 7, net_sales: 70, kind: 'other' },
+        { id: null, label: 'Unknown', customers: 0, net_sales: 10, kind: 'unknown' },
+      ],
+    });
+    const sales = (await (await app.request(`/api/analytics/sales/breakdown?${q}&by=country`)).json()) as { total: { net_sales: { value: number } } };
+    expect(r.countries.rows.reduce((a, x) => a + x.net_sales!, 0)).toBe(sales.total.net_sales.value);
+    expect(r.cohorts.map((c) => c.month)).toEqual(['2026-08', '2026-09', '2026-10']);
+  });
+
+  it('no customer to follow: no cohorts, no countries; the no-data state says why', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(LEDGER_NOW);
+    const r = (await (await createApp(ledger()).request(`/api/analytics/customers?store=${LEDGER_STORE}&period=custom&from=${P1.from}&to=${P1.to}`)).json()) as SaCustomers;
+    expect([r.missing?.reason, r.cohorts, r.countries]).toEqual(['needs_ingestion', [], { rows: [] }]);
   });
 });
 

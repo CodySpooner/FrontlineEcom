@@ -1,4 +1,4 @@
-import { SA_BREAKDOWNS, SA_METRICS, SA_SALES_GRAINS, SA_SOURCES, SA_TRAFFIC_BREAKDOWNS, SA_TRAFFIC_REPORT, type SaBreakdownBy, type SaTraffic, type SaCollection, type SaContext, type SaMetricId, type SaSalesGrain, type SaSourceKind } from '@frontline/shared';
+import { SA_BREAKDOWNS, SA_METRICS, SA_SALES_GRAINS, SA_SOURCES, SA_TRAFFIC_BREAKDOWNS, SA_TRAFFIC_REPORT, type SaBreakdownBy, type SaCustomers, type SaTraffic, type SaCollection, type SaContext, type SaMetricId, type SaSalesGrain, type SaSourceKind } from '@frontline/shared';
 import { Hono } from 'hono';
 import type { Db } from '../db';
 import { annotations } from './annotations';
@@ -16,7 +16,7 @@ import { productDetail } from './product';
 import { historyStart, storePeriod, zoneInfo } from './period';
 import { reconcile } from './reconcile';
 import { salesReport } from './sales-report';
-import { customersReport } from './customers';
+import { customerCohorts, customerCountries, customersReport } from './customers';
 import { datasetFreshness, markVerified, sourceRows } from './sources';
 import { trafficBreakdown, trafficFunnel } from './traffic';
 
@@ -151,7 +151,13 @@ export function storeAnalyticsRoutes(db: Db) {
       if (typeof sp === 'string') return c.json({ error: sp }, 400);
       const filters = parseFilters(c.req.query('filters'));
       if (typeof filters === 'string') return c.json({ error: filters }, 400);
-      return c.json(customersReport(db, s.storeId, sp.period, filters));
+      const basis = c.req.query('refunds') ?? 'refund_day';
+      if (basis !== 'refund_day' && basis !== 'order_day') return c.json({ error: 'refunds must be refund_day or order_day' }, 400);
+      const r = customersReport(db, s.storeId, sp.period, filters);
+      // SA-105: with no customer to follow, neither (the no-data state says why)
+      const cohorts = r.missing ? [] : customerCohorts(db, s.storeId, sp.period.from, sp.period.to);
+      const countries = r.missing ? { rows: [] } : customerCountries(db, s.storeId, sp, basis);
+      return c.json({ ...r, cohorts, countries } satisfies SaCustomers);
     })
     // SA-97: the orders behind the period's net sales, a page at a time, adding up to it.
     .get('/api/analytics/orders', (c) => {
