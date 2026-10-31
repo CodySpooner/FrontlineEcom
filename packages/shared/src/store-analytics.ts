@@ -806,6 +806,43 @@ export interface SaSalesReport extends SaMetricSet {
   rows: SaSalesRow[];
 }
 
+/**
+ * SA-97: one order behind the period's sales, money in the store's currency (null: no rate that day). `placed`: placed
+ * in the period (else it's here for a refund in it). `net`: what it adds to the period's net sales; a duplicate copy
+ * (`duplicateOf`) adds nothing. No customer data.
+ */
+export interface SaOrderRow {
+  id: string;
+  date: string;
+  channel: string;
+  status: string;
+  currency: string;
+  placed: boolean;
+  /** Synced before money parts were recorded: `gross` is its total less tax, an estimate. */
+  estimated: boolean;
+  gross: number | null;
+  discounts: number | null;
+  /** Order level: null with a product filter. */
+  tax: number | null;
+  shipping: number | null;
+  refunds: number | null;
+  net: number | null;
+  duplicateOf: string | null;
+}
+
+export interface SaOrders {
+  period: SaPeriod;
+  /** The net sales these orders add up to (/metrics' for the scope). */
+  total: SaMetricResult;
+  /** Every row on every page, newest first. */
+  count: number;
+  page: number;
+  pageSize: number;
+  rows: SaOrderRow[];
+  note?: string;
+  scope: SaFilterScope;
+}
+
 /** SA-96: what `GET /api/analytics/sales/breakdown?by=` splits net sales and units by. */
 export const SA_BREAKDOWNS = ['channel', 'product', 'collection', 'country'] as const;
 export type SaBreakdownBy = (typeof SA_BREAKDOWNS)[number];

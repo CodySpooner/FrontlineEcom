@@ -16,7 +16,8 @@ export type RefundBasis = 'refund_day' | 'order_day';
  * Decision 10: canonical paid orders, not duplicate channel copies. One with money parts (`breakdown_at`) was paid when
  * it has a paid time, cancelled or refunded later or not; one synced before them counts as the legacy surfaces do.
  */
-export const CANONICAL = `o.duplicate_of IS NULL AND iif(o.breakdown_at IS NULL, o.status = 'paid', o.paid_at IS NOT NULL AND o.status IN ('paid', 'refunded'))`;
+export const PAID = `iif(o.breakdown_at IS NULL, o.status = 'paid', o.paid_at IS NOT NULL AND o.status IN ('paid', 'refunded'))`;
+export const CANONICAL = `o.duplicate_of IS NULL AND ${PAID}`;
 
 /**
  * What a computation is narrowed to (SA-22). `cut`: the comparison's last day cut at today's clock time (decision 6):

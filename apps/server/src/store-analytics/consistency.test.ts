@@ -1,7 +1,7 @@
 // SA-69: one number, one value everywhere. Each surface that shows a v1 number has a row here holding it equal to
 // /metrics (or to the surface it's drawn from) for the same scope, on the ledger fixture and on a demo store. Later
 // surfaces add a row.
-import type { SaListings, SaMetricSet, SaOverview, SaProductDetail, SaSalesBreakdown, SaSalesReport } from '@frontline/shared';
+import type { SaListings, SaMetricSet, SaOrders, SaOverview, SaProductDetail, SaSalesBreakdown, SaSalesReport } from '@frontline/shared';
 import { SA_BREAKDOWNS, SA_OVERVIEW_KPIS, SA_SALES_REPORT } from '@frontline/shared';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../app';
@@ -69,6 +69,20 @@ for (const scope of SCOPES) {
           expect(b.rows.reduce((s, r) => s + r.net_sales!, 0), `${by}${v}`).toBeCloseTo(m[0]!.value!, 2);
           expect(b.rows.reduce((s, r) => s + r.units!, 0), `${by}${v}`).toBe(m[1]!.value);
         }
+      }
+    });
+
+    it("the order records' net adds up to /metrics' net sales for the same scope (SA-97)", async () => {
+      const a = app();
+      for (const v of VARIANTS) {
+        const q = `store=${scope.store}&${scope.period}${v}`;
+        const m = (await get<SaMetricSet>(a, `metrics?${q.replace('&compare=year', '')}&metrics=net_sales&compare=none`)).metrics[0]!;
+        const first = await get<SaOrders>(a, `orders?${q}`);
+        expect(first.total, v).toEqual(m);
+        if (first.note) continue; // a demo store has no order records
+        let net = 0;
+        for (let p = 1; p <= Math.ceil(first.count / first.pageSize); p++) net += (await get<SaOrders>(a, `orders?${q}&page=${p}`)).rows.reduce((s, r) => s + (r.net ?? 0), 0);
+        expect(net, v).toBeCloseTo(m.value!, 2);
       }
     });
 

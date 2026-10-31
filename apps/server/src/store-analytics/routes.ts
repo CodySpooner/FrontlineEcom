@@ -10,6 +10,7 @@ import { insights } from './insights';
 import { deleteLink, setLink } from './links';
 import { computeMetricSet, computeSeries, parseFilters } from './metric-set';
 import { listings, listingVariants } from './listings';
+import { orderRecords } from './orders';
 import { overview } from './overview';
 import { productDetail } from './product';
 import { historyStart, storePeriod, zoneInfo } from './period';
@@ -126,6 +127,20 @@ export function storeAnalyticsRoutes(db: Db) {
       const basis = c.req.query('refunds') ?? 'refund_day';
       if (basis !== 'refund_day' && basis !== 'order_day') return c.json({ error: 'refunds must be refund_day or order_day' }, 400);
       return c.json(salesBreakdown(db, s, sp, filters, basis, by));
+    })
+    // SA-97: the orders behind the period's net sales, a page at a time, adding up to it.
+    .get('/api/analytics/orders', (c) => {
+      const s = scoped(c);
+      if ('error' in s) return c.json({ error: s.error }, s.status);
+      const sp = storePeriod(db, s.storeId, (k) => c.req.query(k));
+      if (typeof sp === 'string') return c.json({ error: sp }, 400);
+      const filters = parseFilters(c.req.query('filters'));
+      if (typeof filters === 'string') return c.json({ error: filters }, 400);
+      const basis = c.req.query('refunds') ?? 'refund_day';
+      if (basis !== 'refund_day' && basis !== 'order_day') return c.json({ error: 'refunds must be refund_day or order_day' }, 400);
+      const page = Number(c.req.query('page') || 1);
+      if (!Number.isInteger(page) || page < 1) return c.json({ error: 'page must be a whole number from 1' }, 400);
+      return c.json(orderRecords(db, s, sp, filters, basis, page));
     })
     // SA-24: Dashboard's revenue to v1 net sales for the period, line by line.
     .get('/api/analytics/reconcile', (c) => {
