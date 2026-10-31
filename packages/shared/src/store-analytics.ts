@@ -921,6 +921,8 @@ export interface SaRule {
   when: string;
   minSample: string;
   datasets: SaDataset[];
+  /** SA-77: the metric definitions its observation is built on (the finding card's evidence chips). */
+  metrics: SaMetricId[];
 }
 
 /** What an insight's row opens. */

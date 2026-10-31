@@ -2,11 +2,12 @@
 import { ChevronRight } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
-import { SA_COMPARES, SA_DATASETS, SA_METRICS, type SaAnnotation, type SaContext, type SaInsightTarget, type SaMetricId, type SaOverview } from '@frontline/shared';
-import { Button, cx, Dialog, ErrorState, LoadingState, Panel, Segmented } from '../components/ui';
+import { SA_COMPARES, SA_METRICS, type SaAnnotation, type SaContext, type SaInsightTarget, type SaMetricId, type SaOverview } from '@frontline/shared';
+import { Button, cx, ErrorState, LoadingState, Panel, Segmented } from '../components/ui';
 import { fmtDay, money } from '../lib/format';
 import { useSaAnnotations, useSaContext, useSaContributions, useSaInsights, useSaOverview, useSaSeries } from './api';
 import { FilterScope } from './FilterScope';
+import { FindingCard, RulesDialog, type Investigate } from './FindingCard';
 import { channelsOf } from './Filters';
 import { KpiStrip } from './KpiStrip';
 import type { AnalyticsPage, AnalyticsState } from './state';
@@ -156,14 +157,10 @@ function MovedPanel({ s, ctx }: { s: AnalyticsState; ctx?: SaContext }) {
 const DOT = { warn: 'bg-amber', red: 'bg-red', info: 'bg-[#7fb2ff]' };
 const ROW = 'flex w-full items-center gap-2.5 border-t border-line px-4 py-[9px] text-left text-[12.5px]';
 
-/** SA-76: the rule engine's flags, each opening where it can be looked into; How flags work lists every rule. */
-function AttentionPanel({ s, onChart }: { s: AnalyticsPage; onChart: (k: string) => void }) {
-  const q = useSaInsights(s);
+/** Where a flag's target is looked into. One with no screen yet (Listings, SA-82) has none: no dead link (decision 33). */
+function useInvestigate(s: AnalyticsPage, onChart: (k: string) => void) {
   const [, setParams] = useSearchParams();
-  const [how, setHow] = useState(false);
-  const d = q.data?.insights && q.data;
-  // A target that has no screen yet (Listings, SA-82) leaves its row plain: no dead link (decision 33).
-  const go = (t: SaInsightTarget): { to: string } | { onClick: () => void; title: string } | undefined => {
+  return (t: SaInsightTarget): Investigate | undefined => {
     if (t.kind === 'product' || t.kind === 'products') {
       const ids = t.kind === 'product' ? [t.id] : t.ids;
       return { onClick: () => s.set({ filters: { ...s.filters, product: ids }, page: 1 }), title: ids.length === 1 ? 'Show this product only' : 'Show these products only' };
@@ -172,6 +169,14 @@ function AttentionPanel({ s, onChart }: { s: AnalyticsPage; onChart: (k: string)
     if (t.kind === 'metric') return { onClick: () => onChart(t.id === 'contribution_after_ads' ? 'contribution' : t.id), title: `Chart ${SA_METRICS[t.id].label.toLowerCase()}` };
     if (t.kind === 'orders') return { to: '/orders' };
   };
+}
+
+/** SA-76: the rule engine's flags, each opening where it can be looked into; How flags work lists every rule. */
+function AttentionPanel({ s, onChart }: { s: AnalyticsPage; onChart: (k: string) => void }) {
+  const q = useSaInsights(s);
+  const go = useInvestigate(s, onChart);
+  const [how, setHow] = useState(false);
+  const d = q.data?.insights && q.data;
   return (
     <section className="card min-w-0 p-4">
       <div className="mb-2 flex flex-wrap items-center gap-2">
@@ -229,29 +234,22 @@ function AttentionPanel({ s, onChart }: { s: AnalyticsPage; onChart: (k: string)
           })}
         </ul>
       )}
-      {d && (
-        <Dialog open={how} onClose={() => setHow(false)} title="How flags work" width={640}>
-          <div className="grid gap-3 text-[13px]">
-            <p className="text-text-2">
-              Each flag is a fixed rule over this store's own data: what was observed, never a score or a cause. A rule needs its minimum sample before it flags, and one that would flag on a source that is out of date or failing is held back and
-              says so.
-            </p>
-            <ul className="grid gap-2.5">
-              {d.rules.map((r) => (
-                <li key={r.id} className="border-t border-line pt-2.5">
-                  <b className="font-semibold">{r.name}</b> <span className="font-mono text-[11px] text-muted">{r.id}</span>
-                  <p className="text-text-2">{r.when}</p>
-                  <p className="text-xs text-muted">
-                    Minimum sample: {r.minSample} · Reads: {r.datasets.length ? r.datasets.map((x) => SA_DATASETS[x]).join(', ') : "every source's sync status"}
-                  </p>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </Dialog>
-      )}
+      {d && <RulesDialog rules={d.rules} open={how} onClose={() => setHow(false)} />}
     </section>
   );
+}
+
+const RANK = { red: 0, warn: 1, info: 2 };
+
+/** SA-77: the finding card with the most urgent flag (red first, then the rules' order). */
+function Finding({ s, onChart }: { s: AnalyticsPage; onChart: (k: string) => void }) {
+  const q = useSaInsights(s);
+  const go = useInvestigate(s, onChart);
+  const d = q.data?.insights && q.data;
+  if (!d)
+    return <section className="card min-w-0 p-4">{q.isError ? <ErrorState message="Couldn't load the finding." onRetry={() => q.refetch()} /> : <LoadingState rows={3} />}</section>;
+  const top = [...d.insights].sort((a, b) => RANK[a.tone] - RANK[b.tone])[0];
+  return <FindingCard insight={top} rules={d.rules} investigate={top && go(top.target)} />;
 }
 
 export function Overview({ s, tabs }: { s: AnalyticsPage; tabs: string[] }) {
@@ -272,6 +270,7 @@ export function Overview({ s, tabs }: { s: AnalyticsPage; tabs: string[] }) {
       </div>
       <div className="grid items-start gap-3.5 min-[1180px]:grid-cols-[minmax(0,1.1fr)_minmax(0,1.2fr)_minmax(0,1fr)]">
         <AttentionPanel s={s} onChart={setChart} />
+        <Finding s={s} onChart={setChart} />
       </div>
     </div>
   );

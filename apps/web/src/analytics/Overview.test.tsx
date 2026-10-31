@@ -77,7 +77,7 @@ describe('What moved (SA-73)', () => {
   });
 });
 
-const RULE = { when: 'w', minSample: 'm', datasets: [] };
+const RULE = { when: 'w', minSample: 'm', datasets: [], metrics: [] };
 const INSIGHTS: SaInsights = {
   insights: [
     { rule: 'stock_cover@1', kind: 'business', tone: 'warn', title: 'Hydra Barrier Night Cream: ~5 days of stock', detail: '38 left · 7.4 sold a day over the last 14 days', evidence: {}, target: { kind: 'product', id: '8002' } },
@@ -87,7 +87,7 @@ const INSIGHTS: SaInsights = {
     { rule: 'ads_contribution@1', kind: 'business', tone: 'warn', title: 'Ad spend up 20.0% while contribution after ads fell 3.2%', detail: 'd', evidence: {}, target: { kind: 'metric', id: 'contribution_after_ads' } },
   ],
   rules: [
-    { id: 'stock_cover@1', name: 'Low stock cover', when: 'Stock lasts under 10 days', minSample: '5 units sold in the last 14 days', datasets: ['orders', 'inventory'] },
+    { id: 'stock_cover@1', name: 'Low stock cover', when: 'Stock lasts under 10 days', minSample: '5 units sold in the last 14 days', datasets: ['orders', 'inventory'], metrics: ['units'] },
     { id: 'source_health@1', name: 'Source health', ...RULE },
   ],
 };
@@ -143,5 +143,14 @@ describe('Needs attention (SA-76)', () => {
     fail = false;
     fireEvent.click(await within(p).findByRole('button', { name: 'Try again' }));
     expect(await within(p).findByText('Meta Ads sync failing')).toBeTruthy();
+  });
+});
+
+describe('Finding card on the Overview (SA-77)', () => {
+  it('shows the most urgent flag (red before the rules order) and investigates its target', async () => {
+    render(() => MOVED, () => INSIGHTS);
+    const c = within(await screen.findByRole('region', { name: 'Finding' }));
+    expect(c.getByRole('heading').textContent).toBe('2 orders not shipped after 48 h'); // red, though stock cover comes first
+    expect(c.getByRole('link', { name: 'Investigate' }).getAttribute('href')).toBe('/orders');
   });
 });

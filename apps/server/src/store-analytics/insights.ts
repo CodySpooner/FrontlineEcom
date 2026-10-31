@@ -250,47 +250,47 @@ function sourceHealth({ freshness, now }: Ctx): SaInsight[] {
 
 export const RULES: Rule[] = [
   {
-    id: 'stock_cover@1', name: 'Low stock cover', datasets: ['orders', 'order_lines', 'inventory'], run: stockCover,
+    id: 'stock_cover@1', name: 'Low stock cover', metrics: ['units'], datasets: ['orders', 'order_lines', 'inventory'], run: stockCover,
     when: `Tracked stock covers under ${COVER_DAYS} days at the last ${COVER_WINDOW} full days' sales rate`, minSample: `${COVER_MIN_UNITS} units sold in those ${COVER_WINDOW} days`,
   },
   {
-    id: 'refund_rate@1', name: 'High refund rate', datasets: ['orders', 'order_lines', 'refunds'], run: refundRate,
+    id: 'refund_rate@1', name: 'High refund rate', metrics: ['refund_rate', 'units'], datasets: ['orders', 'order_lines', 'refunds'], run: refundRate,
     when: `A product's units refunded ÷ units ordered is over ${REFUND_MULTIPLE}× the store's, in the period`, minSample: `${REFUND_MIN_UNITS} units ordered in the period`,
   },
   {
-    id: 'unit_cost@1', name: 'No unit cost', datasets: ['orders', 'order_lines', 'catalog'], run: unitCost,
+    id: 'unit_cost@1', name: 'No unit cost', metrics: ['cost_coverage', 'contribution_before_ads'], datasets: ['orders', 'order_lines', 'catalog'], run: unitCost,
     when: 'Units sold in the period have no unit cost, so contribution leaves them out', minSample: '1 unit sold',
   },
   {
-    id: 'listing_sync@1', name: 'Listing sync failed', datasets: ['channel_listings'], run: listingSync,
+    id: 'listing_sync@1', name: 'Listing sync failed', metrics: [], datasets: ['channel_listings'], run: listingSync,
     when: "A sales channel's last sync of a listing failed", minSample: 'None: every failure counts',
   },
   {
-    id: 'product_down@1', name: 'Product sales down', datasets: ['orders', 'order_lines', 'refunds'], run: productDown,
+    id: 'product_down@1', name: 'Product sales down', metrics: ['net_sales'], datasets: ['orders', 'order_lines', 'refunds'], run: productDown,
     when: `A product's net sales fell ${pct(DOWN_SHARE, 0)} or more against the comparison`, minSample: `${DOWN_MIN_UNITS} units sold in the comparison`,
   },
   {
-    id: 'ads_contribution@1', name: 'Ad spend up, contribution down', datasets: ['ad_spend', 'orders', 'order_lines'], run: adsUpContributionDown,
+    id: 'ads_contribution@1', name: 'Ad spend up, contribution down', metrics: ['ad_spend', 'contribution_after_ads'], datasets: ['ad_spend', 'orders', 'order_lines'], run: adsUpContributionDown,
     when: `Ad spend rose ${pct(AD_UP, 0)} or more against the comparison while contribution after ads fell`, minSample: 'Ad spend and contribution in both periods',
   },
   {
-    id: 'conversion_down@1', name: 'Conversion down', datasets: ['traffic', 'purchase_sessions'], run: conversionDown,
+    id: 'conversion_down@1', name: 'Conversion down', metrics: ['site_conversion', 'sessions'], datasets: ['traffic', 'purchase_sessions'], run: conversionDown,
     when: `Site conversion fell ${pct(CONVERSION_DOWN, 0)} or more against the comparison (only where it is tracked)`, minSample: `${CONVERSION_MIN_SESSIONS} sessions in each period`,
   },
   {
-    id: 'late_fulfillment@1', name: 'Late fulfillment', datasets: ['orders'], run: lateFulfillment,
+    id: 'late_fulfillment@1', name: 'Late fulfillment', metrics: [], datasets: ['orders'], run: lateFulfillment,
     when: `A paid order not shipped ${LATE_HOURS} hours after it was placed`, minSample: 'None: every late order counts',
   },
   {
-    id: 'variant_out@1', name: 'Out of stock', datasets: ['variants', 'inventory'], run: variantOut,
+    id: 'variant_out@1', name: 'Out of stock', metrics: [], datasets: ['variants', 'inventory'], run: variantOut,
     when: "An active product's tracked variant at 0 or below", minSample: 'None',
   },
   {
-    id: 'unmapped_orders@1', name: 'Orders that may duplicate', datasets: ['orders'], run: unmappedOrders,
+    id: 'unmapped_orders@1', name: 'Orders that may duplicate', metrics: ['orders'], datasets: ['orders'], run: unmappedOrders,
     when: 'Orders the store platform recorded for a sales-channel app with no integration here, in the period', minSample: 'None',
   },
   {
-    id: 'source_health@1', name: 'Stale or failed source', datasets: [], run: sourceHealth,
+    id: 'source_health@1', name: 'Stale or failed source', metrics: [], datasets: [], run: sourceHealth,
     when: "A source's last sync of a dataset failed, or it hasn't synced for 3 of its sync intervals", minSample: 'None',
   },
 ];
