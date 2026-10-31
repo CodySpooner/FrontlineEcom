@@ -77,7 +77,8 @@ describe('listings (SA-66)', () => {
       const rows = list(db, {}, {}, basis).rows.slice(0, 4);
       for (const r of rows) {
         const s = salesMetrics(db, LEDGER_STORE, P1.from, P1.to, basis, { products: [r.id] });
-        expect([r.netSales, r.units, r.refunds, r.refundRate, r.contribution]).toEqual([s.net_sales, s.units, s.refunds, s.refund_rate, costMetrics(db, LEDGER_STORE, P1.from, P1.to, basis, { products: [r.id] }).contribution_before_ads]);
+        const c = costMetrics(db, LEDGER_STORE, P1.from, P1.to, basis, { products: [r.id] });
+        expect([r.netSales, r.units, r.refunds, r.refundRate, r.contribution, r.costCoverage]).toEqual([s.net_sales, s.units, s.refunds, s.refund_rate, c.contribution_before_ads, c.cost_coverage]);
       }
       for (const sort of ['units', 'net_sales', 'refunds'] as const) {
         const values = list(db, { sort }, {}, basis).rows.map((r) => ({ units: r.units, net_sales: r.netSales, refunds: r.refunds })[sort].value!);
@@ -210,6 +211,12 @@ describe('listings (SA-66)', () => {
     expect(rows.map((r) => [r.id, r.stockState, r.stock])).toEqual([['x2', 'supplier', null], ['x3', 'in_stock', 5], ['x4', 'not_tracked', null], ['x6', 'not_tracked', null]]);
     expect(list(db, { status: 'all', stock: 'supplier' }).rows.map((r) => r.id)).toEqual(['x2']);
     expect(list(db, { status: 'all', stock: 'not_tracked' }).total).toBe(31);
+  });
+
+  it('SA-84: a row names its collections, by title', () => {
+    const db = fixture();
+    const rows = list(db, { status: 'all' }, { product: ['8001', '8002', '8003', 'tt-9001'] }).rows;
+    expect(Object.fromEntries(rows.map((r) => [r.id, r.collections]))).toEqual({ '8001': ['Best sellers', 'Face care'], '8002': ['Face care'], '8003': ['Best sellers', 'Lip care'], 'tt-9001': [] });
   });
 
   it("SA-83: each variant's sales are the v1 functions' for the lines naming it, adding up to its product's row", () => {

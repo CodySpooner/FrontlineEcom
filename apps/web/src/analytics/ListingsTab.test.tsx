@@ -18,7 +18,7 @@ const V = (value: number | null, more: Partial<SaValue> = {}): SaValue => ({ val
 const row = (i: number, more: Partial<SaListingRow> = {}): SaListingRow => ({
   id: `p${i}`, title: `Product ${String(i).padStart(2, '0')}`, image: null, status: 'active', category: null, sku: `SKU-${i}`, variants: 1, variantsOut: 0, price: 10, compareAt: null,
   stock: 100, stockState: 'in_stock', channels: [{ channel: 'site', status: 'active', error: null }], syncedAt: null,
-  netSales: V(100), units: V(5), refunds: V(0), refundRate: V(0), contribution: V(40), ...more,
+  netSales: V(100), units: V(5), refunds: V(0), refundRate: V(0), contribution: V(40), collections: [], costCoverage: V(1), ...more,
 });
 const ALL = Array.from({ length: 64 }, (_, i) => row(i + 1));
 
@@ -173,5 +173,31 @@ describe('Listings table (SA-82)', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Show the variants of Overnight Lip Mask' }));
     expect(await screen.findByText('Variant sales not recorded yet')).toBeTruthy();
     expect(cells((await bodyRows())[1]!)).toEqual(['Berry · GH-OLM-BER', '', '', '$18.00', '312', '–', '–', '–', '–', '']); // never zeros
+  });
+
+  it('Columns shows, hides and orders the optional columns, kept in the URL; the page stays (SA-84)', async () => {
+    const rows = ALL.map((r, i) => (i === 25 ? { ...r, sku: 'GH-1', compareAt: 59.99, collections: ['Face care', 'Best sellers'], costCoverage: V(0.75) } : i === 26 ? { ...r, title: 'Combo', variants: 2 } : r));
+    const variant = { id: 'v1', title: 'Red', sku: 'X', price: 1, stock: 1, stockState: 'in_stock', units: V(1), netSales: V(1), refunds: V(0), contribution: V(1) };
+    render(rows, '/analytics?store=a&tab=listings&page=2&cols=bogus,sku', undefined, () => ({ rows: [variant] }));
+    const heads = () => screen.getAllByRole('columnheader').map((th) => th.textContent);
+    const DEFAULT = ['Product', 'Channels', 'Status', 'Price', 'Stock', 'Units ↓', 'Net sales', 'Refunds', 'Contribution'];
+    const menu = (role: 'menuitem' | 'menuitemcheckbox', name: string) => within(document.getElementById('sa-listings-columns')!).getByRole(role, { name, hidden: true }) as HTMLButtonElement;
+    await screen.findByText(/^26–50 of 64/);
+    expect(heads()).toEqual([...DEFAULT, 'SKU', 'Synced']); // an unknown id is dropped
+
+    for (const name of ['Compare-at price', 'Cost coverage', 'Collection']) fireEvent.click(menu('menuitemcheckbox', name));
+    await waitFor(() => expect(heads()).toEqual([...DEFAULT, 'SKU', 'Compare-at price', 'Cost coverage', 'Collection', 'Synced']));
+    expect(cells((await bodyRows())[0]!).slice(9)).toEqual(['GH-1', '$59.99', '75.0%', 'Face care, Best sellers', '–']);
+    fireEvent.click(menu('menuitem', 'Move Collection up'));
+    fireEvent.click(menu('menuitemcheckbox', 'SKU'));
+    await waitFor(() => expect(heads()).toEqual([...DEFAULT, 'Compare-at price', 'Collection', 'Cost coverage', 'Synced']));
+    expect([menu('menuitem', 'Move Compare-at price up').disabled, menu('menuitem', 'Move Cost coverage down').disabled]).toEqual([true, true]);
+    const where = decodeURIComponent(screen.getByTestId('where').textContent!);
+    expect(where).toContain('cols=compare_at,collection,cost_coverage');
+    expect(where).toContain('page=2'); // a column isn't a filter
+
+    fireEvent.click(screen.getByRole('button', { name: 'Show the variants of Combo' }));
+    await screen.findByText('Red');
+    expect(cells((await bodyRows())[2]!)).toHaveLength(13); // the variant row lines up under the optional columns
   });
 });

@@ -1,13 +1,14 @@
 // SA-82: the Listings tab (spec §7 Listings table; the Listings board): every listing of the store, 25 a page, filtered
 // and sorted over the whole matching set by the API (SA-66, SA-80). Status, search and the tab's own filters live in
 // the URL beside the page's; Channel and Collection are the page's filters. A row opens the product drawer through
-// `onOpen` (SA-88): without it rows aren't interactive (decision 33). A product with variants expands to them (SA-83).
+// `onOpen` (SA-88): without it rows aren't interactive (decision 33). A product with variants expands to them (SA-83);
+// Columns adds optional ones (SA-84).
 import { Fragment, useDeferredValue, useState, type ReactNode } from 'react';
 import { useSearchParams } from 'react-router';
-import { ChevronDown, ChevronRight, Info, Plus, Search, TriangleAlert } from 'lucide-react';
+import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, Columns3, Info, Plus, Search, TriangleAlert } from 'lucide-react';
 import { SA_LISTING_FILTERS, SA_LISTING_STATUSES, SA_REASONS, type SaListingRow, type SaListingStatus, type SaValue } from '@frontline/shared';
 import { hidePopover, Popover, rove } from '../agents/Popover';
-import { Button, cx, ErrorState, LoadingState, Segmented } from '../components/ui';
+import { Button, buttonClass, cx, ErrorState, LoadingState, Segmented } from '../components/ui';
 import { ago, cents, money, pct } from '../lib/format';
 import { useSaCollections, useSaContext, useSaListings, useSaVariants } from './api';
 import { FilterScope } from './FilterScope';
@@ -92,14 +93,25 @@ function stock(r: Pick<SaListingRow, 'stock' | 'stockState' | 'coverDays'> & Par
   }
 }
 
+/**
+ * SA-84: the optional columns, shown and ordered through Columns (`cols=` in the URL), before Synced. Product
+ * conversion joins them once a product-views source exists (SA-04).
+ */
+const COLUMNS: { id: string; label: string; right?: boolean; cell: (r: SaListingRow, currency?: string) => ReactNode }[] = [
+  { id: 'sku', label: 'SKU', cell: (r) => r.sku ?? dash() },
+  { id: 'collection', label: 'Collection', cell: (r) => (r.collections.length ? <span className="block max-w-[180px] truncate" title={r.collections.join(', ')}>{r.collections.join(', ')}</span> : dash()) },
+  { id: 'compare_at', label: 'Compare-at price', right: true, cell: (r, c) => (r.compareAt == null ? dash() : cents(r.compareAt, c)) },
+  { id: 'cost_coverage', label: 'Cost coverage', right: true, cell: (r) => val(r.costCoverage, (n) => pct(n * 100)) },
+];
+
 const INDENT = { paddingLeft: 62 }; // the board's; an inline style, as the table's cell padding beats a class
 
 /** SA-83: a product's variants under its row (no checkbox, no channels or status of their own) and why sales are missing. */
-function VariantRows({ s, id, currency }: { s: AnalyticsPage & { store: string }; id: string; currency?: string }) {
+function VariantRows({ s, id, currency, extra }: { s: AnalyticsPage & { store: string }; id: string; currency?: string; extra: number }) {
   const q = useSaVariants(s.store, id, { ...periodParams(s), compare: 'none' });
   const line = (body: ReactNode) => (
     <tr className="bg-bg-2 text-xs text-muted">
-      <td colSpan={10} style={INDENT}>
+      <td colSpan={10 + extra} style={INDENT}>
         {body}
       </td>
     </tr>
@@ -134,6 +146,9 @@ function VariantRows({ s, id, currency }: { s: AnalyticsPage & { store: string }
             <td className={R}>{val(v.netSales, (n) => money(n, currency))}</td>
             <td className={R}>{val(v.refunds, (n) => money(n, currency))}</td>
             <td className={R}>{val(v.contribution, (n) => money(n, currency))}</td>
+            {Array.from({ length: extra }, (_, k) => (
+              <td key={k} />
+            ))}
             <td />
           </tr>
         );
@@ -158,11 +173,18 @@ export function ListingsTab({ s, onOpen }: { s: AnalyticsPage & { store: string 
         const n = new URLSearchParams(p);
         if (v) n.set(k, v);
         else n.delete(k);
-        n.delete('page');
+        if (k !== 'cols') n.delete('page');
         return n;
       },
       { replace: k === 'q' },
     );
+  const cols = [...new Set(get('cols').split(','))].flatMap((id) => COLUMNS.filter((c) => c.id === id));
+  const setCols = (ids: string[]) => put('cols', ids.join(','));
+  const move = (i: number, by: -1 | 1) => {
+    const ids = cols.map((c) => c.id);
+    [ids[i], ids[i + by]] = [ids[i + by]!, ids[i]!];
+    setCols(ids);
+  };
   const status = (SA_LISTING_STATUSES as readonly string[]).includes(get('status')) ? (get('status') as SaListingStatus) : 'active';
   const term = useDeferredValue(get('q').trim());
   // no comparison: the table has no change column
@@ -210,6 +232,11 @@ export function ListingsTab({ s, onOpen }: { s: AnalyticsPage & { store: string 
                 {sortable('net_sales', 'Net sales', true)}
                 {sortable('refunds', 'Refunds', true)}
                 <th className={cx(TH, R)}>Contribution</th>
+                {cols.map((c) => (
+                  <th key={c.id} className={cx(TH, c.right ? R : 'text-left')}>
+                    {c.label}
+                  </th>
+                ))}
                 <th className={cx(TH, 'text-left')}>Synced</th>
               </tr>
             </thead>
@@ -287,6 +314,11 @@ export function ListingsTab({ s, onOpen }: { s: AnalyticsPage & { store: string 
                           val(r.contribution, (n) => money(n, cur))
                         )}
                       </td>
+                      {cols.map((c) => (
+                        <td key={c.id} className={cx(c.right && R)}>
+                          {c.cell(r, cur)}
+                        </td>
+                      ))}
                       <td>
                         {failed.length ? (
                           <span className="inline-flex items-center gap-1 text-red" title={failed.map((c) => `${name(c.channel)}: ${c.error ?? 'failed'}`).join('\n')}>
@@ -300,7 +332,7 @@ export function ListingsTab({ s, onOpen }: { s: AnalyticsPage & { store: string 
                         )}
                       </td>
                     </tr>
-                    {open && <VariantRows s={s} id={r.id} currency={cur} />}
+                    {open && <VariantRows s={s} id={r.id} currency={cur} extra={cols.length} />}
                   </Fragment>
                 );
               })}
@@ -384,6 +416,35 @@ export function ListingsTab({ s, onOpen }: { s: AnalyticsPage & { store: string 
             </Option>
           ))}
         </Menu>
+        <button type="button" popoverTarget="sa-listings-columns" className={cx(buttonClass('ghost', 'sm'), 'ml-auto')}>
+          <Columns3 aria-hidden className="size-3.5" />
+          Columns
+        </button>
+        <Popover id="sa-listings-columns" label="Columns" align="end" className="w-[240px]">
+          {[...cols, ...COLUMNS.filter((c) => !cols.includes(c))].map((c) => {
+            const i = cols.indexOf(c);
+            const arrow = 'grid size-6 shrink-0 cursor-pointer place-items-center rounded-md text-muted outline-none hover:bg-panel-2 hover:text-white focus-visible:bg-panel-2 focus-visible:text-white disabled:cursor-default disabled:opacity-30';
+            return (
+              <div key={c.id} className="flex items-center">
+                <div className="min-w-0 flex-1">
+                  <Option on={i >= 0} onClick={() => setCols(i >= 0 ? cols.filter((x) => x !== c).map((x) => x.id) : [...cols.map((x) => x.id), c.id])}>
+                    {c.label}
+                  </Option>
+                </div>
+                {i >= 0 && (
+                  <>
+                    <button type="button" role="menuitem" data-item aria-label={`Move ${c.label} up`} disabled={i === 0} onClick={() => move(i, -1)} className={arrow}>
+                      <ArrowUp aria-hidden className="size-3" />
+                    </button>
+                    <button type="button" role="menuitem" data-item aria-label={`Move ${c.label} down`} disabled={i === cols.length - 1} onClick={() => move(i, 1)} className={arrow}>
+                      <ArrowDown aria-hidden className="size-3" />
+                    </button>
+                  </>
+                )}
+              </div>
+            );
+          })}
+        </Popover>
       </div>
       {d && (
         <p className="flex items-center gap-1.5 text-xs text-muted">

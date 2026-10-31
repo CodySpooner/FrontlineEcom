@@ -103,7 +103,7 @@ export function totals(db: Db, storeId: string, from: string, to: string, basis:
   return t;
 }
 
-type Sales = Record<'net_sales' | 'units' | 'refunds' | 'refund_rate' | 'contribution', SaValue>;
+type Sales = Record<'net_sales' | 'units' | 'refunds' | 'refund_rate' | 'contribution' | 'cost_coverage', SaValue>;
 const cents = (n: number) => Math.round(n * 100) / 100;
 
 /**
@@ -113,11 +113,12 @@ const cents = (n: number) => Math.round(n * 100) / 100;
  */
 function demoSplit(db: Db, storeId: string, from: string, to: string, basis: RefundBasis, slice: Slice = {}) {
   const s = salesMetrics(db, storeId, from, to, basis, slice);
-  const c = costMetrics(db, storeId, from, to, basis, slice).contribution_before_ads;
+  const c = costMetrics(db, storeId, from, to, basis, slice);
   const part = (k: number): Sales => {
     const of = (v: SaValue, round: (n: number) => number): SaValue => (v.value == null ? v : { ...v, value: round(v.value * k) });
-    // a share doesn't change a rate; a product that sold nothing has none
-    return { net_sales: of(s.net_sales, cents), units: of(s.units, Math.round), refunds: of(s.refunds, cents), refund_rate: k ? s.refund_rate : { ...s.refund_rate, value: null }, contribution: of(c, cents) };
+    // a share doesn't change a rate or a share; a product that sold nothing has none
+    const rate = (v: SaValue) => (k ? v : { ...v, value: null });
+    return { net_sales: of(s.net_sales, cents), units: of(s.units, Math.round), refunds: of(s.refunds, cents), refund_rate: rate(s.refund_rate), contribution: of(c.contribution_before_ads, cents), cost_coverage: rate(c.cost_coverage) };
   };
   const rows = new Map([...demoShares(db, storeId)].map(([id, k]) => [id, part(k)]));
   return (id: string) => rows.get(id) ?? part(0);
@@ -270,11 +271,13 @@ export function listings(db: Db, storeId: string, query: Query, sp: StorePeriod,
      FROM products p WHERE p.store_id = ? AND p.id = ?`,
   );
   const listed = db.prepare('SELECT channel, status, error FROM channel_listings WHERE store_id = ? AND product_id = ? ORDER BY channel, id');
+  const member = db.prepare('SELECT DISTINCT coalesce(title, collection_id) AS t FROM product_collections WHERE store_id = ? AND product_id = ? ORDER BY 1 COLLATE NOCASE');
   const rows = ids.map((id): SaListingRow => {
     const p = product.get(storeId, id)!;
     const slice = { ...(channels && { channels }), products: [id] };
     const sales = demoSales ? undefined : salesMetrics(db, storeId, sp.period.from, sp.period.to, basis, slice);
-    const d = demoSales?.(id) ?? { ...sales!, contribution: costMetrics(db, storeId, sp.period.from, sp.period.to, basis, slice).contribution_before_ads };
+    const costs = demoSales ? undefined : costMetrics(db, storeId, sp.period.from, sp.period.to, basis, slice);
+    const d = demoSales?.(id) ?? { ...sales!, contribution: costs!.contribution_before_ads, cost_coverage: costs!.cost_coverage };
     const cover = coverOf(byId.get(id)!, sold.get(id) ?? 0);
     const before = compare && (demoBefore?.(id).net_sales ?? salesMetrics(db, storeId, compare.from, compare.to, basis, { ...slice, ...(cut && { cut }) }).net_sales);
     return {
@@ -283,6 +286,7 @@ export function listings(db: Db, storeId: string, query: Query, sp: StorePeriod,
       image: p.image == null ? null : String(p.image),
       status: String(p.status),
       category: p.category == null ? null : String(p.category),
+      collections: member.all(storeId, id).map((c) => String(c.t)),
       sku: Number(p.variants) === 1 && p.sku != null ? String(p.sku) : null,
       variants: Math.max(1, Number(p.variants)),
       variantsOut: Number(p.out),
@@ -298,6 +302,7 @@ export function listings(db: Db, storeId: string, query: Query, sp: StorePeriod,
       refunds: d.refunds,
       refundRate: d.refund_rate,
       contribution: d.contribution,
+      costCoverage: d.cost_coverage,
       ...(before && { previousNetSales: before }),
     };
   });

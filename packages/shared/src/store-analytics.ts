@@ -870,6 +870,8 @@ export interface SaListingRow {
   /** The platform's product status now. */
   status: string;
   category: string | null;
+  /** SA-84: the titles of its collections (the ids where a title isn't synced). */
+  collections: string[];
   /** Its SKU when it has one variant. */
   sku: string | null;
   /** A product with no variant rows is its own variant. */
@@ -892,6 +894,8 @@ export interface SaListingRow {
   /** SA-82: the refund rate metric's (refunded units ÷ units ordered) for this product. */
   refundRate: SaValue;
   contribution: SaValue;
+  /** SA-84: the cost coverage metric's (units sold with a unit cost) for this product. */
+  costCoverage: SaValue;
   /** SA-78: net sales over the comparison period, its last day cut like the KPI's; absent with no comparison. */
   previousNetSales?: SaValue;
 }
