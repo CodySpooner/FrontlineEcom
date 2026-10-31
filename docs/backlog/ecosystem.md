@@ -88,6 +88,8 @@ Anything else in another lane → append to that lane's backlog **Inbox** (`- [ 
 ## Blocked
 
 ## Done
+- 2026-10-31 ECO-47: Audited sprites, world, state, camera and lifecycle; inspected the supplied character reference. Original field-headquarters direction and eight role concepts in docs/features/ecosystem-art-direction.md. Orca live office inspected (.agent/eco-47-before.png / after.png); baseline pnpm check 334 files, 2586 passed, 1 skipped. No runtime changes.
+
 - 2026-10-27 00:30 VISUAL SPRINT SUMMARY: Completed ECO-24 through ECO-46 (23 slices): expanded 64x48 office, platform/owner holograms, lighting, ten showpieces, real hub data, ambient office/city life, original generated skyline, camera/minimap, architecture, furnished departments, worker previews, truthful status beacons and portrait activity. Before/after screenshots for every item are in .agent/; final full office is .agent/sprint-final.png, plus Midnight/Ember, mobile, reduced-motion and low-power captures. Final pnpm check: 149 files / 987 tests. Thirty-worker fullscreen measured 58.2 FPS; low power 29.5 FPS. Orca live six-worker scene has no alerts. Art totals 1,990,672 bytes with prompt/provenance in public/ecosystem/README.md. Original acceptance behaviors remain covered by the suite and browser selection/focus checks. No paid engine calls or writes to live stores. Deadline reached; finish/push ECO-46, log, then create .agent/STOP.
 - 2026-10-27 ECO-46: Occupied desks gain status beacons from actual worker state; character dots share the same tested palette. Empty desks stay unlit and the status display switch controls both layers. Desktop/Orca, three themes and thirty-worker standard/low-power checks (.agent/eco-46-*.png); pnpm check 987 tests, 58.2 / 29.5 FPS.
 - 2026-10-27 ECO-45: Live activity now carries the deployed worker's saved appearance and identity in a compact portrait row. Existing focus and receiving-task links remain intact. Appearance/identity binding test, browser feed-to-worker focus and Orca screenshots (.agent/eco-45-*.png); pnpm check 986 tests, 56-58 FPS.
@@ -268,7 +270,7 @@ Rules for this run:
 - Ports: `WEB_PORT=5203`, `API_PORT=8817`. Never connect a real store or use a real Claude run to test.
 
 Items (stages from brief §11):
-- [ ] ECO-47 Stage 1 — Audit and direction: read the brief, study the reference, audit characters/world/motion/
+- [x] ECO-47 Stage 1 — Audit and direction: read the brief, study the reference, audit characters/world/motion/
   interaction code. Write the shared visual language (proportions, palette, light direction, materials, motion tiers,
   one design concept per role) to `docs/features/ecosystem-art-direction.md`.
 - [ ] ECO-48 Stage 2 — Prove one character (e.g. Product Hunter) at target quality inside the real office: readable at
